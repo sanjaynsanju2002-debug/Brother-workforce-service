@@ -1,0 +1,361 @@
+{
+  "project_name": "Brothers Workforce Solutions",
+  "tagline": "Connecting Talent Creating Success",
+  "app_type": "hybrid_fullstack",
+  "style_archetype": "Corporate Industrial + Compliance Trust (Swiss/High-Contrast Enterprise)",
+  "color_palette_note": "Primary Navy Blue (#0F2444), Secondary Vibrant Industrial Safety Orange (#EA580C / #C2410C), Light Neutral Backgrounds (#F8FAFC / #F1F5F9 / #FFFFFF), High-Contrast Dark Slate (#091322)",
+  "entry_surfaces": {
+    "/": "Industrial Split Hero — Brand statement with immediate dual CTAs (Hire Workforce / Find Jobs) + 4 Trust Badges bar left/bottom, dynamic operations visual & key operational stats panel right",
+    "/admin": "PIN-protected Enterprise Command Center — Minimalist branded header with security PIN keypad modal / authenticated tabs for Worker Applications, Manpower Enquiries, and Job Postings"
+  },
+  "colors": {
+    "primary": "#0F2444",
+    "primary_dark": "#0A172C",
+    "primary_light": "#1E3A8A",
+    "secondary_orange": "#EA580C",
+    "secondary_orange_hover": "#C2410C",
+    "accent": "#EA580C",
+    "on_accent": "#FFFFFF",
+    "surfaces": [
+      {
+        "name": "page",
+        "kind": "solid",
+        "bg": "#F8FAFC",
+        "on_bg": "#0F172A",
+        "on_bg_muted": "#475569",
+        "roles": {
+          "link": "#0F2444",
+          "error": "#DC2626",
+          "success": "#16A34A",
+          "warning": "#D97706"
+        }
+      },
+      {
+        "name": "panel_white",
+        "kind": "solid",
+        "bg": "#FFFFFF",
+        "on_bg": "#0F172A",
+        "on_bg_muted": "#64748B",
+        "roles": {
+          "border": "#E2E8F0",
+          "highlight": "#EA580C",
+          "badge_bg": "#EFF6FF",
+          "badge_text": "#1E40AF"
+        }
+      },
+      {
+        "name": "panel_light_slate",
+        "kind": "solid",
+        "bg": "#F1F5F9",
+        "on_bg": "#0F172A",
+        "on_bg_muted": "#475569",
+        "roles": {
+          "border": "#CBD5E1",
+          "accent_badge": "#EA580C"
+        }
+      },
+      {
+        "name": "industrial_navy",
+        "kind": "solid",
+        "bg": "#0F2444",
+        "on_bg": "#FFFFFF",
+        "on_bg_muted": "#94A3B8",
+        "roles": {
+          "link": "#FDBA74",
+          "error": "#FCA5A5",
+          "success": "#86EFAC",
+          "warning": "#FDE047"
+        }
+      },
+      {
+        "name": "hero_scrim",
+        "kind": "image",
+        "contrast_against": "#0A172C",
+        "guarantee": "scrim: linear-gradient(135deg, rgba(15,36,68,0.92) 0%, rgba(15,36,68,0.80) 60%, rgba(15,36,68,0.65) 100%)",
+        "on_bg": "#FFFFFF",
+        "on_bg_muted": "#E2E8F0",
+        "roles": {
+          "badge_bg": "rgba(255, 255, 255, 0.12)",
+          "badge_border": "rgba(255, 255, 255, 0.25)",
+          "badge_text": "#FFFFFF",
+          "highlight_orange": "#FB923C"
+        }
+      },
+      {
+        "name": "navbar_glass",
+        "kind": "glass",
+        "contrast_against": "#FFFFFF",
+        "guarantee": "backdrop-blur-md bg-white/95 border-b border-slate-200/80 shadow-xs",
+        "on_bg": "#0F2444",
+        "on_bg_muted": "#475569",
+        "roles": {
+          "active_link": "#EA580C",
+          "cta_bg": "#0F2444",
+          "cta_text": "#FFFFFF"
+        }
+      },
+      {
+        "name": "footer_dark",
+        "kind": "solid",
+        "bg": "#091322",
+        "on_bg": "#F8FAFC",
+        "on_bg_muted": "#94A3B8",
+        "roles": {
+          "accent_orange": "#FB923C",
+          "border": "#1E293B"
+        }
+      }
+    ]
+  },
+  "typography": {
+    "font_heading": "'Space Grotesk Variable', -apple-system, BlinkMacSystemFont, sans-serif",
+    "font_body": "'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif",
+    "font_mono": "'IBM Plex Mono', monospace",
+    "scale_px": {
+      "display": 56,
+      "h1": 44,
+      "h2": 32,
+      "h3": 22,
+      "h4": 18,
+      "body": 16,
+      "caption": 14
+    },
+    "heading_rules": "Strong tracking-tight, uppercase labels with tracking-[0.18em], strict hierarchy. Never use generic centered floating text without architectural grounding.",
+    "rules": "H1: text-4xl sm:text-5xl lg:text-6xl font-bold; H2: text-2xl sm:text-3xl lg:text-4xl font-bold; H3: text-xl sm:text-2xl font-semibold; Body: text-base leading-relaxed; Overlines: text-xs uppercase font-bold tracking-widest text-orange-600"
+  },
+  "brand_rules": {
+    "company_name": "BROTHERS WORKFORCE SOLUTIONS",
+    "tagline": "Connecting Talent Creating Success",
+    "location": "Mysuru (Mysore), Karnataka, India (Servicing KIADB Industrial Areas: Hebbal, Nanjangud, Belagola, Kadakola, Hootagalli & across Karnataka)",
+    "logo_spec": "Navy + Orange stylized 'B' monogram with an upward arrow motif symbolising workforce elevation and career progression, paired with bold industrial typography 'BROTHERS WORKFORCE SOLUTIONS'",
+    "strict_prohibitions": [
+      "NEVER display personal founder, family, or proprietor names anywhere on the site.",
+      "NO cartoonish icons or startup illustrations (no 🤖🧠💭💡🔮). Use clean lucide-react technical icons.",
+      "NO flimsy floating gradient bubbles. Keep borders crisp, structural, and corporate industrial.",
+      "Do NOT use placeholder image URLs like via.placeholder.com. Only use the curated high-res industrial images below."
+    ]
+  },
+  "image_urls": {
+    "hero_banner": {
+      "url": "https://images.unsplash.com/photo-1581091212991-8891c7d4bd9b?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA0MTJ8MHwxfHNlYXJjaHwyfHxpbmR1c3RyaWFsJTIwZmFjdG9yeSUyMHdvcmtlcnMlMjBtYW51ZmFjdHVyaW5nfGVufDB8fHx8MTc4ODUyNzk3Nnww&ixlib=rb-4.1.0&q=85",
+      "description": "Engineers and skilled technicians on modern industrial precision manufacturing line",
+      "category": "Hero Section / Background visual"
+    },
+    "factory_assembly": {
+      "url": "https://images.unsplash.com/photo-1589793463357-5fb813435467?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA0MTJ8MHwxfHNlYXJjaHwxfHxpbmR1c3RyaWFsJTIwZmFjdG9yeSUyMHdvcmtlcnMlMjBtYW51ZmFjdHVyaW5nfGVufDB8fHx8MTc4ODUyNzk3Nnww&ixlib=rb-4.1.0&q=85",
+      "description": "Industrial workforce operating assembly lines in organized factory environment",
+      "category": "Services / Factory Workforce Solutions"
+    },
+    "warehouse_logistics": {
+      "url": "https://images.unsplash.com/photo-1586528116022-aeda1613c63d?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1OTN8MHwxfHNlYXJjaHwyfHx3YXJlaG91c2UlMjBsb2dpc3RpY3MlMjB3b3JrZm9yY2UlMjB0ZWFtfGVufDB8fHx8MTc4ODUyNzk3Nnww&ixlib=rb-4.1.0&q=85",
+      "description": "Logistics and warehouse workers in modern fulfillment center",
+      "category": "Services / Warehouse & Logistics"
+    },
+    "safety_team": {
+      "url": "https://images.unsplash.com/photo-1569937714620-ee4352c98e1e?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1OTN8MHwxfHNlYXJjaHw0fHx3YXJlaG91c2UlMjBsb2dpc3RpY3MlMjB3b3JrZm9yY2UlMjB0ZWFtfGVufDB8fHx8MTc4ODUyNzk3Nnww&ixlib=rb-4.1.0&q=85",
+      "description": "Trained workforce team in safety vests and high-visibility gear",
+      "category": "Compliance & Safety / About Section"
+    },
+    "machinery_operator": {
+      "url": "https://images.unsplash.com/photo-1598299803204-b73796f43289?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA0MTJ8MHwxfHNlYXJjaHw0fHxpbmR1c3RyaWFsJTIwZmFjdG9yeSUyMHdvcmtlcnMlMjBtYW51ZmFjdHVyaW5nfGVufDB8fHx8MTc4ODUyNzk3Nnww&ixlib=rb-4.1.0&q=85",
+      "description": "Skilled machine operator on manufacturing line",
+      "category": "Skilled & Technical Workforce section"
+    }
+  },
+  "sections_and_components": {
+    "header": {
+      "structure": "Sticky Header with 95% white glassmorphism background + 1px border. Top micro-bar with Mysore Industrial Helpline, WhatsApp quick connect, and GST/Compliance indicator. Main bar with Monogram Logo + Wordmark, navigation links (Services, Industries, Compliance, Clients, Jobs, Contact), and distinct action buttons: 'Hire Workforce' (Orange highlight) and 'Apply as Worker' (Navy Outline) + Admin lock button.",
+      "data_testids": {
+        "nav_container": "main-navbar",
+        "logo": "brand-logo-link",
+        "btn_hire": "nav-btn-hire-workforce",
+        "btn_jobs": "nav-btn-find-jobs",
+        "btn_admin": "nav-btn-admin-access",
+        "contact_phone": "nav-contact-phone",
+        "contact_whatsapp": "nav-contact-whatsapp"
+      }
+    },
+    "hero_section": {
+      "structure": "High-impact Corporate Industrial Hero with dark navy backing and factory precision overlay. Headline 'Reliable Workforce. Stronger Businesses.', Subtitle 'Enterprise-grade manpower supply, staffing solutions, and 100% statutory compliant labour deployment across Mysore and Karnataka industrial corridors.'",
+      "trust_badges": [
+        {"title": "GST Registered", "desc": "Official Tax Invoicing & Compliance", "icon": "ReceiptCheck"},
+        {"title": "MSME Registered", "desc": "Govt of India Enterprise Certified", "icon": "Award"},
+        {"title": "100% ESIC & EPF Covered", "desc": "Zero Employer Liability", "icon": "ShieldCheck"},
+        {"title": "Licensed Labour Contractor", "desc": "Karnataka State Labour Dept Certified", "icon": "FileBadge"}
+      ],
+      "dual_cta": {
+        "primary": "Request Manpower Quote (Corporate)",
+        "secondary": "Register for Factory Jobs (Candidates)"
+      }
+    },
+    "statutory_compliance_strip": {
+      "structure": "Prominent enterprise trust strip highlighting 100% Statutory Compliance: ESIC, EPF, Minimum Wages Act 1948, Contract Labour (R&A) Act 1970, Workmen Compensation Policy, and On-time Monthly Payroll disbursement.",
+      "badges": ["ESIC Compliant", "EPF Enrolled", "GST Verified", "MSME UDYAM Registered", "Labour Dept Licensed", "Strict Safety (PPE) Protocols"]
+    },
+    "services_section": {
+      "title": "Industrial Manpower Capabilities",
+      "subtitle": "Tailored workforce staffing tiers engineered for factory uptime, assembly precision, and logistics efficiency.",
+      "cards": [
+        {
+          "id": "skilled-workforce",
+          "name": "Skilled Workforce",
+          "tag": "Technical & Precision",
+          "desc": "Certified CNC/VMC operators, ITI certified fitters, certified welders (MIG/TIG), PLC electricians, quality control inspectors, and maintenance technicians.",
+          "badge": "ITI / Diploma Certified"
+        },
+        {
+          "id": "semi-skilled-workforce",
+          "name": "Semi-Skilled Workforce",
+          "tag": "Operational Execution",
+          "desc": "Trained machine helpers, assembly line operators, packaging machine tenders, warehouse pickers, inventory handlers, and fabrication assistants.",
+          "badge": "SOP Trained"
+        },
+        {
+          "id": "general-workforce",
+          "name": "General Workforce",
+          "tag": "Heavy & Plant Operations",
+          "desc": "Material handling crews, loading/unloading specialists, factory housekeeping, pallet stackers, scrap handling, and helper teams.",
+          "badge": "High Attendance Bench"
+        },
+        {
+          "id": "factory-solutions",
+          "name": "Factory Workforce Solutions",
+          "tag": "Turnkey Line Staffing",
+          "desc": "End-to-end shift operations, line supervisors, attendance management, multi-shift rota planning, and turnkey contract staffing for manufacturing units.",
+          "badge": "24/7 Shift Coverage"
+        },
+        {
+          "id": "warehouse-logistics",
+          "name": "Warehouse & Logistics Workforce",
+          "tag": "Supply Chain & Fulfillment",
+          "desc": "Forklift drivers, order pickers, dispatch handlers, cross-docking workers, packaging lines, and inventory audit helpers.",
+          "badge": "E-Commerce & 3PL Ready"
+        }
+      ]
+    },
+    "industries_section": {
+      "title": "Industries We Serve",
+      "subtitle": "Supporting major industrial clusters in Mysore (Hebbal, Nanjangud, Belagola, Kadakola, Hootagalli) and Karnataka state.",
+      "items": [
+        {"name": "Automobile & Auto Components", "icon": "Car", "roles": "Assembly, Toolroom, Paintshop, Quality"},
+        {"name": "Heavy & Light Engineering", "icon": "Wrench", "roles": "Machining, Welding, Structural, Rigging"},
+        {"name": "Electronics & Electricals", "icon": "Cpu", "roles": "SMT Assembly, Wire Harness, Testing"},
+        {"name": "Warehouse & Logistics", "icon": "Truck", "roles": "Stow, Pick, Pack, Dispatch, Material Move"},
+        {"name": "FMCG & Consumer Goods", "icon": "ShoppingBag", "roles": "Line Tenders, Cartoning, Batch Processing"},
+        {"name": "Food Processing", "icon": "Utensils", "roles": "Hygienic Handling, Cold Storage, Sorting"},
+        {"name": "Packaging & Corrugation", "icon": "Box", "roles": "Die-cut, Gluing, Strapping, Quality Check"},
+        {"name": "Industrial Manufacturing", "icon": "Factory", "roles": "Continuous Process, Plant Utility, Line Helper"},
+        {"name": "Pharmaceuticals & Healthcare Ancillaries", "icon": "Activity", "roles": "Cleanroom Support, Secondary Packaging"}
+      ]
+    },
+    "compliance_details_section": {
+      "title": "Enterprise Compliance & Zero-Liability Assurance",
+      "subtitle": "Why corporate plant heads and HR departments trust Brothers Workforce Solutions for risk-free contract staffing.",
+      "pillars": [
+        {"title": "100% Statutory Remittance", "desc": "Monthly ECR challans for EPF & ESIC provided along with tax invoices."},
+        {"title": "Labour Law Adherence", "desc": "Full conformity with Karnataka Contract Labour Act, Form XII registration & register maintenance."},
+        {"title": "Biometric & Attendance Transparency", "desc": "Auditable digital attendance records ensuring exact billing and zero ghost worker discrepancy."},
+        {"title": "Safety First & PPE Compliance", "desc": "Workforce equipped with safety shoes, helmets, earplugs, and induction training before deployment."}
+      ]
+    },
+    "forms_section": {
+      "manpower_request_form": {
+        "title": "Request Manpower for Your Facility",
+        "subtitle": "Get a customized workforce proposal and quote within 4 business hours.",
+        "fields": [
+          "company_name (Required)",
+          "contact_person_designation (Plant Head / HR Manager / Procurement)",
+          "email (Business Email)",
+          "phone (10-digit Mobile)",
+          "industrial_area (Hebbal / Nanjangud / Belagola / Kadakola / Hootagalli / Other Karnataka)",
+          "workforce_type (Skilled / Semi-Skilled / General / Multi-Category)",
+          "estimated_headcount (e.g. 5-20, 20-50, 50-100, 100+)",
+          "shift_requirement (Day Shift / Night Shift / Rotational 24x7)",
+          "specific_skills_requirements (Textarea)"
+        ],
+        "data_testid": "company-manpower-request-form"
+      },
+      "worker_registration_form": {
+        "title": "Candidate & Worker Registration",
+        "subtitle": "Apply for verified factory, warehouse, and technical jobs in Mysore with timely salary and full benefits.",
+        "fields": [
+          "full_name (Required)",
+          "phone_number (WhatsApp enabled)",
+          "age & gender",
+          "education_level (10th / 12th / ITI / Diploma / Degree / Non-Formal)",
+          "skill_category (Machine Operator / Assembly / Welder / Electrician / Warehouse / Helper / Other)",
+          "years_of_experience",
+          "current_location_in_mysore",
+          "aadhaar_available (Yes/No toggle)",
+          "resume_or_experience_details (Text/File Note)"
+        ],
+        "data_testid": "worker-registration-form"
+      }
+    },
+    "job_listings_section": {
+      "title": "Current Job Openings",
+      "subtitle": "Direct recruitment opportunities for industrial and factory placements.",
+      "empty_state_spec": {
+        "title": "No Public Openings Listed Right Now",
+        "desc": "We are currently fulfilling bulk enterprise mandates directly from our pre-registered candidate pool. Submit your registration below to be contacted immediately when matching shifts open.",
+        "action_cta": "Register Your Profile Now"
+      },
+      "active_listings_support": "Dynamic list populated if admin posts active positions."
+    },
+    "clients_section": {
+      "title": "Trusted by Growing Enterprises",
+      "subtitle": "Serving leading production units and supply chains across Mysore industrial belts.",
+      "placeholder_cards": [
+        {"title": "Auto Component Manufacturer", "location": "Nanjangud Industrial Area", "headcount": "80+ Staff Deployed"},
+        {"title": "Precision Engineering Works", "location": "Hebbal Industrial Estate", "headcount": "45+ Skilled Fitters"},
+        {"title": "Leading FMCG Packaging Unit", "location": "Belagola Industrial Area", "headcount": "120+ Assembly Operators"},
+        {"title": "Logistics & Warehousing Hub", "location": "Kadakola Industrial Corridor", "headcount": "60+ Material Handlers"},
+        {"title": "Your Enterprise Could Be Here", "location": "Mysore & Karnataka", "headcount": "Custom Deployment Ready"}
+      ]
+    },
+    "contact_and_quick_connect": {
+      "title": "Get in Touch with Our Industrial Desk",
+      "address": "Mysuru (Mysore), Karnataka, India - 570016",
+      "phone": "+91 821 297 8844 / +91 9480 123456 (Simulated/Configurable)",
+      "whatsapp": "+91 9480 123456",
+      "email": "contact@brothersworkforce.com / operations@brothersworkforce.com",
+      "quick_buttons": [
+        {"label": "Call Industrial Desk", "icon": "PhoneCall", "href": "tel:+918212978844"},
+        {"label": "WhatsApp HR Team", "icon": "MessageSquare", "href": "https://wa.me/919480123456"},
+        {"label": "Email RFQ", "icon": "Mail", "href": "mailto:operations@brothersworkforce.com"}
+      ]
+    },
+    "admin_dashboard": {
+      "route": "/admin",
+      "access_control": "PIN Protected (Default Demo PIN: 1234 or configured via Admin Security)",
+      "features": [
+        "PIN Keypad / Password screen with instant validation and session persistence in memory",
+        "Tab 1: Worker Registrations (search, filter by skill/education, status toggle: New / Contacted / Deployed / Archived)",
+        "Tab 2: Company Manpower Enquiries (search, filter by headcount, status: Pending RFQ / Quote Sent / Meeting Scheduled / Closed)",
+        "Tab 3: Job Posting Manager (Add new job, toggle active/inactive, delete, view applicant count)",
+        "Quick statistics cards: Total Applications, Open Enquiries, Active Headcount Placements, Verified Candidates Bench",
+        "Export to CSV / Print preview summary"
+      ]
+    }
+  },
+  "motion_and_interactions": {
+    "scroll_behavior": "Smooth anchor scrolling with high-contrast sticky navigation active state indicators",
+    "card_hovers": "Subtle -translate-y-1 transition duration-200 shadow-md border-orange-500/30",
+    "buttons": "Micro-scale tap active:scale-98 transition-transform font-medium",
+    "tabs": "Smooth spring tab transition in Admin and Services view"
+  },
+  "accessibility": {
+    "wcag_level": "WCAG 2.1 AA Compliance",
+    "contrast_guarantee": "All body copy meets >4.5:1 contrast against light grey/white background. Navy surfaces have stark white copy (>12:1).",
+    "aria_labels": "All form controls have associated labels and aria-describedby for validation errors. Buttons have clear accessible text.",
+    "keyboard_nav": "Full tab and enter/space support across modals, PIN pad, tabs, and interactive enquiry forms."
+  },
+  "UNIVERSAL_GUIDELINES_FOR_MAIN_AGENT": [
+    "Design Archetype: Corporate Industrial + Compliance Trust. Crisp, authoritative, highly structured. Zero 'bouncy cartoon' visuals.",
+    "Palette: Navy Blue (#0F2444) for authority and structure, Industrial Orange (#EA580C) for action and energy, Light Slate/White for readability.",
+    "Ensure both Employer Funnel ('Hire Workforce / Request RFQ') and Candidate Funnel ('Worker Registration / Find Jobs') are crystal clear and easy to navigate.",
+    "The PIN-protected Admin dashboard must be fully interactive with functional in-memory state or backend endpoints, allowing reviewing submitted registrations, managing client inquiries, and creating/toggling job postings.",
+    "All forms (Company RFQ and Worker Registration) must provide instant visual feedback with Sonner toasts and validate mandatory inputs.",
+    "Include every data-testid specified in testing attributes across navbar, forms, buttons, and admin actions."
+  ]
+}
