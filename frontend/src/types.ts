@@ -75,3 +75,39 @@ export interface AdminStats {
 export interface Ok {
   ok: boolean;
 }
+
+export interface DnsRecord {
+  record?: string | null;
+  name?: string | null;
+  type?: string | null;
+  ttl?: string | null;
+  status?: string | null;
+  value?: string | null;
+  priority?: number | null;
+}
+
+export interface EmailDomain {
+  id: string;
+  name: string;
+  status: string;
+  region?: string | null;
+  created_at?: string | null;
+  records: DnsRecord[];
+}
+
+export interface EmailStatus {
+  key_configured: boolean;
+  sender: string;
+  recipients: string[];
+  using_shared_sender: boolean;
+  key_restricted: boolean;
+  domains: EmailDomain[];
+  error?: string | null;
+}
+
+export interface TestEmailResult {
+  ok: boolean;
+  email_id?: string | null;
+  sent_to: string[];
+  detail?: string | null;
+}

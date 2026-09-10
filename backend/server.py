@@ -62,7 +62,9 @@ async def get_status_checks():
 
 from routers.public import router as public_router  # noqa: E402
 from routers.admin import router as admin_router  # noqa: E402
+from routers.email_admin import router as email_router  # noqa: E402
 
+admin_router.include_router(email_router)
 api_router.include_router(public_router)
 api_router.include_router(admin_router)
 

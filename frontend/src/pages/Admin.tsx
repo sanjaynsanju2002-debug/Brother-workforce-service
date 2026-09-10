@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import EmailSettings from "@/components/site/EmailSettings";
 import {
   Table,
   TableBody,
@@ -216,9 +217,9 @@ function Dashboard({ pin, onLogout }: { pin: string; onLogout: () => void }) {
           >
             <MailWarning className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
             <div className="text-sm text-amber-900">
-              <strong>Email alerts are not active yet.</strong> Submissions are still saved and shown here. Add
-              your Resend API key as <code className="rounded bg-amber-100 px-1">RESEND_API_KEY</code> in the
-              backend environment to start receiving instant emails at {BRAND.email}.
+              <strong>Email alerts are not active yet.</strong> Submissions are still saved and shown here.
+              Add your Resend API key as <code className="rounded bg-amber-100 px-1">RESEND_API_KEY</code> in
+              the backend environment, then use the <strong>Email Settings</strong> tab to send a test.
             </div>
           </div>
         )}
@@ -233,6 +234,9 @@ function Dashboard({ pin, onLogout }: { pin: string; onLogout: () => void }) {
             </TabsTrigger>
             <TabsTrigger value="jobs" data-testid="admin-tab-jobs">
               Job Postings
+            </TabsTrigger>
+            <TabsTrigger value="email" data-testid="admin-tab-email">
+              Email Settings
             </TabsTrigger>
           </TabsList>
 
@@ -556,6 +560,10 @@ function Dashboard({ pin, onLogout }: { pin: string; onLogout: () => void }) {
                 </Table>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="email" className="mt-6">
+            <EmailSettings pin={pin} />
           </TabsContent>
         </Tabs>
       </main>

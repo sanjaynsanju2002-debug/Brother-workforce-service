@@ -100,3 +100,53 @@ class AdminStats(BaseModel):
 
 class Ok(BaseModel):
     ok: bool
+
+
+# ---------- Email settings & domain verification ----------
+class DnsRecord(BaseModel):
+    record: Optional[str] = None
+    name: Optional[str] = None
+    type: Optional[str] = None
+    ttl: Optional[str] = None
+    status: Optional[str] = None
+    value: Optional[str] = None
+    priority: Optional[int] = None
+
+
+class EmailDomain(BaseModel):
+    id: str
+    name: str
+    status: str
+    region: Optional[str] = None
+    created_at: Optional[str] = None
+    records: list[DnsRecord] = []
+
+
+class EmailStatus(BaseModel):
+    key_configured: bool
+    sender: str
+    recipients: list[str]
+    using_shared_sender: bool
+    key_restricted: bool = False
+    domains: list[EmailDomain] = []
+    error: Optional[str] = None
+
+
+class DomainCreate(BaseModel):
+    name: str
+
+
+class EmailSettingsUpdate(BaseModel):
+    sender: str
+    recipients: list[str]
+
+
+class TestEmail(BaseModel):
+    to: Optional[str] = None
+
+
+class TestEmailResult(BaseModel):
+    ok: bool
+    email_id: Optional[str] = None
+    sent_to: list[str] = []
+    detail: Optional[str] = None

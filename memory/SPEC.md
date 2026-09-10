@@ -20,10 +20,25 @@ Admin (`backend/routers/admin.py`, all take `?pin=`):
 - GET/PATCH /api/admin/workers[/{id}] (status: New|Contacted|Deployed|Archived)
 - GET/PATCH /api/admin/company-requests[/{id}] (status: Pending|Quote Sent|In Progress|Closed)
 - GET/POST /api/admin/jobs, PATCH /api/admin/jobs/{id} (active), DELETE /api/admin/jobs/{id}
+- GET /api/admin/export/workers.csv, GET /api/admin/export/company-requests.csv
+
+Email admin (`backend/routers/email_admin.py`, mounted under /api/admin/email, all take `?pin=`):
+- GET /status -> key_configured, sender, recipients, using_shared_sender, key_restricted, domains[]
+- POST /domains {name} -> adds a Resend sending domain, returns DNS records
+- POST /domains/{id}/verify, DELETE /domains/{id}
+- PUT /settings {sender, recipients[]} -> persists to the `settings` collection
+- POST /test {to?} -> sends a test email
+The Resend API key is NEVER returned to the frontend; only domain names/statuses and the
+public DNS records are exposed.
 
 ## Data model
-Collections: `workers`, `company_requests`, `jobs`. String uuid4 `id`. Models in
+Collections: `workers`, `company_requests`, `jobs`, `settings` (one doc id="email" holding
+sender + recipients; env values are the fallback). String uuid4 `id`. Models in
 `backend/models/bws.py`, mirrored in `frontend/src/types.ts`.
+
+## Admin tabs
+Worker Applications | Company Enquiries | Job Postings | Email Settings
+(Email Settings = `frontend/src/components/site/EmailSettings.tsx`)
 
 ## Notes
 - Email notifications via Resend (`backend/lib/notify.py`), sent as FastAPI BackgroundTasks:

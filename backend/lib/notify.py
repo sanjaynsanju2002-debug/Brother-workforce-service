@@ -12,9 +12,6 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-NOTIFY_TO = os.environ.get("NOTIFY_EMAIL", "brothersworkforcesolutions@gmail.com")
-SENDER = os.environ.get("SENDER_EMAIL", "onboarding@resend.dev")
-
 
 def email_configured() -> bool:
     return bool(os.environ.get("RESEND_API_KEY"))
@@ -57,18 +54,30 @@ def build_html(title: str, pairs: list[tuple[str, Any]]) -> str:
     )
 
 
-async def send_notification(subject: str, html: str) -> None:
-    """Fire-and-forget: never raises, never blocks the request path."""
+async def send_email(subject: str, html: str, sender: str, recipients: list[str]) -> str:
+    """Low-level send. Raises on failure — callers decide how to handle it."""
     api_key = os.environ.get("RESEND_API_KEY")
     if not api_key:
+        raise RuntimeError("RESEND_API_KEY is not configured")
+
+    import resend
+
+    resend.api_key = api_key
+    params = {"from": sender, "to": recipients, "subject": subject, "html": html}
+    result = await asyncio.to_thread(resend.Emails.send, params)
+    return str(result.get("id", ""))
+
+
+async def send_notification(subject: str, html: str) -> None:
+    """Fire-and-forget: never raises, never blocks the request path."""
+    if not email_configured():
         logger.warning("RESEND_API_KEY not set — skipping email notification: %s", subject)
         return
     try:
-        import resend
+        from lib.settings import get_email_settings
 
-        resend.api_key = api_key
-        params = {"from": SENDER, "to": [NOTIFY_TO], "subject": subject, "html": html}
-        result = await asyncio.to_thread(resend.Emails.send, params)
-        logger.info("notification email sent (%s): %s", subject, result.get("id"))
+        cfg = await get_email_settings()
+        email_id = await send_email(subject, html, cfg["sender"], cfg["recipients"])
+        logger.info("notification email sent (%s): %s", subject, email_id)
     except Exception as exc:  # a broken mailbox must never break a form submission
         logger.error("notification email failed (%s): %s", subject, exc)
