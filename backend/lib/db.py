@@ -42,6 +42,10 @@ INDEXES: dict[str, list[IndexModel]] = {
         # drop idempotency keys after 30 days so the collection cannot grow forever
         IndexModel([("created_at", ASCENDING)], name="ttl", expireAfterSeconds=2592000),
     ],
+    "shortlists": [
+        IndexModel([("id", ASCENDING)], name="id", unique=True),
+        IndexModel([("created_at", DESCENDING)], name="created_desc"),
+    ],
 }
 
 

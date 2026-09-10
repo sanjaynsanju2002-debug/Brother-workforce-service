@@ -143,6 +143,25 @@ export interface WorkerFilters {
   availabilities: string[];
 }
 
+export interface ShortlistCreate {
+  name: string;
+  request_id?: string | null;
+  notes?: string | null;
+}
+
+export interface Shortlist extends ShortlistCreate {
+  id: string;
+  worker_ids: string[];
+  created_at: string;
+}
+
+export interface DayPoint {
+  date: string;
+  visits: number;
+  applications: number;
+  requests: number;
+}
+
 export interface SecurityInfo {
   pin: string;
   is_default: boolean;

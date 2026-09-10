@@ -13,6 +13,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import EmailSettings from "@/components/site/EmailSettings";
 import ClientsManager from "@/components/site/ClientsManager";
 import Security from "@/components/site/Security";
+import TrafficChart from "@/components/site/TrafficChart";
+import Shortlists from "@/components/site/Shortlists";
+import JobMatches from "@/components/site/JobMatches";
+import { waLink, workerMessage, companyMessage } from "@/lib/wa";
 import {
   Table,
   TableBody,
@@ -30,26 +34,15 @@ import {
 } from "@/components/ui/select";
 import { apiDelete, apiGet, apiPatch, apiPost } from "@/lib/api";
 import { BRAND, SKILL_CATEGORIES } from "@/lib/brand";
-import type { AdminStats, CompanyRequest, Job, JobCreate, Ok, TrafficStats, Worker, WorkerFilters } from "@/types";
+import type { AdminStats, CompanyRequest, Job, JobCreate, Ok, Shortlist, TrafficStats, Worker, WorkerFilters } from "@/types";
 
 const EMPTY_FILTERS = { skill_category: "", location: "", availability: "", status: "", q: "" };
 
 const WORKER_STATUS = ["New", "Contacted", "Deployed", "Archived"];
 const REQUEST_STATUS = ["Pending", "Quote Sent", "In Progress", "Closed"];
 
-function waLink(number: string, message: string): string {
-  const digits = (number || "").replace(/\D/g, "");
-  const withCode = digits.length === 10 ? `91${digits}` : digits;
-  return `https://wa.me/${withCode}?text=${encodeURIComponent(message)}`;
-}
 
-function workerMessage(name: string): string {
-  return `Hello ${name}, this is Brothers Workforce Solutions regarding your job application. We would like to discuss a suitable opportunity with you.`;
-}
 
-function companyMessage(company: string, role: string, count: string): string {
-  return `Hello, this is Brothers Workforce Solutions. Thank you for your manpower requirement for ${company} (${count} x ${role}). We would like to discuss the deployment plan with you.`;
-}
 
 export default function Admin() {
   const [pin, setPin] = useState("");
@@ -123,6 +116,23 @@ function Dashboard({
   const qc = useQueryClient();
   const q = `?pin=${encodeURIComponent(pin)}`;
   const [filters, setFilters] = useState(EMPTY_FILTERS);
+  const [matchJobId, setMatchJobId] = useState<string | null>(null);
+
+  const shortlists = useQuery({
+    queryKey: ["admin-shortlists", pin],
+    queryFn: () => apiGet<Shortlist[]>(`/admin/shortlists${q}`),
+  });
+
+  const addToShortlist = useMutation({
+    mutationFn: (v: { slId: string; workerId: string }) =>
+      apiPost<Shortlist>(`/admin/shortlists/${v.slId}/workers${q}`, { worker_id: v.workerId }),
+    onSuccess: (sl) => {
+      qc.invalidateQueries({ queryKey: ["admin-shortlists", pin] });
+      qc.invalidateQueries({ queryKey: ["shortlist-members", pin] });
+      toast.success(`Added to "${sl.name}"`);
+    },
+    onError: () => toast.error("Could not add to shortlist"),
+  });
 
   const stats = useQuery({ queryKey: ["admin-stats", pin], queryFn: () => apiGet<AdminStats>(`/admin/stats${q}`) });
   const trafficQ = useQuery({
@@ -291,6 +301,8 @@ function Dashboard({
           </div>
         )}
 
+        <TrafficChart pin={pin} />
+
         <Tabs defaultValue="workers" className="mt-8">
           <TabsList data-testid="admin-tabs">
             <TabsTrigger value="workers" data-testid="admin-tab-workers">
@@ -310,6 +322,9 @@ function Dashboard({
             </TabsTrigger>
             <TabsTrigger value="security" data-testid="admin-tab-security">
               Security
+            </TabsTrigger>
+            <TabsTrigger value="shortlists" data-testid="admin-tab-shortlists">
+              Shortlists
             </TabsTrigger>
           </TabsList>
 
@@ -435,15 +450,36 @@ function Dashboard({
                           </Select>
                         </TableCell>
                         <TableCell>
-                          <a
-                            href={waLink(w.whatsapp || w.mobile, workerMessage(w.full_name))}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex items-center gap-1.5 rounded-md bg-[#16A34A] px-2.5 py-1.5 text-xs font-semibold text-white transition-transform duration-150 hover:bg-[#15803D] active:scale-98"
-                            data-testid={`admin-worker-whatsapp-${w.id}`}
-                          >
-                            <MessageSquare className="h-3.5 w-3.5" /> WhatsApp
-                          </a>
+                          <div className="flex items-center gap-2">
+                            <a
+                              href={waLink(w.whatsapp || w.mobile, workerMessage(w.full_name))}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-1.5 rounded-md bg-[#16A34A] px-2.5 py-1.5 text-xs font-semibold text-white transition-transform duration-150 hover:bg-[#15803D] active:scale-98"
+                              data-testid={`admin-worker-whatsapp-${w.id}`}
+                            >
+                              <MessageSquare className="h-3.5 w-3.5" /> WhatsApp
+                            </a>
+                            {(shortlists.data ?? []).length > 0 && (
+                              <Select
+                                value=""
+                                onValueChange={(slId: string) =>
+                                  addToShortlist.mutate({ slId, workerId: w.id })
+                                }
+                              >
+                                <SelectTrigger size="sm" data-testid={`worker-shortlist-add-${w.id}`}>
+                                  <SelectValue placeholder="Shortlist">{() => "Shortlist"}</SelectValue>
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {(shortlists.data ?? []).map((sl) => (
+                                    <SelectItem key={sl.id} value={sl.id}>
+                                      {sl.name}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            )}
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -665,6 +701,14 @@ function Dashboard({
                           <Button
                             size="xs"
                             variant="outline"
+                            onClick={() => setMatchJobId(matchJobId === j.id ? null : j.id)}
+                            data-testid={`admin-job-matches-${j.id}`}
+                          >
+                            {matchJobId === j.id ? "Hide" : "Alerts"}
+                          </Button>
+                          <Button
+                            size="xs"
+                            variant="outline"
                             onClick={() => toggleJob.mutate({ id: j.id, active: !j.active })}
                             data-testid={`admin-job-toggle-${j.id}`}
                           >
@@ -683,6 +727,11 @@ function Dashboard({
                     ))}
                   </TableBody>
                 </Table>
+                {matchJobId && (jobs.data ?? []).some((j) => j.id === matchJobId) && (
+                  <div className="p-4 pt-0">
+                    <JobMatches pin={pin} job={(jobs.data ?? []).find((j) => j.id === matchJobId)!} />
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -697,6 +746,10 @@ function Dashboard({
 
           <TabsContent value="security" className="mt-6">
             <Security pin={pin} onPinChanged={onPinChanged} />
+          </TabsContent>
+
+          <TabsContent value="shortlists" className="mt-6">
+            <Shortlists pin={pin} />
           </TabsContent>
         </Tabs>
       </main>
