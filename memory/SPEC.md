@@ -24,10 +24,20 @@ section falls back to hardcoded placeholders if zero visible clients exist.
 
 Admin (`backend/routers/admin.py`, all take `?pin=`):
 - POST /api/admin/login, GET /api/admin/stats
+- GET /api/admin/traffic -> visits_total/today/week + workers & requests total/today
+- GET /api/admin/security -> {pin, is_default}; POST /api/admin/security/pin {new_pin}
+  (4-12 digits, stored in `settings` doc id="admin", overrides the ADMIN_PIN env fallback)
 - GET/PATCH /api/admin/workers[/{id}] (status: New|Contacted|Deployed|Archived)
 - GET/PATCH /api/admin/company-requests[/{id}] (status: Pending|Quote Sent|In Progress|Closed)
 - GET/POST /api/admin/jobs, PATCH /api/admin/jobs/{id} (active), DELETE /api/admin/jobs/{id}
 - GET /api/admin/export/workers.csv, GET /api/admin/export/company-requests.csv
+
+PIN checks go through `lib/auth.py: verify_pin()` (async, DB-first with env fallback) — used by
+every admin router. Never re-add a local sync `_check`.
+
+Visits (`POST /api/visits`, public): anonymous counter, no IP/cookie/personal data. The
+frontend calls it from `lib/track.ts` with a sessionStorage guard so one browser session
+counts once (this also neutralises StrictMode's double-invoked effects).
 
 Email admin (`backend/routers/email_admin.py`, mounted under /api/admin/email, all take `?pin=`):
 - GET /status -> key_configured, sender, recipients, using_shared_sender, key_restricted, domains[]
@@ -44,8 +54,15 @@ sender + recipients; env values are the fallback). String uuid4 `id`. Models in
 `backend/models/bws.py`, mirrored in `frontend/src/types.ts`.
 
 ## Admin tabs
-Worker Applications | Company Enquiries | Job Postings | Email Settings | Clients
-(`frontend/src/components/site/EmailSettings.tsx`, `ClientsManager.tsx`)
+Worker Applications | Company Enquiries | Job Postings | Email Settings | Clients | Security
+(`frontend/src/components/site/EmailSettings.tsx`, `ClientsManager.tsx`, `Security.tsx`)
+Dashboard header also shows a "Website Activity" funnel: People Visited / Applied for Jobs /
+Requested Manpower, each with a total and a today count.
+
+## Security note
+The PIN is deliberately NOT displayed on the public `/admin` login screen — that page is
+reachable by anyone and the dashboard exposes applicant phone numbers and resumes. The PIN is
+only viewable in the Security tab after authenticating.
 
 ## Notes
 - Email notifications via Resend (`backend/lib/notify.py`), sent as FastAPI BackgroundTasks:

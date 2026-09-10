@@ -126,3 +126,18 @@ export interface Client extends ClientCreate {
   sort_order: number;
   created_at: string;
 }
+
+export interface TrafficStats {
+  visits_total: number;
+  visits_today: number;
+  visits_week: number;
+  workers_total: number;
+  workers_today: number;
+  requests_total: number;
+  requests_today: number;
+}
+
+export interface SecurityInfo {
+  pin: string;
+  is_default: boolean;
+}

@@ -150,3 +150,12 @@ class TestEmailResult(BaseModel):
     email_id: Optional[str] = None
     sent_to: list[str] = []
     detail: Optional[str] = None
+
+
+class SecurityInfo(BaseModel):
+    pin: str
+    is_default: bool
+
+
+class PinChange(BaseModel):
+    new_pin: str

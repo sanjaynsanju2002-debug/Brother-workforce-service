@@ -12,9 +12,11 @@ from models.bws import (
     CompanyRequest,
     CompanyRequestCreate,
     Job,
+    Ok,
     Worker,
     WorkerCreate,
 )
+from models.visits import Visit, VisitCreate
 
 router = APIRouter()
 
@@ -121,3 +123,11 @@ async def create_company_request(
 async def list_jobs() -> list[Job]:
     docs = await db.jobs.find({"active": True}).sort("created_at", -1).to_list(200)
     return [Job(**d) for d in docs]
+
+
+@router.post("/visits", response_model=Ok)
+async def record_visit(payload: VisitCreate) -> Ok:
+    """Anonymous visit counter — no IP, cookie or personal data is stored."""
+    visit = Visit(path=payload.path)
+    await db.visits.insert_one(visit.model_dump())
+    return Ok(ok=True)

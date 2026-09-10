@@ -31,10 +31,6 @@ SHARED_SENDERS = {"onboarding@resend.dev", "delivered@resend.dev"}
 DOMAIN_RE = re.compile(r"^(?!-)[A-Za-z0-9-]{1,63}(?<!-)(\.[A-Za-z0-9-]{1,63})*\.[A-Za-z]{2,}$")
 
 
-def _check(pin: str) -> None:
-    if pin != os.environ.get("ADMIN_PIN", "246810"):
-        raise HTTPException(status_code=401, detail="Invalid PIN")
-
 
 def _resend():
     api_key = os.environ.get("RESEND_API_KEY")
@@ -71,7 +67,7 @@ def _to_domain(raw: dict) -> EmailDomain:
 
 @router.get("/status", response_model=EmailStatus)
 async def email_status(pin: str = Query(...)) -> EmailStatus:
-    _check(pin)
+    await verify_pin(pin)
     cfg = await get_email_settings()
     status = EmailStatus(
         key_configured=email_configured(),
@@ -96,7 +92,7 @@ async def email_status(pin: str = Query(...)) -> EmailStatus:
 
 @router.post("/domains", response_model=EmailDomain)
 async def add_domain(payload: DomainCreate, pin: str = Query(...)) -> EmailDomain:
-    _check(pin)
+    await verify_pin(pin)
     name = payload.name.strip().lower().removeprefix("http://").removeprefix("https://").strip("/")
     name = name.removeprefix("www.")
     if not DOMAIN_RE.match(name):
@@ -119,7 +115,7 @@ async def add_domain(payload: DomainCreate, pin: str = Query(...)) -> EmailDomai
 
 @router.post("/domains/{domain_id}/verify", response_model=EmailDomain)
 async def verify_domain(domain_id: str, pin: str = Query(...)) -> EmailDomain:
-    _check(pin)
+    await verify_pin(pin)
     resend = _resend()
     try:
         await asyncio.to_thread(resend.Domains.verify, domain_id)
@@ -131,7 +127,7 @@ async def verify_domain(domain_id: str, pin: str = Query(...)) -> EmailDomain:
 
 @router.delete("/domains/{domain_id}", response_model=Ok)
 async def remove_domain(domain_id: str, pin: str = Query(...)) -> Ok:
-    _check(pin)
+    await verify_pin(pin)
     resend = _resend()
     try:
         await asyncio.to_thread(resend.Domains.remove, domain_id)
@@ -142,7 +138,7 @@ async def remove_domain(domain_id: str, pin: str = Query(...)) -> Ok:
 
 @router.put("/settings", response_model=EmailStatus)
 async def update_settings(payload: EmailSettingsUpdate, pin: str = Query(...)) -> EmailStatus:
-    _check(pin)
+    await verify_pin(pin)
     sender = payload.sender.strip()
     recipients = [r.strip() for r in payload.recipients if r.strip()]
     if "@" not in sender:
@@ -158,7 +154,7 @@ async def update_settings(payload: EmailSettingsUpdate, pin: str = Query(...)) -
 
 @router.post("/test", response_model=TestEmailResult)
 async def send_test(payload: TestEmail, pin: str = Query(...)) -> TestEmailResult:
-    _check(pin)
+    await verify_pin(pin)
     if not email_configured():
         raise HTTPException(status_code=400, detail="RESEND_API_KEY is not configured on the server")
     cfg = await get_email_settings()

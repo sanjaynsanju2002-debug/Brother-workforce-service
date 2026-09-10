@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Activity,
@@ -33,6 +34,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { apiGet } from "@/lib/api";
 import { BRAND, IMAGES } from "@/lib/brand";
+import { trackVisit } from "@/lib/track";
 import type { Client, Job } from "@/types";
 
 const TRUST = [
@@ -109,6 +111,10 @@ function scrollTo(id: string) {
 }
 
 export default function Home() {
+  useEffect(() => {
+    trackVisit("/");
+  }, []);
+
   const jobsQuery = useQuery({ queryKey: ["jobs"], queryFn: () => apiGet<Job[]>("/jobs") });
   const jobs = jobsQuery.isError ? [] : (jobsQuery.data ?? []);
 

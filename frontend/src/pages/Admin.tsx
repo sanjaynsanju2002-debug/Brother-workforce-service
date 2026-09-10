@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Briefcase, Download, FileText, Loader2, Lock, MailWarning, MessageSquare, Plus, Trash2, Users } from "lucide-react";
+import { ArrowLeft, Briefcase, Building2, Download, Eye, FileText, Loader2, Lock, MailWarning, MessageSquare, Plus, Trash2, TrendingUp, Users } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import EmailSettings from "@/components/site/EmailSettings";
 import ClientsManager from "@/components/site/ClientsManager";
+import Security from "@/components/site/Security";
 import {
   Table,
   TableBody,
@@ -29,7 +30,7 @@ import {
 } from "@/components/ui/select";
 import { apiDelete, apiGet, apiPatch, apiPost } from "@/lib/api";
 import { BRAND, SKILL_CATEGORIES } from "@/lib/brand";
-import type { AdminStats, CompanyRequest, Job, JobCreate, Ok, Worker } from "@/types";
+import type { AdminStats, CompanyRequest, Job, JobCreate, Ok, TrafficStats, Worker } from "@/types";
 
 const WORKER_STATUS = ["New", "Contacted", "Deployed", "Archived"];
 const REQUEST_STATUS = ["Pending", "Quote Sent", "In Progress", "Closed"];
@@ -105,14 +106,26 @@ export default function Admin() {
     );
   }
 
-  return <Dashboard pin={authPin} onLogout={() => setAuthPin(null)} />;
+  return <Dashboard pin={authPin} onLogout={() => setAuthPin(null)} onPinChanged={setAuthPin} />;
 }
 
-function Dashboard({ pin, onLogout }: { pin: string; onLogout: () => void }) {
+function Dashboard({
+  pin,
+  onLogout,
+  onPinChanged,
+}: {
+  pin: string;
+  onLogout: () => void;
+  onPinChanged: (p: string) => void;
+}) {
   const qc = useQueryClient();
   const q = `?pin=${encodeURIComponent(pin)}`;
 
   const stats = useQuery({ queryKey: ["admin-stats", pin], queryFn: () => apiGet<AdminStats>(`/admin/stats${q}`) });
+  const trafficQ = useQuery({
+    queryKey: ["admin-traffic", pin],
+    queryFn: () => apiGet<TrafficStats>(`/admin/traffic${q}`),
+  });
   const workers = useQuery({ queryKey: ["admin-workers", pin], queryFn: () => apiGet<Worker[]>(`/admin/workers${q}`) });
   const requests = useQuery({
     queryKey: ["admin-requests", pin],
@@ -180,6 +193,7 @@ function Dashboard({ pin, onLogout }: { pin: string; onLogout: () => void }) {
   });
 
   const s = stats.data;
+  const t = trafficQ.data;
 
   return (
     <div className="min-h-screen bg-[#F8FAFC]">
@@ -209,6 +223,40 @@ function Dashboard({ pin, onLogout }: { pin: string; onLogout: () => void }) {
           <Stat icon={FileText} label="Company Enquiries" value={s?.requests ?? 0} testid="stat-requests" />
           <Stat icon={FileText} label="Pending Enquiries" value={s?.open_requests ?? 0} testid="stat-open-requests" />
           <Stat icon={Briefcase} label="Active Jobs" value={s?.active_jobs ?? 0} testid="stat-active-jobs" />
+        </div>
+
+        {/* Website traffic + conversion funnel */}
+        <div className="mt-6 rounded-lg border border-slate-200 bg-white p-6" data-testid="admin-traffic">
+          <h2 className="flex items-center gap-2 text-base font-semibold text-[#0F2444]">
+            <TrendingUp className="h-4 w-4 text-[#EA580C]" /> Website Activity
+          </h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Anonymous visit counts — one per visitor session. No personal data is tracked.
+          </p>
+          <div className="mt-5 grid gap-4 sm:grid-cols-3">
+            <Funnel
+              icon={Eye}
+              label="People Visited"
+              total={t?.visits_total ?? 0}
+              today={t?.visits_today ?? 0}
+              week={t?.visits_week}
+              testid="funnel-visits"
+            />
+            <Funnel
+              icon={Users}
+              label="Applied for Jobs"
+              total={t?.workers_total ?? 0}
+              today={t?.workers_today ?? 0}
+              testid="funnel-applications"
+            />
+            <Funnel
+              icon={Building2}
+              label="Requested Manpower"
+              total={t?.requests_total ?? 0}
+              today={t?.requests_today ?? 0}
+              testid="funnel-requests"
+            />
+          </div>
         </div>
 
         {s && !s.email_configured && (
@@ -241,6 +289,9 @@ function Dashboard({ pin, onLogout }: { pin: string; onLogout: () => void }) {
             </TabsTrigger>
             <TabsTrigger value="clients" data-testid="admin-tab-clients">
               Clients
+            </TabsTrigger>
+            <TabsTrigger value="security" data-testid="admin-tab-security">
+              Security
             </TabsTrigger>
           </TabsList>
 
@@ -573,8 +624,47 @@ function Dashboard({ pin, onLogout }: { pin: string; onLogout: () => void }) {
           <TabsContent value="clients" className="mt-6">
             <ClientsManager pin={pin} />
           </TabsContent>
+
+          <TabsContent value="security" className="mt-6">
+            <Security pin={pin} onPinChanged={onPinChanged} />
+          </TabsContent>
         </Tabs>
       </main>
+    </div>
+  );
+}
+
+function Funnel({
+  icon: Icon,
+  label,
+  total,
+  today,
+  week,
+  testid,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  total: number;
+  today: number;
+  week?: number;
+  testid: string;
+}) {
+  return (
+    <div className="rounded-md border border-slate-200 bg-[#F8FAFC] p-5" data-testid={testid}>
+      <div className="flex items-center gap-2">
+        <Icon className="h-4 w-4 text-[#EA580C]" />
+        <p className="text-xs font-bold uppercase tracking-widest text-slate-500">{label}</p>
+      </div>
+      <p className="mt-3 text-3xl font-bold text-[#0F2444]" data-testid={`${testid}-total`}>
+        {total}
+      </p>
+      <p className="mt-1 text-xs text-slate-500">
+        <span className="font-semibold text-[#EA580C]" data-testid={`${testid}-today`}>
+          {today}
+        </span>{" "}
+        today
+        {week !== undefined && <> · {week} in last 7 days</>}
+      </p>
     </div>
   );
 }
