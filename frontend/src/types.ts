@@ -137,6 +137,12 @@ export interface TrafficStats {
   requests_today: number;
 }
 
+export interface WorkerFilters {
+  skill_categories: string[];
+  locations: string[];
+  availabilities: string[];
+}
+
 export interface SecurityInfo {
   pin: string;
   is_default: boolean;

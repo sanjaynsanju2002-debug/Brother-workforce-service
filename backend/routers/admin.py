@@ -3,6 +3,7 @@
 import csv
 import io
 import os
+import re
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, HTTPException, Query
@@ -22,6 +23,7 @@ from models.bws import (
     SecurityInfo,
     StatusUpdate,
     Worker,
+    WorkerFilters,
 )
 from models.visits import TrafficStats
 
@@ -83,10 +85,54 @@ async def change_pin(payload: PinChange, pin: str = Query(...)) -> SecurityInfo:
 
 
 @router.get("/workers", response_model=list[Worker])
-async def list_workers(pin: str = Query(...)) -> list[Worker]:
+async def list_workers(
+    pin: str = Query(...),
+    skill_category: str | None = Query(None),
+    location: str | None = Query(None),
+    availability: str | None = Query(None),
+    status: str | None = Query(None),
+    q: str | None = Query(None),
+) -> list[Worker]:
     await verify_pin(pin)
-    docs = await db.workers.find().sort("created_at", -1).to_list(500)
+    query: dict = {}
+    if skill_category:
+        query["skill_category"] = skill_category
+    if availability:
+        query["availability"] = availability
+    if status:
+        query["status"] = status
+    if location:
+        query["$or"] = [
+            {"current_location": {"$regex": re.escape(location), "$options": "i"}},
+            {"preferred_location": {"$regex": re.escape(location), "$options": "i"}},
+        ]
+    if q:
+        term = {"$regex": re.escape(q), "$options": "i"}
+        clause = [
+            {"full_name": term},
+            {"mobile": term},
+            {"skills": term},
+            {"education": term},
+            {"previous_experience": term},
+        ]
+        # keep an existing $or (location) intact by combining with $and
+        if "$or" in query:
+            query = {"$and": [{"$or": query.pop("$or")}, {"$or": clause}], **query}
+        else:
+            query["$or"] = clause
+    docs = await db.workers.find(query).sort("created_at", -1).to_list(500)
     return [Worker(**d) for d in docs]
+
+
+@router.get("/worker-filters", response_model=WorkerFilters)
+async def worker_filters(pin: str = Query(...)) -> WorkerFilters:
+    """Distinct values so the admin filters only offer options that exist."""
+    await verify_pin(pin)
+    return WorkerFilters(
+        skill_categories=sorted(x for x in await db.workers.distinct("skill_category") if x),
+        locations=sorted(x for x in await db.workers.distinct("current_location") if x),
+        availabilities=sorted(x for x in await db.workers.distinct("availability") if x),
+    )
 
 
 @router.patch("/workers/{worker_id}", response_model=Worker)

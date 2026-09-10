@@ -30,7 +30,9 @@ import {
 } from "@/components/ui/select";
 import { apiDelete, apiGet, apiPatch, apiPost } from "@/lib/api";
 import { BRAND, SKILL_CATEGORIES } from "@/lib/brand";
-import type { AdminStats, CompanyRequest, Job, JobCreate, Ok, TrafficStats, Worker } from "@/types";
+import type { AdminStats, CompanyRequest, Job, JobCreate, Ok, TrafficStats, Worker, WorkerFilters } from "@/types";
+
+const EMPTY_FILTERS = { skill_category: "", location: "", availability: "", status: "", q: "" };
 
 const WORKER_STATUS = ["New", "Contacted", "Deployed", "Archived"];
 const REQUEST_STATUS = ["Pending", "Quote Sent", "In Progress", "Closed"];
@@ -120,13 +122,29 @@ function Dashboard({
 }) {
   const qc = useQueryClient();
   const q = `?pin=${encodeURIComponent(pin)}`;
+  const [filters, setFilters] = useState(EMPTY_FILTERS);
 
   const stats = useQuery({ queryKey: ["admin-stats", pin], queryFn: () => apiGet<AdminStats>(`/admin/stats${q}`) });
   const trafficQ = useQuery({
     queryKey: ["admin-traffic", pin],
     queryFn: () => apiGet<TrafficStats>(`/admin/traffic${q}`),
   });
-  const workers = useQuery({ queryKey: ["admin-workers", pin], queryFn: () => apiGet<Worker[]>(`/admin/workers${q}`) });
+  const workers = useQuery({
+    queryKey: ["admin-workers", pin, filters],
+    queryFn: () => {
+      const p = new URLSearchParams({ pin });
+      if (filters.skill_category) p.set("skill_category", filters.skill_category);
+      if (filters.location) p.set("location", filters.location);
+      if (filters.availability) p.set("availability", filters.availability);
+      if (filters.status) p.set("status", filters.status);
+      if (filters.q) p.set("q", filters.q);
+      return apiGet<Worker[]>(`/admin/workers?${p.toString()}`);
+    },
+  });
+  const filterOptions = useQuery({
+    queryKey: ["admin-worker-filters", pin],
+    queryFn: () => apiGet<WorkerFilters>(`/admin/worker-filters${q}`),
+  });
   const requests = useQuery({
     queryKey: ["admin-requests", pin],
     queryFn: () => apiGet<CompanyRequest[]>(`/admin/company-requests${q}`),
@@ -296,6 +314,58 @@ function Dashboard({
           </TabsList>
 
           <TabsContent value="workers" className="mt-6">
+            <div className="mb-4 rounded-lg border border-slate-200 bg-white p-4" data-testid="worker-filters">
+              <div className="flex flex-wrap items-end gap-3">
+                <div className="min-w-[200px] flex-1">
+                  <Label className="mb-1.5 block text-xs text-slate-500">Search name, phone or skill</Label>
+                  <Input
+                    placeholder="e.g. welder, 98765…"
+                    value={filters.q}
+                    onChange={(e) => setFilters({ ...filters, q: e.target.value })}
+                    data-testid="worker-filter-search"
+                  />
+                </div>
+                <FilterSelect
+                  label="Skill Category"
+                  value={filters.skill_category}
+                  options={filterOptions.data?.skill_categories ?? []}
+                  onChange={(v) => setFilters({ ...filters, skill_category: v })}
+                  testid="worker-filter-skill"
+                />
+                <FilterSelect
+                  label="Location"
+                  value={filters.location}
+                  options={filterOptions.data?.locations ?? []}
+                  onChange={(v) => setFilters({ ...filters, location: v })}
+                  testid="worker-filter-location"
+                />
+                <FilterSelect
+                  label="Availability"
+                  value={filters.availability}
+                  options={filterOptions.data?.availabilities ?? []}
+                  onChange={(v) => setFilters({ ...filters, availability: v })}
+                  testid="worker-filter-availability"
+                />
+                <FilterSelect
+                  label="Status"
+                  value={filters.status}
+                  options={WORKER_STATUS}
+                  onChange={(v) => setFilters({ ...filters, status: v })}
+                  testid="worker-filter-status"
+                />
+                <Button
+                  variant="outline"
+                  onClick={() => setFilters(EMPTY_FILTERS)}
+                  data-testid="worker-filter-clear"
+                >
+                  Clear
+                </Button>
+              </div>
+              <p className="mt-3 text-xs text-slate-500" data-testid="worker-filter-count">
+                Showing {(workers.data ?? []).length} candidate
+                {(workers.data ?? []).length === 1 ? "" : "s"}
+              </p>
+            </div>
             <div className="mb-4 flex justify-end">
               <a
                 href={`/api/admin/export/workers.csv${q}`}
@@ -630,6 +700,39 @@ function Dashboard({
           </TabsContent>
         </Tabs>
       </main>
+    </div>
+  );
+}
+
+function FilterSelect({
+  label,
+  value,
+  options,
+  onChange,
+  testid,
+}: {
+  label: string;
+  value: string;
+  options: string[];
+  onChange: (v: string) => void;
+  testid: string;
+}) {
+  return (
+    <div className="min-w-[150px]">
+      <Label className="mb-1.5 block text-xs text-slate-500">{label}</Label>
+      <Select value={value || "__all"} onValueChange={(v: string) => onChange(v === "__all" ? "" : v)}>
+        <SelectTrigger data-testid={testid}>
+          <SelectValue>{(v) => (v === "__all" || !v ? "All" : String(v))}</SelectValue>
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="__all">All</SelectItem>
+          {options.map((o) => (
+            <SelectItem key={o} value={o}>
+              {o}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     </div>
   );
 }

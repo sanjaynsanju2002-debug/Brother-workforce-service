@@ -37,6 +37,11 @@ INDEXES: dict[str, list[IndexModel]] = {
     ],
     "settings": [IndexModel([("id", ASCENDING)], name="id", unique=True)],
     "visits": [IndexModel([("created_at", DESCENDING)], name="created_desc")],
+    "cron_runs": [
+        IndexModel([("run_id", ASCENDING)], name="run_id", unique=True),
+        # drop idempotency keys after 30 days so the collection cannot grow forever
+        IndexModel([("created_at", ASCENDING)], name="ttl", expireAfterSeconds=2592000),
+    ],
 }
 
 

@@ -28,6 +28,10 @@ Admin (`backend/routers/admin.py`, all take `?pin=`):
 - GET /api/admin/security -> {pin, is_default}; POST /api/admin/security/pin {new_pin}
   (4-12 digits, stored in `settings` doc id="admin", overrides the ADMIN_PIN env fallback)
 - GET/PATCH /api/admin/workers[/{id}] (status: New|Contacted|Deployed|Archived)
+  GET supports filters: `skill_category`, `location` (regex over current+preferred),
+  `availability`, `status`, `q` (name/mobile/skills/education/previous_experience).
+  Location + q combine via `$and` so neither `$or` clobbers the other.
+- GET /api/admin/worker-filters -> distinct skill_categories/locations/availabilities
 - GET/PATCH /api/admin/company-requests[/{id}] (status: Pending|Quote Sent|In Progress|Closed)
 - GET/POST /api/admin/jobs, PATCH /api/admin/jobs/{id} (active), DELETE /api/admin/jobs/{id}
 - GET /api/admin/export/workers.csv, GET /api/admin/export/company-requests.csv
@@ -58,6 +62,16 @@ Worker Applications | Company Enquiries | Job Postings | Email Settings | Client
 (`frontend/src/components/site/EmailSettings.tsx`, `ClientsManager.tsx`, `Security.tsx`)
 Dashboard header also shows a "Website Activity" funnel: People Visited / Applied for Jobs /
 Requested Manpower, each with a total and a today count.
+
+## Scheduled tasks
+`.emergent/crons.yml` -> one cron `daily-digest`: `0 7 * * *` in `Asia/Kolkata`, POST to
+`/api/cron/digest` (`backend/routers/cron.py`).
+- Auth: `Authorization: Bearer $WEBHOOK_CRON_SECRET` (backend/.env), constant-time compare,
+  401 on missing/wrong.
+- Idempotent on `X-Webhook-Id` / envelope `run_id` via the `cron_runs` collection
+  (30-day TTL index). Duplicate delivery returns 2xx with `queued: false`.
+- Acks 2xx immediately and sends via BackgroundTasks. Summarises YESTERDAY's visits,
+  applications and manpower requests; **skips sending entirely on zero-activity days**.
 
 ## Security note
 The PIN is deliberately NOT displayed on the public `/admin` login screen — that page is

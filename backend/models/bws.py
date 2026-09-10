@@ -159,3 +159,9 @@ class SecurityInfo(BaseModel):
 
 class PinChange(BaseModel):
     new_pin: str
+
+
+class WorkerFilters(BaseModel):
+    skill_categories: list[str] = []
+    locations: list[str] = []
+    availabilities: list[str] = []
