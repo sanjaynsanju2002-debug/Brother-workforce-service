@@ -3,10 +3,11 @@
 import re
 from pathlib import Path
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 
 from lib.db import db
+from lib.notify import build_html, send_notification
 from models.bws import (
     CompanyRequest,
     CompanyRequestCreate,
@@ -24,9 +25,32 @@ ALLOWED_EXT = {".pdf", ".doc", ".docx", ".png", ".jpg", ".jpeg"}
 
 
 @router.post("/workers", response_model=Worker)
-async def create_worker(payload: WorkerCreate) -> Worker:
+async def create_worker(payload: WorkerCreate, background: BackgroundTasks) -> Worker:
     worker = Worker(**payload.model_dump())
     await db.workers.insert_one(worker.model_dump())
+    background.add_task(
+        send_notification,
+        "New Worker Registration",
+        build_html(
+            "New Worker Registration",
+            [
+                ("Full Name", worker.full_name),
+                ("Mobile", worker.mobile),
+                ("WhatsApp", worker.whatsapp),
+                ("Age", worker.age),
+                ("Gender", worker.gender),
+                ("Current Location", worker.current_location),
+                ("Education", worker.education),
+                ("Experience", worker.experience),
+                ("Skill Category", worker.skill_category),
+                ("Skills", worker.skills),
+                ("Previous Experience", worker.previous_experience),
+                ("Preferred Location", worker.preferred_location),
+                ("Expected Salary", worker.expected_salary),
+                ("Availability", worker.availability),
+            ],
+        ),
+    )
     return worker
 
 
@@ -62,9 +86,34 @@ async def download_resume(worker_id: str) -> FileResponse:
 
 
 @router.post("/company-requests", response_model=CompanyRequest)
-async def create_company_request(payload: CompanyRequestCreate) -> CompanyRequest:
+async def create_company_request(
+    payload: CompanyRequestCreate, background: BackgroundTasks
+) -> CompanyRequest:
     req = CompanyRequest(**payload.model_dump())
     await db.company_requests.insert_one(req.model_dump())
+    background.add_task(
+        send_notification,
+        "New Manpower Requirement",
+        build_html(
+            "New Manpower Requirement",
+            [
+                ("Company Name", req.company_name),
+                ("Contact Person", req.contact_person),
+                ("Designation", req.designation),
+                ("Mobile", req.mobile),
+                ("Email", req.email),
+                ("Company Location", req.company_location),
+                ("Industry", req.industry),
+                ("Workforce Type", req.workforce_type),
+                ("Job Role", req.job_role),
+                ("Workers Required", req.worker_count),
+                ("Shift Details", req.shift_details),
+                ("Expected Joining Date", req.joining_date),
+                ("Work Location", req.work_location),
+                ("Requirement", req.description),
+            ],
+        ),
+    )
     return req
 
 

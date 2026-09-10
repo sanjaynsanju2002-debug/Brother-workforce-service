@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Briefcase, FileText, Loader2, Lock, Plus, Trash2, Users } from "lucide-react";
+import { ArrowLeft, Briefcase, Download, FileText, Loader2, Lock, MailWarning, MessageSquare, Plus, Trash2, Users } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -31,6 +31,20 @@ import type { AdminStats, CompanyRequest, Job, JobCreate, Ok, Worker } from "@/t
 
 const WORKER_STATUS = ["New", "Contacted", "Deployed", "Archived"];
 const REQUEST_STATUS = ["Pending", "Quote Sent", "In Progress", "Closed"];
+
+function waLink(number: string, message: string): string {
+  const digits = (number || "").replace(/\D/g, "");
+  const withCode = digits.length === 10 ? `91${digits}` : digits;
+  return `https://wa.me/${withCode}?text=${encodeURIComponent(message)}`;
+}
+
+function workerMessage(name: string): string {
+  return `Hello ${name}, this is Brothers Workforce Solutions regarding your job application. We would like to discuss a suitable opportunity with you.`;
+}
+
+function companyMessage(company: string, role: string, count: string): string {
+  return `Hello, this is Brothers Workforce Solutions. Thank you for your manpower requirement for ${company} (${count} x ${role}). We would like to discuss the deployment plan with you.`;
+}
 
 export default function Admin() {
   const [pin, setPin] = useState("");
@@ -195,6 +209,20 @@ function Dashboard({ pin, onLogout }: { pin: string; onLogout: () => void }) {
           <Stat icon={Briefcase} label="Active Jobs" value={s?.active_jobs ?? 0} testid="stat-active-jobs" />
         </div>
 
+        {s && !s.email_configured && (
+          <div
+            className="mt-4 flex items-start gap-3 rounded-md border border-amber-200 bg-amber-50 p-4"
+            data-testid="admin-email-warning"
+          >
+            <MailWarning className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+            <div className="text-sm text-amber-900">
+              <strong>Email alerts are not active yet.</strong> Submissions are still saved and shown here. Add
+              your Resend API key as <code className="rounded bg-amber-100 px-1">RESEND_API_KEY</code> in the
+              backend environment to start receiving instant emails at {BRAND.email}.
+            </div>
+          </div>
+        )}
+
         <Tabs defaultValue="workers" className="mt-8">
           <TabsList data-testid="admin-tabs">
             <TabsTrigger value="workers" data-testid="admin-tab-workers">
@@ -209,6 +237,15 @@ function Dashboard({ pin, onLogout }: { pin: string; onLogout: () => void }) {
           </TabsList>
 
           <TabsContent value="workers" className="mt-6">
+            <div className="mb-4 flex justify-end">
+              <a
+                href={`/api/admin/export/workers.csv${q}`}
+                className="inline-flex items-center gap-2 rounded-md bg-[#0F2444] px-4 py-2 text-sm font-semibold text-white transition-transform duration-150 hover:bg-[#0A172C] active:scale-98"
+                data-testid="admin-export-workers"
+              >
+                <Download className="h-4 w-4" /> Download Spreadsheet
+              </a>
+            </div>
             <Card className="border-slate-200 bg-white">
               <CardContent className="p-0">
                 <Table data-testid="admin-workers-table">
@@ -220,12 +257,13 @@ function Dashboard({ pin, onLogout }: { pin: string; onLogout: () => void }) {
                       <TableHead>Location</TableHead>
                       <TableHead>Resume</TableHead>
                       <TableHead>Status</TableHead>
+                      <TableHead>Contact</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {(workers.data ?? []).length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={6} className="py-10 text-center text-slate-500">
+                        <TableCell colSpan={7} className="py-10 text-center text-slate-500">
                           No worker applications yet.
                         </TableCell>
                       </TableRow>
@@ -267,6 +305,17 @@ function Dashboard({ pin, onLogout }: { pin: string; onLogout: () => void }) {
                             </SelectContent>
                           </Select>
                         </TableCell>
+                        <TableCell>
+                          <a
+                            href={waLink(w.whatsapp || w.mobile, workerMessage(w.full_name))}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1.5 rounded-md bg-[#16A34A] px-2.5 py-1.5 text-xs font-semibold text-white transition-transform duration-150 hover:bg-[#15803D] active:scale-98"
+                            data-testid={`admin-worker-whatsapp-${w.id}`}
+                          >
+                            <MessageSquare className="h-3.5 w-3.5" /> WhatsApp
+                          </a>
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -276,6 +325,15 @@ function Dashboard({ pin, onLogout }: { pin: string; onLogout: () => void }) {
           </TabsContent>
 
           <TabsContent value="requests" className="mt-6">
+            <div className="mb-4 flex justify-end">
+              <a
+                href={`/api/admin/export/company-requests.csv${q}`}
+                className="inline-flex items-center gap-2 rounded-md bg-[#0F2444] px-4 py-2 text-sm font-semibold text-white transition-transform duration-150 hover:bg-[#0A172C] active:scale-98"
+                data-testid="admin-export-requests"
+              >
+                <Download className="h-4 w-4" /> Download Spreadsheet
+              </a>
+            </div>
             <Card className="border-slate-200 bg-white">
               <CardContent className="p-0">
                 <Table data-testid="admin-requests-table">
@@ -287,12 +345,13 @@ function Dashboard({ pin, onLogout }: { pin: string; onLogout: () => void }) {
                       <TableHead>Count</TableHead>
                       <TableHead>Industry</TableHead>
                       <TableHead>Status</TableHead>
+                      <TableHead>Contact</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {(requests.data ?? []).length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={6} className="py-10 text-center text-slate-500">
+                        <TableCell colSpan={7} className="py-10 text-center text-slate-500">
                           No company enquiries yet.
                         </TableCell>
                       </TableRow>
@@ -323,6 +382,17 @@ function Dashboard({ pin, onLogout }: { pin: string; onLogout: () => void }) {
                               ))}
                             </SelectContent>
                           </Select>
+                        </TableCell>
+                        <TableCell>
+                          <a
+                            href={waLink(r.mobile, companyMessage(r.company_name, r.job_role, r.worker_count))}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1.5 rounded-md bg-[#16A34A] px-2.5 py-1.5 text-xs font-semibold text-white transition-transform duration-150 hover:bg-[#15803D] active:scale-98"
+                            data-testid={`admin-request-whatsapp-${r.id}`}
+                          >
+                            <MessageSquare className="h-3.5 w-3.5" /> WhatsApp
+                          </a>
                         </TableCell>
                       </TableRow>
                     ))}

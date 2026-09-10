@@ -38,7 +38,7 @@ export default function Navbar() {
         <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-2 text-xs">
           <span className="inline-flex items-center gap-2">
             <ShieldCheck className="h-3.5 w-3.5 text-orange-400" />
-            GST {BRAND.gst} &nbsp;·&nbsp; Licensed Labour Contractor
+            Licensed Labour Contractor &nbsp;·&nbsp; GST {BRAND.gst}
           </span>
           <a
             href={`tel:${BRAND.phoneRaw}`}

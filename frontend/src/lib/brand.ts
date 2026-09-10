@@ -13,11 +13,11 @@ export const BRAND = {
 
 export const IMAGES = {
   hero:
-    "https://images.unsplash.com/photo-1581091212991-8891c7d4bd9b?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA0MTJ8MHwxfHNlYXJjaHwyfHxpbmR1c3RyaWFsJTIwZmFjdG9yeSUyMHdvcmtlcnMlMjBtYW51ZmFjdHVyaW5nfGVufDB8fHx8MTc4ODUyNzk3Nnww&ixlib=rb-4.1.0&q=85",
+    "https://images.unsplash.com/photo-1741183397795-324643563b7f?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzNTl8MHwxfHNlYXJjaHwzfHxJbmRpYW4lMjBmYWN0b3J5JTIwd29ya2VycyUyMG1hbnVmYWN0dXJpbmd8ZW58MHx8fHwxNzg5MDE0ODUwfDA&ixlib=rb-4.1.0&q=85",
   assembly:
-    "https://images.unsplash.com/photo-1589793463357-5fb813435467?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA0MTJ8MHwxfHNlYXJjaHwxfHxpbmR1c3RyaWFsJTIwZmFjdG9yeSUyMHdvcmtlcnMlMjBtYW51ZmFjdHVyaW5nfGVufDB8fHx8MTc4ODUyNzk3Nnww&ixlib=rb-4.1.0&q=85",
+    "https://images.unsplash.com/photo-1741275273537-e172e1411b3a?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMzl8MHwxfHNlYXJjaHwzfHxpbmRpYW4lMjBlbmdpbmVlciUyMGhhcmQlMjBoYXQlMjBmYWN0b3J5fGVufDB8fHx8MTc4OTAxNDg2OHww&ixlib=rb-4.1.0&q=85",
   safety:
-    "https://images.unsplash.com/photo-1569937714620-ee4352c98e1e?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1OTN8MHwxfHNlYXJjaHw0fHx3YXJlaG91c2UlMjBsb2dpc3RpY3MlMjB3b3JrZm9yY2UlMjB0ZWFtfGVufDB8fHx8MTc4ODUyNzk3Nnww&ixlib=rb-4.1.0&q=85",
+    "https://images.unsplash.com/photo-1577199001468-44c049e7603f?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMzl8MHwxfHNlYXJjaHwxfHxpbmRpYW4lMjBlbmdpbmVlciUyMGhhcmQlMjBoYXQlMjBmYWN0b3J5fGVufDB8fHx8MTc4OTAxNDg2OHww&ixlib=rb-4.1.0&q=85",
 };
 
 export const SKILL_CATEGORIES = ["Skilled", "Semi-skilled", "General Worker"];

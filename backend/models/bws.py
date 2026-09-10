@@ -95,6 +95,7 @@ class AdminStats(BaseModel):
     requests: int
     open_requests: int
     active_jobs: int
+    email_configured: bool = False
 
 
 class Ok(BaseModel):

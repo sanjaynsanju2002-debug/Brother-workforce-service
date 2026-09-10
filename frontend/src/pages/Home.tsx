@@ -15,6 +15,7 @@ import {
   MessageSquare,
   PackageCheck,
   PhoneCall,
+  PiggyBank,
   ReceiptText,
   ShieldCheck,
   ShoppingBag,
@@ -35,10 +36,11 @@ import { BRAND, IMAGES } from "@/lib/brand";
 import type { Job } from "@/types";
 
 const TRUST = [
-  { icon: ReceiptText, title: "GST Registered", desc: "Official tax invoicing & compliance" },
-  { icon: Award, title: "MSME Registered", desc: "Registered under MSME framework" },
-  { icon: ShieldCheck, title: "ESIC Covered Employees", desc: "Employee welfare compliance" },
   { icon: FileBadge, title: "Licensed Labour Contractor", desc: "Authorized contract labour operations" },
+  { icon: ReceiptText, title: "GST Registered", desc: "Official tax invoicing & compliance" },
+  { icon: ShieldCheck, title: "ESIC Covered Employees", desc: "Employee welfare compliance" },
+  { icon: PiggyBank, title: "EPF Services", desc: "Provident fund enrolment & remittance" },
+  { icon: Award, title: "MSME Registered", desc: "Registered under MSME framework" },
 ];
 
 const SERVICES = [
@@ -87,10 +89,11 @@ const INDUSTRY_CARDS = [
 ];
 
 const COMPLIANCE = [
-  { title: "GST Registered", desc: `GST No: ${BRAND.gst}`, icon: ReceiptText },
-  { title: "MSME Registered", desc: "Registered business under the MSME framework.", icon: Award },
-  { title: "ESIC Employee Coverage", desc: "Employee welfare supported through ESIC compliance.", icon: ShieldCheck },
   { title: "Licensed Labour Contractor", desc: "Authorized contract labour operations.", icon: FileBadge },
+  { title: "GST Registered", desc: `GST No: ${BRAND.gst}`, icon: ReceiptText },
+  { title: "ESIC Employee Coverage", desc: "Employee welfare supported through ESIC compliance.", icon: ShieldCheck },
+  { title: "EPF Services", desc: "Employee provident fund enrolment and monthly remittance handled for deployed workforce.", icon: PiggyBank },
+  { title: "MSME Registered", desc: "Registered business under the MSME framework.", icon: Award },
 ];
 
 const CLIENTS = [
@@ -148,7 +151,7 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="mt-14 grid gap-3 sm:grid-cols-2 lg:grid-cols-4" data-testid="hero-trust-badges">
+          <div className="mt-14 grid gap-3 sm:grid-cols-2 lg:grid-cols-5" data-testid="hero-trust-badges">
             {TRUST.map((t) => (
               <div
                 key={t.title}
@@ -261,7 +264,7 @@ export default function Home() {
             confidence.
           </p>
         </div>
-        <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-5">
           {COMPLIANCE.map((c) => (
             <div
               key={c.title}

@@ -69,6 +69,7 @@ export interface AdminStats {
   requests: number;
   open_requests: number;
   active_jobs: number;
+  email_configured: boolean;
 }
 
 export interface Ok {
