@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import EmailSettings from "@/components/site/EmailSettings";
+import ClientsManager from "@/components/site/ClientsManager";
 import {
   Table,
   TableBody,
@@ -237,6 +238,9 @@ function Dashboard({ pin, onLogout }: { pin: string; onLogout: () => void }) {
             </TabsTrigger>
             <TabsTrigger value="email" data-testid="admin-tab-email">
               Email Settings
+            </TabsTrigger>
+            <TabsTrigger value="clients" data-testid="admin-tab-clients">
+              Clients
             </TabsTrigger>
           </TabsList>
 
@@ -564,6 +568,10 @@ function Dashboard({ pin, onLogout }: { pin: string; onLogout: () => void }) {
 
           <TabsContent value="email" className="mt-6">
             <EmailSettings pin={pin} />
+          </TabsContent>
+
+          <TabsContent value="clients" className="mt-6">
+            <ClientsManager pin={pin} />
           </TabsContent>
         </Tabs>
       </main>

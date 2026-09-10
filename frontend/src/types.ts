@@ -111,3 +111,18 @@ export interface TestEmailResult {
   sent_to: string[];
   detail?: string | null;
 }
+
+export interface ClientCreate {
+  name: string;
+  industry?: string | null;
+  location?: string | null;
+  headcount?: string | null;
+  visible: boolean;
+}
+
+export interface Client extends ClientCreate {
+  id: string;
+  logo_filename?: string | null;
+  sort_order: number;
+  created_at: string;
+}

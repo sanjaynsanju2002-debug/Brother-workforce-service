@@ -33,7 +33,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { apiGet } from "@/lib/api";
 import { BRAND, IMAGES } from "@/lib/brand";
-import type { Job } from "@/types";
+import type { Client, Job } from "@/types";
 
 const TRUST = [
   { icon: FileBadge, title: "Licensed Labour Contractor", desc: "Authorized contract labour operations" },
@@ -111,6 +111,9 @@ function scrollTo(id: string) {
 export default function Home() {
   const jobsQuery = useQuery({ queryKey: ["jobs"], queryFn: () => apiGet<Job[]>("/jobs") });
   const jobs = jobsQuery.isError ? [] : (jobsQuery.data ?? []);
+
+  const clientsQuery = useQuery({ queryKey: ["clients"], queryFn: () => apiGet<Client[]>("/clients") });
+  const clients = clientsQuery.isError ? [] : (clientsQuery.data ?? []);
 
   return (
     <div className="min-h-screen bg-[#F8FAFC]">
@@ -398,20 +401,59 @@ export default function Home() {
       <Section id="clients" bg="bg-white">
         <Heading overline="Our Clients" title="Businesses We Support" subtitle="Serving production units and supply chains across Mysore industrial belts." />
         <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-5" data-testid="clients-grid">
-          {CLIENTS.map((c, idx) => (
-            <div
-              key={idx}
-              className="flex flex-col items-center justify-center gap-3 rounded-md border border-dashed border-slate-300 bg-[#F8FAFC] p-8 text-center transition-colors duration-200 hover:border-[#EA580C]/50"
-              data-testid={`client-placeholder-${idx}`}
-            >
-              {idx === CLIENTS.length - 1 ? (
-                <Handshake className="h-7 w-7 text-[#EA580C]" />
-              ) : (
-                <Building2 className="h-7 w-7 text-slate-400" />
-              )}
-              <p className="text-sm font-medium text-slate-600">{c}</p>
-            </div>
-          ))}
+          {clients.length > 0
+            ? clients.map((c) => {
+                const isCta = /could be here/i.test(c.name);
+                return (
+                  <div
+                    key={c.id}
+                    className={`flex flex-col items-center justify-center gap-3 rounded-md border p-6 text-center transition-all duration-200 hover:-translate-y-1 hover:shadow-md ${
+                      isCta
+                        ? "border-dashed border-[#EA580C]/50 bg-orange-50/40"
+                        : "border-slate-200 bg-[#F8FAFC] hover:border-[#EA580C]/40"
+                    }`}
+                    data-testid={`client-card-${c.id}`}
+                  >
+                    {c.logo_filename ? (
+                      <img
+                        src={`/api/clients/${c.id}/logo`}
+                        alt={c.name}
+                        className="h-12 w-full max-w-[120px] object-contain"
+                      />
+                    ) : isCta ? (
+                      <Handshake className="h-7 w-7 text-[#EA580C]" />
+                    ) : (
+                      <Building2 className="h-7 w-7 text-slate-400" />
+                    )}
+                    <p className="text-sm font-semibold text-[#0F2444]">{c.name}</p>
+                    {c.industry && <p className="text-xs text-slate-500">{c.industry}</p>}
+                    {c.location && (
+                      <p className="flex items-center gap-1 text-xs text-slate-500">
+                        <MapPin className="h-3 w-3" /> {c.location}
+                      </p>
+                    )}
+                    {c.headcount && (
+                      <Badge variant="secondary" className="text-[10px]">
+                        {c.headcount}
+                      </Badge>
+                    )}
+                  </div>
+                );
+              })
+            : CLIENTS.map((c, idx) => (
+                <div
+                  key={idx}
+                  className="flex flex-col items-center justify-center gap-3 rounded-md border border-dashed border-slate-300 bg-[#F8FAFC] p-8 text-center transition-colors duration-200 hover:border-[#EA580C]/50"
+                  data-testid={`client-placeholder-${idx}`}
+                >
+                  {idx === CLIENTS.length - 1 ? (
+                    <Handshake className="h-7 w-7 text-[#EA580C]" />
+                  ) : (
+                    <Building2 className="h-7 w-7 text-slate-400" />
+                  )}
+                  <p className="text-sm font-medium text-slate-600">{c}</p>
+                </div>
+              ))}
         </div>
       </Section>
 

@@ -15,6 +15,13 @@ Public (`backend/routers/public.py`):
 - POST /api/company-requests -> CompanyRequest
 - GET  /api/jobs -> active jobs only
 
+Clients (`backend/routers/clients.py`):
+- GET /api/clients -> visible clients (public); GET /api/clients/{id}/logo -> logo image
+- GET/POST /api/admin/clients, PATCH/DELETE /api/admin/clients/{id} (all `?pin=`)
+- POST /api/admin/clients/{id}/logo (multipart `file`) -> logos in backend/uploads/logos
+Seeded with 5 generic sector cards via `python seed_clients.py` (idempotent). The public
+section falls back to hardcoded placeholders if zero visible clients exist.
+
 Admin (`backend/routers/admin.py`, all take `?pin=`):
 - POST /api/admin/login, GET /api/admin/stats
 - GET/PATCH /api/admin/workers[/{id}] (status: New|Contacted|Deployed|Archived)
@@ -37,8 +44,8 @@ sender + recipients; env values are the fallback). String uuid4 `id`. Models in
 `backend/models/bws.py`, mirrored in `frontend/src/types.ts`.
 
 ## Admin tabs
-Worker Applications | Company Enquiries | Job Postings | Email Settings
-(Email Settings = `frontend/src/components/site/EmailSettings.tsx`)
+Worker Applications | Company Enquiries | Job Postings | Email Settings | Clients
+(`frontend/src/components/site/EmailSettings.tsx`, `ClientsManager.tsx`)
 
 ## Notes
 - Email notifications via Resend (`backend/lib/notify.py`), sent as FastAPI BackgroundTasks:
