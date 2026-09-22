@@ -23,6 +23,7 @@ from models.bws import (
     TestEmail,
     TestEmailResult,
 )
+from lib.auth import verify_pin
 
 router = APIRouter(prefix="/email")
 logger = logging.getLogger(__name__)
