@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Briefcase, Building2, Download, Eye, FileText, Loader2, Lock, MailWarning, MessageSquare, Plus, Trash2, TrendingUp, Users } from "lucide-react";
@@ -45,6 +45,30 @@ const REQUEST_STATUS = ["Pending", "Quote Sent", "In Progress", "Closed"];
 
 
 export default function Admin() {
+  useEffect(() => {
+    const previousTitle = document.title;
+    const existingRobots = document.querySelector<HTMLMetaElement>('meta[name="robots"]');
+    const previousRobots = existingRobots?.content;
+    const robots = existingRobots ?? document.createElement("meta");
+
+    if (!existingRobots) {
+      robots.name = "robots";
+      document.head.appendChild(robots);
+    }
+
+    document.title = "Admin | Brothers Workforce Solutions";
+    robots.content = "noindex, nofollow, noarchive";
+
+    return () => {
+      document.title = previousTitle;
+      if (existingRobots && previousRobots !== undefined) {
+        existingRobots.content = previousRobots;
+      } else if (!existingRobots) {
+        robots.remove();
+      }
+    };
+  }, []);
+
   const [pin, setPin] = useState("");
   const [authPin, setAuthPin] = useState<string | null>(null);
 
