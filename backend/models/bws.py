@@ -72,7 +72,7 @@ class JobCreate(BaseModel):
     experience: Optional[str] = None
     salary: Optional[str] = None
     shift: Optional[str] = None
-    openings: int = 1
+    openings: int = Field(default=1, ge=1)
     description: Optional[str] = None
 
 

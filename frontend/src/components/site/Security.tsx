@@ -44,7 +44,7 @@ export default function Security({ pin, onPinChanged }: { pin: string; onPinChan
   return (
     <div className="grid gap-6 lg:grid-cols-2" data-testid="security-panel">
       <Card className="border-slate-200 bg-white">
-        <CardContent className="p-6">
+        <CardContent className="p-4 sm:p-6">
           <h3 className="flex items-center gap-2 text-lg font-semibold text-[#0F2444]">
             <KeyRound className="h-5 w-5 text-[#EA580C]" /> Your Security PIN
           </h3>
@@ -53,9 +53,9 @@ export default function Security({ pin, onPinChanged }: { pin: string; onPinChan
             applicant's phone number and resume.
           </p>
 
-          <div className="mt-5 flex items-center gap-3 rounded-md border border-slate-200 bg-[#F8FAFC] p-4">
+          <div className="mt-5 flex flex-wrap items-center gap-3 rounded-md border border-slate-200 bg-[#F8FAFC] p-4">
             <span
-              className="flex-1 font-mono text-2xl font-bold tracking-[0.3em] text-[#0F2444]"
+              className="min-w-0 flex-1 break-all font-mono text-xl font-bold tracking-[0.2em] text-[#0F2444] sm:text-2xl sm:tracking-[0.3em]"
               data-testid="security-pin-value"
             >
               {s ? (reveal ? s.pin : "•".repeat(s.pin.length)) : "……"}
@@ -87,7 +87,7 @@ export default function Security({ pin, onPinChanged }: { pin: string; onPinChan
       </Card>
 
       <Card className="border-slate-200 bg-white">
-        <CardContent className="p-6">
+        <CardContent className="p-4 sm:p-6">
           <h3 className="flex items-center gap-2 text-lg font-semibold text-[#0F2444]">
             <ShieldCheck className="h-5 w-5 text-[#EA580C]" /> Change PIN
           </h3>

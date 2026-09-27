@@ -30,13 +30,13 @@ export default function TrafficChart({ pin }: { pin: string }) {
   const hasAny = data.some((d) => d.visits || d.applications || d.requests);
 
   return (
-    <div className="mt-6 rounded-lg border border-slate-200 bg-white p-6" data-testid="traffic-chart">
+    <div className="mt-6 rounded-lg border border-slate-200 bg-white p-4 sm:p-6" data-testid="traffic-chart">
       <h2 className="text-base font-semibold text-[#0F2444]">Last 30 Days</h2>
       <p className="mt-1 text-sm text-slate-500">
         Daily website visits against job applications and manpower requests.
       </p>
 
-      <div className="mt-5 h-[280px] w-full">
+      <div className="mt-5 h-[230px] w-full sm:h-[280px]">
         {data.length === 0 ? (
           <div className="flex h-full items-center justify-center text-sm text-slate-400">
             Loading chart…
@@ -93,7 +93,7 @@ export default function TrafficChart({ pin }: { pin: string }) {
         )}
       </div>
 
-      <div className="mt-4 flex flex-wrap gap-5 text-xs text-slate-600">
+      <div className="mt-4 flex flex-wrap gap-3 text-xs text-slate-600 sm:gap-5">
         {[
           ["#0F2444", "Visits"],
           ["#EA580C", "Applications"],

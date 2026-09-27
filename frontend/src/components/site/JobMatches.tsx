@@ -19,7 +19,7 @@ export default function JobMatches({ pin, job }: { pin: string; job: Job }) {
     `${w.current_location ?? ""} ${w.preferred_location ?? ""}`.toLowerCase().includes(firstToken);
 
   return (
-    <div className="mt-3 rounded-md border border-slate-200 bg-[#F8FAFC] p-4" data-testid={`job-matches-${job.id}`}>
+    <div className="mt-3 rounded-md border border-slate-200 bg-[#F8FAFC] p-3 sm:p-4" data-testid={`job-matches-${job.id}`}>
       <p className="flex items-center gap-2 text-sm font-semibold text-[#0F2444]">
         <BellRing className="h-4 w-4 text-[#EA580C]" />
         {matches.isLoading
@@ -57,7 +57,7 @@ export default function JobMatches({ pin, job }: { pin: string; job: Job }) {
                 href={waLink(w.whatsapp || w.mobile, jobAlertMessage(w.full_name, job))}
                 target="_blank"
                 rel="noreferrer"
-                className="ml-auto inline-flex items-center gap-1.5 rounded-md bg-[#16A34A] px-2.5 py-1.5 text-xs font-semibold text-white transition-transform duration-150 hover:bg-[#15803D] active:scale-98"
+                className="ml-0 inline-flex w-full items-center justify-center gap-1.5 rounded-md bg-[#16A34A] px-2.5 py-1.5 text-xs font-semibold text-white transition-transform duration-150 hover:bg-[#15803D] active:scale-98 sm:ml-auto sm:w-auto"
                 data-testid={`job-match-wa-${job.id}-${w.id}`}
               >
                 <MessageSquare className="h-3.5 w-3.5" /> Send Alert

@@ -117,7 +117,7 @@ export default function EmailSettings({ pin }: { pin: string }) {
     <div className="grid gap-6" data-testid="email-settings-panel">
       {/* Current state */}
       <Card className="border-slate-200 bg-white">
-        <CardContent className="p-6">
+        <CardContent className="p-4 sm:p-6">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <h3 className="flex items-center gap-2 text-lg font-semibold text-[#0F2444]">
@@ -225,7 +225,7 @@ export default function EmailSettings({ pin }: { pin: string }) {
           )}
 
           <div className="mt-5 flex flex-wrap items-end gap-3 border-t border-slate-200 pt-5">
-            <div className="min-w-[240px] flex-1">
+            <div className="w-full min-w-0 flex-1 sm:min-w-[240px]">
               <Label className="mb-2 block text-sm">Send a test email to</Label>
               <Input
                 placeholder={s?.recipients?.[0] ?? "you@example.com"}
@@ -253,7 +253,7 @@ export default function EmailSettings({ pin }: { pin: string }) {
 
       {/* Domain management */}
       <Card className="border-slate-200 bg-white">
-        <CardContent className="p-6">
+        <CardContent className="p-4 sm:p-6">
           <h3 className="flex items-center gap-2 text-lg font-semibold text-[#0F2444]">
             <Globe className="h-5 w-5 text-[#EA580C]" /> Sending Domains
           </h3>
@@ -263,7 +263,7 @@ export default function EmailSettings({ pin }: { pin: string }) {
           </p>
 
           <div className="mt-5 flex flex-wrap items-end gap-3">
-            <div className="min-w-[240px] flex-1">
+            <div className="w-full min-w-0 flex-1 sm:min-w-[240px]">
               <Label className="mb-2 block text-sm">Domain name</Label>
               <Input
                 placeholder="brothersworkforce.in"
@@ -308,7 +308,7 @@ export default function EmailSettings({ pin }: { pin: string }) {
                     <div className="flex flex-wrap items-center gap-3">
                       <span className="font-semibold text-[#0F2444]">{d.name}</span>
                       <Badge className={tone.className}>{tone.label}</Badge>
-                      <div className="ml-auto flex gap-2">
+                      <div className="ml-0 flex w-full flex-wrap gap-2 sm:ml-auto sm:w-auto">
                         <Button
                           size="sm"
                           variant="outline"
@@ -403,7 +403,7 @@ export default function EmailSettings({ pin }: { pin: string }) {
 
       {/* Manual override */}
       <Card className="border-slate-200 bg-white">
-        <CardContent className="p-6">
+        <CardContent className="p-4 sm:p-6">
           <h3 className="text-lg font-semibold text-[#0F2444]">Sender & Recipients</h3>
           <p className="mt-1 text-sm text-slate-500">
             Change the from-address (must be on a verified domain) and who receives alerts. Separate

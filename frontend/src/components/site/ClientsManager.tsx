@@ -88,7 +88,7 @@ export default function ClientsManager({ pin }: { pin: string }) {
   return (
     <div className="grid gap-6" data-testid="clients-manager">
       <Card className="border-slate-200 bg-white">
-        <CardContent className="p-6">
+        <CardContent className="p-4 sm:p-6">
           <h3 className="flex items-center gap-2 text-lg font-semibold text-[#0F2444]">
             <Building2 className="h-5 w-5 text-[#EA580C]" /> Add a Client
           </h3>
@@ -148,7 +148,7 @@ export default function ClientsManager({ pin }: { pin: string }) {
               <Button
                 type="submit"
                 disabled={create.isPending}
-                className="bg-[#EA580C] text-white hover:bg-[#C2410C]"
+                className="w-full bg-[#EA580C] text-white hover:bg-[#C2410C] sm:w-auto"
                 data-testid="client-add-submit"
               >
                 {create.isPending ? (
@@ -165,7 +165,7 @@ export default function ClientsManager({ pin }: { pin: string }) {
 
       <Card className="border-slate-200 bg-white">
         <CardContent className="p-0">
-          <Table data-testid="clients-table">
+          <Table className="min-w-[760px]" data-testid="clients-table">
             <TableHeader>
               <TableRow>
                 <TableHead>Logo</TableHead>
