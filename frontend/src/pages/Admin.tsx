@@ -593,7 +593,7 @@ function Dashboard({
 
           <TabsContent value="jobs" className="mt-6 grid gap-6 lg:grid-cols-[1fr_1.4fr]">
             <Card className="border-slate-200 bg-white">
-              <CardContent className="p-6">
+              <CardContent className="p-4 sm:p-6">
                 <h3 className="mb-4 text-lg font-semibold text-[#0F2444]">Post a New Job</h3>
                 <form
                   className="space-y-3"
@@ -602,6 +602,10 @@ function Dashboard({
                     e.preventDefault();
                     if (!job.title || !job.location) {
                       toast.error("Title and location are required");
+                      return;
+                    }
+                    if (!Number.isInteger(job.openings) || job.openings < 1) {
+                      toast.error("Enter at least 1 opening");
                       return;
                     }
                     createJob.mutate(job, {
@@ -664,14 +668,28 @@ function Dashboard({
                     onChange={(e) => setJob({ ...job, shift: e.target.value })}
                     data-testid="admin-job-shift"
                   />
-                  <Input
-                    type="number"
-                    min={1}
-                    placeholder="Openings"
-                    value={job.openings}
-                    onChange={(e) => setJob({ ...job, openings: Number(e.target.value) || 1 })}
-                    data-testid="admin-job-openings"
-                  />
+                  <div>
+                    <Label className="mb-2 block text-sm">Number of openings *</Label>
+                    <Input
+                      type="number"
+                      min={1}
+                      step={1}
+                      inputMode="numeric"
+                      placeholder="e.g. 10"
+                      value={job.openings || ""}
+                      onFocus={(e) => e.currentTarget.select()}
+                      onChange={(e) => {
+                        const value = e.target.value;
+                        setJob({ ...job, openings: value === "" ? 0 : Number(value) });
+                      }}
+                      onBlur={() => {
+                        if (!Number.isInteger(job.openings) || job.openings < 1) {
+                          setJob({ ...job, openings: 1 });
+                        }
+                      }}
+                      data-testid="admin-job-openings"
+                    />
+                  </div>
                   <Textarea
                     rows={3}
                     placeholder="Description"
@@ -721,31 +739,33 @@ function Dashboard({
                             {j.active ? "Active" : "Inactive"}
                           </Badge>
                         </TableCell>
-                        <TableCell className="flex gap-2">
-                          <Button
-                            size="xs"
-                            variant="outline"
-                            onClick={() => setMatchJobId(matchJobId === j.id ? null : j.id)}
-                            data-testid={`admin-job-matches-${j.id}`}
-                          >
-                            {matchJobId === j.id ? "Hide" : "Alerts"}
-                          </Button>
-                          <Button
-                            size="xs"
-                            variant="outline"
-                            onClick={() => toggleJob.mutate({ id: j.id, active: !j.active })}
-                            data-testid={`admin-job-toggle-${j.id}`}
-                          >
-                            {j.active ? "Deactivate" : "Activate"}
-                          </Button>
-                          <Button
-                            size="icon-xs"
-                            variant="destructive"
-                            onClick={() => removeJob.mutate(j.id)}
-                            data-testid={`admin-job-delete-${j.id}`}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
+                        <TableCell>
+                          <div className="flex flex-wrap gap-2">
+                            <Button
+                              size="xs"
+                              variant="outline"
+                              onClick={() => setMatchJobId(matchJobId === j.id ? null : j.id)}
+                              data-testid={`admin-job-matches-${j.id}`}
+                            >
+                              {matchJobId === j.id ? "Hide" : "Alerts"}
+                            </Button>
+                            <Button
+                              size="xs"
+                              variant="outline"
+                              onClick={() => toggleJob.mutate({ id: j.id, active: !j.active })}
+                              data-testid={`admin-job-toggle-${j.id}`}
+                            >
+                              {j.active ? "Deactivate" : "Activate"}
+                            </Button>
+                            <Button
+                              size="icon-xs"
+                              variant="destructive"
+                              onClick={() => removeJob.mutate(j.id)}
+                              data-testid={`admin-job-delete-${j.id}`}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
