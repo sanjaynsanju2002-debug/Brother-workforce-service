@@ -250,7 +250,7 @@ function Dashboard({
   return (
     <div className="min-h-screen bg-[#F8FAFC]">
       <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-7xl items-center gap-4 px-6 py-4">
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-3 px-4 py-3 sm:flex-nowrap sm:px-6 sm:py-4">
           <img src={BRAND.logo} alt="" className="h-10 w-10 object-contain" />
           <div>
             <p className="font-[family-name:var(--font-heading)] text-sm font-bold text-[#0F2444]">
@@ -258,18 +258,18 @@ function Dashboard({
             </p>
             <p className="text-xs text-slate-500">Brothers Workforce Solutions</p>
           </div>
-          <div className="ml-auto flex gap-2">
-            <Link to="/" className="rounded-md border border-slate-200 px-4 py-2 text-sm text-slate-600 hover:text-[#0F2444]">
+          <div className="ml-auto flex w-full gap-2 sm:w-auto">
+            <Link to="/" className="flex-1 rounded-md border border-slate-200 px-3 py-2 text-center text-sm text-slate-600 hover:text-[#0F2444] sm:flex-none sm:px-4">
               View Site
             </Link>
-            <Button variant="outline" onClick={onLogout} data-testid="admin-logout">
+            <Button variant="outline" onClick={onLogout} className="flex-1 sm:flex-none" data-testid="admin-logout">
               Lock
             </Button>
           </div>
         </div>
       </header>
 
-      <main className="mx-auto max-w-7xl px-6 py-8">
+      <main className="mx-auto max-w-7xl px-3 py-5 sm:px-6 sm:py-8">
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4" data-testid="admin-stats">
           <Stat icon={Users} label="Worker Applications" value={s?.workers ?? 0} testid="stat-workers" />
           <Stat icon={FileText} label="Company Enquiries" value={s?.requests ?? 0} testid="stat-requests" />
@@ -278,7 +278,7 @@ function Dashboard({
         </div>
 
         {/* Website traffic + conversion funnel */}
-        <div className="mt-6 rounded-lg border border-slate-200 bg-white p-6" data-testid="admin-traffic">
+        <div className="mt-6 rounded-lg border border-slate-200 bg-white p-4 sm:p-6" data-testid="admin-traffic">
           <h2 className="flex items-center gap-2 text-base font-semibold text-[#0F2444]">
             <TrendingUp className="h-4 w-4 text-[#EA580C]" /> Website Activity
           </h2>
@@ -328,26 +328,26 @@ function Dashboard({
         <TrafficChart pin={pin} />
 
         <Tabs defaultValue="workers" className="mt-8">
-          <TabsList data-testid="admin-tabs">
-            <TabsTrigger value="workers" data-testid="admin-tab-workers">
+          <TabsList className="max-w-full justify-start overflow-x-auto" data-testid="admin-tabs">
+            <TabsTrigger value="workers" className="shrink-0 flex-none px-3" data-testid="admin-tab-workers">
               Worker Applications
             </TabsTrigger>
-            <TabsTrigger value="requests" data-testid="admin-tab-requests">
+            <TabsTrigger value="requests" className="shrink-0 flex-none px-3" data-testid="admin-tab-requests">
               Company Enquiries
             </TabsTrigger>
-            <TabsTrigger value="jobs" data-testid="admin-tab-jobs">
+            <TabsTrigger value="jobs" className="shrink-0 flex-none px-3" data-testid="admin-tab-jobs">
               Job Postings
             </TabsTrigger>
-            <TabsTrigger value="email" data-testid="admin-tab-email">
+            <TabsTrigger value="email" className="shrink-0 flex-none px-3" data-testid="admin-tab-email">
               Email Settings
             </TabsTrigger>
-            <TabsTrigger value="clients" data-testid="admin-tab-clients">
+            <TabsTrigger value="clients" className="shrink-0 flex-none px-3" data-testid="admin-tab-clients">
               Clients
             </TabsTrigger>
-            <TabsTrigger value="security" data-testid="admin-tab-security">
+            <TabsTrigger value="security" className="shrink-0 flex-none px-3" data-testid="admin-tab-security">
               Security
             </TabsTrigger>
-            <TabsTrigger value="shortlists" data-testid="admin-tab-shortlists">
+            <TabsTrigger value="shortlists" className="shrink-0 flex-none px-3" data-testid="admin-tab-shortlists">
               Shortlists
             </TabsTrigger>
           </TabsList>
@@ -355,7 +355,7 @@ function Dashboard({
           <TabsContent value="workers" className="mt-6">
             <div className="mb-4 rounded-lg border border-slate-200 bg-white p-4" data-testid="worker-filters">
               <div className="flex flex-wrap items-end gap-3">
-                <div className="min-w-[200px] flex-1">
+                <div className="w-full min-w-0 flex-1 sm:min-w-[200px]">
                   <Label className="mb-1.5 block text-xs text-slate-500">Search name, phone or skill</Label>
                   <Input
                     placeholder="e.g. welder, 98765…"
@@ -408,7 +408,7 @@ function Dashboard({
             <div className="mb-4 flex justify-end">
               <a
                 href={`/api/admin/export/workers.csv${q}`}
-                className="inline-flex items-center gap-2 rounded-md bg-[#0F2444] px-4 py-2 text-sm font-semibold text-white transition-transform duration-150 hover:bg-[#0A172C] active:scale-98"
+                className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-[#0F2444] px-4 py-2 text-sm font-semibold text-white transition-transform duration-150 hover:bg-[#0A172C] active:scale-98 sm:w-auto"
                 data-testid="admin-export-workers"
               >
                 <Download className="h-4 w-4" /> Download Spreadsheet
@@ -517,7 +517,7 @@ function Dashboard({
             <div className="mb-4 flex justify-end">
               <a
                 href={`/api/admin/export/company-requests.csv${q}`}
-                className="inline-flex items-center gap-2 rounded-md bg-[#0F2444] px-4 py-2 text-sm font-semibold text-white transition-transform duration-150 hover:bg-[#0A172C] active:scale-98"
+                className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-[#0F2444] px-4 py-2 text-sm font-semibold text-white transition-transform duration-150 hover:bg-[#0A172C] active:scale-98 sm:w-auto"
                 data-testid="admin-export-requests"
               >
                 <Download className="h-4 w-4" /> Download Spreadsheet
@@ -795,7 +795,7 @@ function FilterSelect({
   testid: string;
 }) {
   return (
-    <div className="min-w-[150px]">
+    <div className="w-full sm:w-auto sm:min-w-[150px]">
       <Label className="mb-1.5 block text-xs text-slate-500">{label}</Label>
       <Select value={value || "__all"} onValueChange={(v: string) => onChange(v === "__all" ? "" : v)}>
         <SelectTrigger data-testid={testid}>
@@ -830,7 +830,7 @@ function Funnel({
   testid: string;
 }) {
   return (
-    <div className="rounded-md border border-slate-200 bg-[#F8FAFC] p-5" data-testid={testid}>
+    <div className="rounded-md border border-slate-200 bg-[#F8FAFC] p-4 sm:p-5" data-testid={testid}>
       <div className="flex items-center gap-2">
         <Icon className="h-4 w-4 text-[#EA580C]" />
         <p className="text-xs font-bold uppercase tracking-widest text-slate-500">{label}</p>
@@ -862,7 +862,7 @@ function Stat({
 }) {
   return (
     <Card className="border-slate-200 bg-white" data-testid={testid}>
-      <CardContent className="flex items-center gap-4 p-5">
+      <CardContent className="flex items-center gap-3 p-4 sm:gap-4 sm:p-5">
         <div className="rounded-md bg-[#0F2444] p-3">
           <Icon className="h-5 w-5 text-[#FB923C]" />
         </div>
