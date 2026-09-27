@@ -131,15 +131,15 @@ export default function Home() {
         <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(15,36,68,0.95)_0%,rgba(15,36,68,0.82)_60%,rgba(15,36,68,0.6)_100%)]" />
         <div className="relative mx-auto max-w-7xl px-6 py-20 lg:py-28">
           <div className="max-w-3xl bws-rise">
-            <p className="bws-overline text-orange-400">Manpower Supply Partner · Mysore, Karnataka</p>
+            <p className="bws-overline text-orange-400">Manpower Supply Partner · Mysuru (Mysore), Karnataka</p>
             <h1 className="mt-4 text-4xl font-bold leading-[1.08] tracking-tight text-white sm:text-5xl lg:text-6xl">
-              Reliable Workforce.
+              Reliable Manpower Services.
               <br />
               <span className="text-[#FB923C]">Stronger Businesses.</span>
             </h1>
             <p className="mt-6 max-w-2xl text-base leading-relaxed text-slate-200 sm:text-lg">
-              Brothers Workforce Solutions connects businesses with dependable skilled, semi-skilled and general
-              workforce solutions for factories, manufacturing units and industrial operations across Karnataka.
+              Brothers Workforce Solutions provides dependable skilled, semi-skilled and general manpower supply,
+              contract staffing and workforce solutions for factories, warehouses and industrial operations across Karnataka.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <Button
@@ -181,12 +181,12 @@ export default function Home() {
           <div>
             <p className="bws-overline">About Us</p>
             <h2 className="mt-3 text-3xl font-bold tracking-tight text-[#0F2444] lg:text-4xl">
-              Your Trusted Workforce Partner
+              Manpower & Workforce Partner in Mysuru, Karnataka
             </h2>
             <div className="mt-6 space-y-4 text-base leading-relaxed text-slate-600">
               <p>
-                Brothers Workforce Solutions is a trusted manpower supply partner providing skilled, semi-skilled
-                and general workforce solutions to factories, manufacturing units and businesses across Karnataka.
+                Brothers Workforce Solutions is a manpower and contract staffing partner providing skilled, semi-skilled
+                and general workforce solutions to factories, warehouses, manufacturing units and businesses across Karnataka.
               </p>
               <p>
                 We focus on connecting businesses with reliable employees while supporting workforce availability,
@@ -214,7 +214,7 @@ export default function Home() {
 
       {/* SERVICES */}
       <Section id="services" bg="bg-[#F1F5F9]">
-        <Heading overline="Our Services" title="Industrial Manpower Capabilities" subtitle="Workforce staffing tiers built for factory uptime, assembly precision and logistics efficiency." />
+        <Heading overline="Our Services" title="Manpower & Contract Staffing Services" subtitle="Skilled, semi-skilled and general workforce staffing for factories, manufacturing units, warehouses and logistics operations." />
         <div className="mt-12 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {SERVICES.map((s) => (
             <Card
