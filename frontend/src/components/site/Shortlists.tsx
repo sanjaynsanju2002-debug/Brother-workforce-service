@@ -72,7 +72,7 @@ export default function Shortlists({ pin }: { pin: string }) {
   return (
     <div className="grid gap-6" data-testid="shortlists-panel">
       <Card className="border-slate-200 bg-white">
-        <CardContent className="p-6">
+        <CardContent className="p-4 sm:p-6">
           <h3 className="flex items-center gap-2 text-lg font-semibold text-[#0F2444]">
             <ListChecks className="h-5 w-5 text-[#EA580C]" /> Create a Shortlist
           </h3>
@@ -91,7 +91,7 @@ export default function Shortlists({ pin }: { pin: string }) {
               create.mutate(name);
             }}
           >
-            <div className="min-w-[260px] flex-1">
+            <div className="w-full min-w-0 flex-1 sm:min-w-[260px]">
               <Label className="mb-2 block text-sm">Shortlist name</Label>
               <Input
                 placeholder="e.g. Nanjangud — 25 CNC Operators"
@@ -103,7 +103,7 @@ export default function Shortlists({ pin }: { pin: string }) {
             <Button
               type="submit"
               disabled={create.isPending}
-              className="bg-[#EA580C] text-white hover:bg-[#C2410C]"
+              className="w-full bg-[#EA580C] text-white hover:bg-[#C2410C] sm:w-auto"
               data-testid="shortlist-create-submit"
             >
               {create.isPending ? (
@@ -128,13 +128,13 @@ export default function Shortlists({ pin }: { pin: string }) {
         <div className="grid gap-4">
           {rows.map((sl) => (
             <Card key={sl.id} className="border-slate-200 bg-white" data-testid={`shortlist-${sl.id}`}>
-              <CardContent className="p-5">
+              <CardContent className="p-4 sm:p-5">
                 <div className="flex flex-wrap items-center gap-3">
                   <span className="font-semibold text-[#0F2444]">{sl.name}</span>
                   <Badge variant="secondary" data-testid={`shortlist-count-${sl.id}`}>
                     {sl.worker_ids.length} candidate{sl.worker_ids.length === 1 ? "" : "s"}
                   </Badge>
-                  <div className="ml-auto flex gap-2">
+                  <div className="ml-0 flex w-full flex-wrap gap-2 sm:ml-auto sm:w-auto">
                     <Button
                       size="sm"
                       variant="outline"
@@ -178,7 +178,7 @@ export default function Shortlists({ pin }: { pin: string }) {
                             <span className="text-slate-500">{w.mobile}</span>
                             <span className="text-slate-500">{w.skill_category}</span>
                             <span className="text-slate-500">{w.current_location}</span>
-                            <div className="ml-auto flex gap-2">
+                            <div className="ml-0 flex w-full flex-wrap gap-2 sm:ml-auto sm:w-auto">
                               <a
                                 href={waLink(w.whatsapp || w.mobile, workerMessage(w.full_name))}
                                 target="_blank"
