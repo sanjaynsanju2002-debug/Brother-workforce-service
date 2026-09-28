@@ -17,6 +17,8 @@ import { apiPost } from "@/lib/api";
 import { AVAILABILITY, SKILL_CATEGORIES } from "@/lib/brand";
 import type { Worker, WorkerCreate } from "@/types";
 
+const MAX_RESUME_SIZE = 5 * 1024 * 1024;
+
 const EMPTY: WorkerCreate = {
   full_name: "",
   mobile: "",
@@ -220,15 +222,24 @@ export default function WorkerForm() {
       </Field>
 
       <div className="sm:col-span-2">
-        <Label className="mb-2 block text-sm font-medium text-slate-700">Resume Upload</Label>
+        <Label className="mb-2 block text-sm font-medium text-slate-700">Resume Upload <span className="font-normal text-slate-500">(maximum 5 MB)</span></Label>
         <label className="flex cursor-pointer items-center gap-3 rounded-md border border-dashed border-slate-300 bg-white px-4 py-3 text-sm text-slate-600 transition-colors hover:border-[#EA580C]">
           <Upload className="h-4 w-4 text-[#EA580C]" />
-          <span data-testid="worker-resume-name">{resume ? resume.name : "Upload PDF / DOC / image (optional)"}</span>
+          <span data-testid="worker-resume-name">{resume ? `${resume.name} (${(resume.size / 1024 / 1024).toFixed(1)} MB)` : "Upload PDF / DOC / image — max 5 MB (optional)"}</span>
           <input
             type="file"
             className="hidden"
             accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
-            onChange={(e) => setResume(e.target.files?.[0] ?? null)}
+            onChange={(e) => {
+              const file = e.target.files?.[0] ?? null;
+              if (file && file.size > MAX_RESUME_SIZE) {
+                toast.error("Resume must be 5 MB or smaller");
+                e.target.value = "";
+                setResume(null);
+                return;
+              }
+              setResume(file);
+            }}
             data-testid="worker-resume-input"
           />
         </label>
