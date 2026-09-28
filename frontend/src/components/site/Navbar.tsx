@@ -75,6 +75,7 @@ export default function Navbar() {
         </nav>
 
         <div className="ml-auto flex items-center gap-2 xl:ml-2">
+          <a href="/app" className="rounded border border-slate-200 px-3 py-2 text-sm font-semibold text-[#0F2444] hover:bg-slate-50" data-testid="nav-install-app">Get app</a>
           <Button
             className="hidden bg-[#EA580C] text-white transition-transform duration-150 hover:bg-[#C2410C] active:scale-98 sm:inline-flex"
             onClick={() => go("#manpower-request")}

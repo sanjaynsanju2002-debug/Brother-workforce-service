@@ -113,6 +113,8 @@ function scrollTo(id: string) {
 export default function Home() {
   useEffect(() => {
     trackVisit("/");
+    const anchor = window.location.hash.slice(1);
+    if (anchor) document.getElementById(anchor)?.scrollIntoView({ behavior: "instant" });
   }, []);
 
   const jobsQuery = useQuery({ queryKey: ["jobs"], queryFn: () => apiGet<Job[]>("/jobs") });

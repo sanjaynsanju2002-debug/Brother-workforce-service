@@ -1,0 +1,23 @@
+{
+  "id": "/",
+  "name": "Brothers Workforce Solutions",
+  "short_name": "Brothers",
+  "description": "Find jobs, register for work, request manpower, and manage your workforce.",
+  "lang": "en-IN",
+  "start_url": "/app",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#F8FAFC",
+  "theme_color": "#0F2444",
+  "icons": [
+    {"src": "/app-icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+    {"src": "/app-icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+    {"src": "/app-icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+  ],
+  "shortcuts": [
+    {"name": "Find jobs", "url": "/#jobs"},
+    {"name": "Register for work", "url": "/#worker-registration"},
+    {"name": "Request workers", "url": "/#manpower-request"},
+    {"name": "Admin access", "url": "/admin"}
+  ]
+}

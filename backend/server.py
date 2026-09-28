@@ -91,20 +91,6 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from lib.frontend import mount_frontend
 
-
-frontend_path = ROOT_DIR.parent / "frontend" / "dist"
-
-
-if frontend_path.exists():
-    app.mount(
-        "/",
-        StaticFiles(directory=frontend_path, html=True),
-        name="frontend"
-    )
-
-    @app.get("/{path:path}")
-    async def frontend_routes(path: str):
-        return FileResponse(frontend_path / "index.html")
+mount_frontend(app, ROOT_DIR.parent / "frontend" / "dist")
