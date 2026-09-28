@@ -24,6 +24,7 @@ UPLOAD_DIR = Path(__file__).parent.parent / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
 
 ALLOWED_EXT = {".pdf", ".doc", ".docx", ".png", ".jpg", ".jpeg"}
+MAX_RESUME_SIZE = 5 * 1024 * 1024  # 5 MB
 
 
 @router.post("/workers", response_model=Worker)
@@ -66,9 +67,13 @@ async def upload_resume(worker_id: str, file: UploadFile = File(...)) -> Worker:
     if ext not in ALLOWED_EXT:
         raise HTTPException(status_code=400, detail=f"Unsupported file type: {ext or 'unknown'}")
 
+    contents = await file.read(MAX_RESUME_SIZE + 1)
+    if len(contents) > MAX_RESUME_SIZE:
+        raise HTTPException(status_code=413, detail="Resume must be 5 MB or smaller")
+
     safe = re.sub(r"[^A-Za-z0-9._-]", "_", Path(file.filename or "resume").name)
     stored = UPLOAD_DIR / f"{worker_id}__{safe}"
-    stored.write_bytes(await file.read())
+    stored.write_bytes(contents)
 
     await db.workers.update_one({"id": worker_id}, {"$set": {"resume_filename": safe}})
     doc["resume_filename"] = safe
