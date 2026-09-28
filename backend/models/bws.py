@@ -19,6 +19,7 @@ def _uid() -> str:
 class WorkerCreate(BaseModel):
     full_name: str
     mobile: str
+    email: Optional[str] = None
     whatsapp: Optional[str] = None
     age: Optional[str] = None
     gender: Optional[str] = None
