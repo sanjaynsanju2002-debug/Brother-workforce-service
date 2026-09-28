@@ -445,7 +445,7 @@ function Dashboard({
                         <TableCell>
                           {w.resume_filename ? (
                             <a
-                              href={`/api/workers/${w.id}/resume`}
+                              href={`/api/workers/${w.id}/resume${q}`}
                               target="_blank"
                               rel="noreferrer"
                               className="text-[#EA580C] underline"

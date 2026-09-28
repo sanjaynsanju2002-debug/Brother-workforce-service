@@ -1,11 +1,15 @@
 """Public API: worker registrations, company manpower requests, job listings."""
 
+import os
 import re
 from pathlib import Path
 
-from fastapi import APIRouter, BackgroundTasks, File, HTTPException, UploadFile
-from fastapi.responses import FileResponse
+import boto3
 
+from fastapi import APIRouter, BackgroundTasks, File, HTTPException, Query, UploadFile
+from fastapi.responses import FileResponse, StreamingResponse
+
+from lib.auth import verify_pin
 from lib.db import db
 from lib.notify import build_html, send_notification
 from models.bws import (
@@ -25,6 +29,14 @@ UPLOAD_DIR.mkdir(exist_ok=True)
 
 ALLOWED_EXT = {".pdf", ".doc", ".docx", ".png", ".jpg", ".jpeg"}
 MAX_RESUME_SIZE = 5 * 1024 * 1024  # 5 MB
+R2_BUCKET = os.getenv("R2_BUCKET", "")
+R2_ENDPOINT = os.getenv("R2_ENDPOINT", "")
+
+
+def _r2():
+    if not R2_BUCKET or not R2_ENDPOINT:
+        raise HTTPException(status_code=503, detail="Resume storage is not configured")
+    return boto3.client("s3", endpoint_url=R2_ENDPOINT, region_name=os.getenv("AWS_DEFAULT_REGION", "auto"))
 
 
 @router.post("/workers", response_model=Worker)
@@ -72,20 +84,51 @@ async def upload_resume(worker_id: str, file: UploadFile = File(...)) -> Worker:
         raise HTTPException(status_code=413, detail="Resume must be 5 MB or smaller")
 
     safe = re.sub(r"[^A-Za-z0-9._-]", "_", Path(file.filename or "resume").name)
-    stored = UPLOAD_DIR / f"{worker_id}__{safe}"
-    stored.write_bytes(contents)
+    object_key = f"resumes/{worker_id}/{safe}"
 
-    await db.workers.update_one({"id": worker_id}, {"$set": {"resume_filename": safe}})
+    try:
+        _r2().put_object(
+            Bucket=R2_BUCKET,
+            Key=object_key,
+            Body=contents,
+            ContentType=file.content_type or "application/octet-stream",
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Could not store resume. Please try again.") from exc
+
+    await db.workers.update_one(
+        {"id": worker_id},
+        {"$set": {"resume_filename": safe, "resume_object_key": object_key}},
+    )
     doc["resume_filename"] = safe
+    doc["resume_object_key"] = object_key
     doc.pop("_id", None)
     return Worker(**doc)
 
 
 @router.get("/workers/{worker_id}/resume")
-async def download_resume(worker_id: str) -> FileResponse:
+async def download_resume(worker_id: str, pin: str = Query(...)):
+    await verify_pin(pin)
     doc = await db.workers.find_one({"id": worker_id})
     if not doc or not doc.get("resume_filename"):
         raise HTTPException(status_code=404, detail="No resume on file")
+
+    object_key = doc.get("resume_object_key")
+    if object_key:
+        try:
+            obj = _r2().get_object(Bucket=R2_BUCKET, Key=object_key)
+            return StreamingResponse(
+                obj["Body"].iter_chunks(),
+                media_type=obj.get("ContentType") or "application/octet-stream",
+                headers={"Content-Disposition": f'attachment; filename="{doc["resume_filename"]}"'},
+            )
+        except HTTPException:
+            raise
+        except Exception as exc:
+            raise HTTPException(status_code=404, detail="No resume on file") from exc
+
     stored = UPLOAD_DIR / f"{worker_id}__{doc['resume_filename']}"
     if not stored.exists():
         raise HTTPException(status_code=404, detail="No resume on file")
