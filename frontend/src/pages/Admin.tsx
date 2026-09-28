@@ -201,6 +201,20 @@ function Dashboard({
     },
   });
 
+  const removeWorker = useMutation({
+    mutationFn: (id: string) => apiDelete<Ok>(`/admin/workers/${id}${q}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-workers", pin] });
+      qc.invalidateQueries({ queryKey: ["admin-worker-filters", pin] });
+      qc.invalidateQueries({ queryKey: ["admin-stats", pin] });
+      qc.invalidateQueries({ queryKey: ["admin-traffic", pin] });
+      qc.invalidateQueries({ queryKey: ["admin-shortlists", pin] });
+      qc.invalidateQueries({ queryKey: ["shortlist-members", pin] });
+      toast.success("Application permanently deleted");
+    },
+    onError: () => toast.error("Could not delete application"),
+  });
+
   const requestStatus = useMutation({
     mutationFn: (v: { id: string; status: string }) =>
       apiPatch<CompanyRequest>(`/admin/company-requests/${v.id}${q}`, { status: v.status }),
@@ -429,7 +443,7 @@ function Dashboard({
                       <TableHead>Location</TableHead>
                       <TableHead>Resume</TableHead>
                       <TableHead>Status</TableHead>
-                      <TableHead>Contact</TableHead>
+                      <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -507,6 +521,26 @@ function Dashboard({
                                 </SelectContent>
                               </Select>
                             )}
+                            <Button
+                              type="button"
+                              size="icon-xs"
+                              variant="destructive"
+                              disabled={removeWorker.isPending}
+                              onClick={() => {
+                                if (
+                                  window.confirm(
+                                    `Permanently delete ${w.full_name}'s application? This will also remove the record from the backend database and delete the stored resume.`
+                                  )
+                                ) {
+                                  removeWorker.mutate(w.id);
+                                }
+                              }}
+                              aria-label={`Delete ${w.full_name}'s application`}
+                              title="Delete application permanently"
+                              data-testid={`admin-worker-delete-${w.id}`}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
                           </div>
                         </TableCell>
                       </TableRow>
