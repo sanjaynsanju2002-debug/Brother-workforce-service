@@ -71,6 +71,7 @@ export default function TalentBank({ pin }: { pin: string }) {
   const [form, setForm] = useState<WorkerCreate>({ ...EMPTY_TALENT });
   const [resume, setResume] = useState<File | null>(null);
   const [importZip, setImportZip] = useState<File | null>(null);
+  const [lastImport, setLastImport] = useState<TalentImportResult | null>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
 
   const talents = useQuery({
@@ -120,6 +121,7 @@ export default function TalentBank({ pin }: { pin: string }) {
       return data as TalentImportResult;
     },
     onSuccess: (result) => {
+      setLastImport(result);
       qc.invalidateQueries({ queryKey: ["admin-talents", pin] });
       setImportZip(null);
       const summary = `${result.imported} imported${result.skipped ? `, ${result.skipped} skipped` : ""}`;
@@ -350,6 +352,27 @@ export default function TalentBank({ pin }: { pin: string }) {
           <p className="mt-1 text-sm text-slate-500">
             Upload a prepared ZIP package containing talents.csv and the matching resume files.
           </p>
+          {lastImport && (
+            <div className={`mt-4 rounded-md border p-3 text-sm ${lastImport.errors.length ? "border-amber-300 bg-amber-50 text-amber-900" : "border-emerald-300 bg-emerald-50 text-emerald-900"}`}>
+              <div className="font-semibold">
+                {lastImport.imported} imported{lastImport.skipped ? `, ${lastImport.skipped} skipped` : ""}.
+              </div>
+              {lastImport.errors.length > 0 && (
+                <div className="mt-2">
+                  <div className="font-medium">Resume/file issues:</div>
+                  <ul className="mt-1 list-disc space-y-1 pl-5">
+                    {lastImport.errors.slice(0, 6).map((error, index) => (
+                      <li key={index}>{error}</li>
+                    ))}
+                  </ul>
+                  {lastImport.errors.length > 6 && (
+                    <div className="mt-1">+ {lastImport.errors.length - 6} more issue(s)</div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
             <Input
               ref={importInputRef}
