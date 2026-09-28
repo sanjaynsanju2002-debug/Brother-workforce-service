@@ -36,6 +36,7 @@ class WorkerCreate(BaseModel):
 class Worker(WorkerCreate):
     id: str = Field(default_factory=_uid)
     resume_filename: Optional[str] = None
+    source: str = "Website Application"
     status: str = "New"
     created_at: datetime = Field(default_factory=_now)
 
