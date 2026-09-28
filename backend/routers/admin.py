@@ -10,6 +10,7 @@ import zipfile
 import boto3
 
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
@@ -165,6 +166,38 @@ async def update_worker(worker_id: str, payload: StatusUpdate, pin: str = Query(
         raise HTTPException(status_code=404, detail="Not found")
     doc.pop("_id", None)
     return Worker(**doc)
+
+
+@router.delete("/workers/{worker_id}", response_model=Ok)
+async def delete_worker_application(worker_id: str, pin: str = Query(...)) -> Ok:
+    """Permanently delete a website worker application and its stored resume."""
+    await verify_pin(pin)
+    doc = await db.workers.find_one({"id": worker_id, "source": {"$ne": "Talent Bank"}})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Worker application not found")
+
+    object_key = doc.get("resume_object_key")
+    client = _r2_client()
+    if client and object_key:
+        try:
+            client.delete_object(Bucket=R2_BUCKET, Key=object_key)
+        except Exception:
+            # Do not block application deletion if the old resume object is already missing.
+            pass
+
+    resume_filename = doc.get("resume_filename")
+    if resume_filename:
+        local_resume = Path(__file__).parent.parent / "uploads" / f"{worker_id}__{resume_filename}"
+        try:
+            local_resume.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+    await db.shortlists.update_many({}, {"$pull": {"worker_ids": worker_id}})
+    result = await db.workers.delete_one({"id": worker_id, "source": {"$ne": "Talent Bank"}})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Worker application not found")
+    return Ok(ok=True)
 
 
 @router.get("/talents", response_model=list[Worker])
