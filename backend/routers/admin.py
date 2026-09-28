@@ -237,6 +237,7 @@ async def import_talents(file: UploadFile = File(...), pin: str = Query(...)) ->
         payload = WorkerCreate(
             full_name=full_name,
             mobile=mobile,
+            email=value(row, "email") or None,
             whatsapp=value(row, "whatsapp") or None,
             age=value(row, "age") or None,
             gender=value(row, "gender") or None,
@@ -369,6 +370,7 @@ WORKER_COLUMNS = [
     ("created_at", "Application Date"),
     ("full_name", "Full Name"),
     ("mobile", "Mobile"),
+    ("email", "Email"),
     ("whatsapp", "WhatsApp"),
     ("age", "Age"),
     ("gender", "Gender"),
