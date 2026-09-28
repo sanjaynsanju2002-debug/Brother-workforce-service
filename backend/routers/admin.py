@@ -230,9 +230,7 @@ async def import_talents(file: UploadFile = File(...), pin: str = Query(...)) ->
         duplicate_query = {"source": "Talent Bank", "full_name": full_name}
         if mobile:
             duplicate_query = {"source": "Talent Bank", "mobile": mobile}
-        if await db.workers.find_one(duplicate_query):
-            skipped += 1
-            continue
+        existing = await db.workers.find_one(duplicate_query)
 
         payload = WorkerCreate(
             full_name=full_name,
@@ -251,42 +249,62 @@ async def import_talents(file: UploadFile = File(...), pin: str = Query(...)) ->
             expected_salary=value(row, "expected_salary") or None,
             availability=value(row, "availability") or None,
         )
-        talent = Worker(**payload.model_dump(), source="Talent Bank", status=value(row, "status") or "Available")
-        doc = talent.model_dump()
+
+        if existing:
+            talent_id = existing["id"]
+            doc = existing
+        else:
+            talent = Worker(**payload.model_dump(), source="Talent Bank", status=value(row, "status") or "Available")
+            talent_id = talent.id
+            doc = talent.model_dump()
 
         resume_file = value(row, "resume_file")
+        resume_uploaded = False
         if resume_file:
             if resume_file not in names:
-                errors.append(f"Row {index}: resume file not found: {resume_file}")
-                continue
-            resume_bytes = archive.read(resume_file)
-            if len(resume_bytes) > 5 * 1024 * 1024:
-                errors.append(f"Row {index}: resume is larger than 5 MB")
-                continue
-            ext = os.path.splitext(resume_file)[1].lower()
-            if ext not in {".pdf", ".doc", ".docx", ".png", ".jpg", ".jpeg"}:
-                errors.append(f"Row {index}: unsupported resume type {ext}")
-                continue
-            if not client:
-                raise HTTPException(status_code=503, detail="Cloudflare R2 storage is not configured")
+                errors.append(f"Row {index} ({full_name}): resume file not found: {resume_file}")
+            else:
+                resume_bytes = archive.read(resume_file)
+                ext = os.path.splitext(resume_file)[1].lower()
+                if len(resume_bytes) > 5 * 1024 * 1024:
+                    errors.append(f"Row {index} ({full_name}): resume is larger than 5 MB")
+                elif ext not in {".pdf", ".doc", ".docx", ".png", ".jpg", ".jpeg"}:
+                    errors.append(f"Row {index} ({full_name}): unsupported resume type {ext}")
+                elif not client:
+                    errors.append(f"Row {index} ({full_name}): Cloudflare R2 storage is not configured")
+                else:
+                    safe = re.sub(r"[^A-Za-z0-9._-]", "_", os.path.basename(resume_file))
+                    object_key = f"resumes/{talent_id}/{safe}"
+                    try:
+                        client.put_object(
+                            Bucket=R2_BUCKET,
+                            Key=object_key,
+                            Body=resume_bytes,
+                            ContentType=mimetypes.guess_type(safe)[0] or "application/octet-stream",
+                        )
+                        doc["resume_filename"] = safe
+                        doc["resume_object_key"] = object_key
+                        resume_uploaded = True
+                    except Exception as exc:
+                        detail = str(exc).replace("\n", " ")[:180]
+                        errors.append(
+                            f"Row {index} ({full_name}): resume storage error - {type(exc).__name__}: {detail}"
+                        )
 
-            safe = re.sub(r"[^A-Za-z0-9._-]", "_", os.path.basename(resume_file))
-            object_key = f"resumes/{talent.id}/{safe}"
-            try:
-                client.put_object(
-                    Bucket=R2_BUCKET,
-                    Key=object_key,
-                    Body=resume_bytes,
-                    ContentType=mimetypes.guess_type(safe)[0] or "application/octet-stream",
-                )
-            except Exception as exc:
-                errors.append(f"Row {index}: could not upload resume for {full_name}")
-                continue
-            doc["resume_filename"] = safe
-            doc["resume_object_key"] = object_key
-
-        await db.workers.insert_one(doc)
-        imported += 1
+        if existing:
+            update_doc = payload.model_dump()
+            update_doc["status"] = value(row, "status") or existing.get("status", "Available")
+            if resume_uploaded:
+                update_doc["resume_filename"] = doc.get("resume_filename")
+                update_doc["resume_object_key"] = doc.get("resume_object_key")
+            await db.workers.update_one({"id": talent_id}, {"$set": update_doc})
+            if existing.get("resume_object_key") and not resume_uploaded:
+                skipped += 1
+            else:
+                imported += 1
+        else:
+            await db.workers.insert_one(doc)
+            imported += 1
 
     return {"ok": True, "imported": imported, "skipped": skipped, "errors": errors}
 
