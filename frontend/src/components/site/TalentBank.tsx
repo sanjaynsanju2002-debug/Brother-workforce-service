@@ -27,6 +27,13 @@ import { AVAILABILITY, SKILL_CATEGORIES } from "@/lib/brand";
 import { waLink, workerMessage } from "@/lib/wa";
 import type { Ok, Worker, WorkerCreate } from "@/types";
 
+type TalentImportResult = {
+  ok: boolean;
+  imported: number;
+  skipped: number;
+  errors: string[];
+};
+
 const MAX_RESUME_SIZE = 5 * 1024 * 1024;
 const TALENT_STATUS = ["Available", "Contacted", "Shortlisted", "Deployed", "Archived"];
 
@@ -62,6 +69,7 @@ export default function TalentBank({ pin }: { pin: string }) {
   const q = `?pin=${encodeURIComponent(pin)}`;
   const [form, setForm] = useState<WorkerCreate>({ ...EMPTY_TALENT });
   const [resume, setResume] = useState<File | null>(null);
+  const [importZip, setImportZip] = useState<File | null>(null);
 
   const talents = useQuery({
     queryKey: ["admin-talents", pin],
@@ -93,6 +101,34 @@ export default function TalentBank({ pin }: { pin: string }) {
       }
     },
     onError: () => toast.error("Could not add talent"),
+  });
+
+  const bulkImport = useMutation({
+    mutationFn: async () => {
+      if (!importZip) throw new Error("Choose a ZIP file");
+      const body = new FormData();
+      body.append("file", importZip);
+      const res = await fetch(`/api/admin/talents/import${q}`, {
+        method: "POST",
+        body,
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new Error(data?.detail || "Bulk import failed");
+      }
+      return data as TalentImportResult;
+    },
+    onSuccess: (result) => {
+      qc.invalidateQueries({ queryKey: ["admin-talents", pin] });
+      setImportZip(null);
+      const summary = `${result.imported} imported${result.skipped ? `, ${result.skipped} skipped` : ""}`;
+      if (result.errors.length) {
+        toast.warning(`${summary}. ${result.errors.length} row(s) need attention.`);
+      } else {
+        toast.success(summary);
+      }
+    },
+    onError: (err) => toast.error(err instanceof Error ? err.message : "Bulk import failed"),
   });
 
   const updateStatus = useMutation({
@@ -295,6 +331,37 @@ export default function TalentBank({ pin }: { pin: string }) {
               </Button>
             </div>
           </form>
+        </CardContent>
+      </Card>
+
+      <Card className="border-slate-200 bg-white">
+        <CardContent className="p-4 sm:p-6">
+          <h3 className="text-base font-semibold text-[#0F2444]">Bulk Import Talents</h3>
+          <p className="mt-1 text-sm text-slate-500">
+            Upload a prepared ZIP package containing talents.csv and the matching resume files.
+          </p>
+          <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+            <Input
+              type="file"
+              accept=".zip,application/zip"
+              onChange={(e) => setImportZip(e.target.files?.[0] ?? null)}
+              className="sm:max-w-md"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              disabled={!importZip || bulkImport.isPending}
+              onClick={() => bulkImport.mutate()}
+              className="w-full sm:w-auto"
+            >
+              {bulkImport.isPending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Upload className="mr-2 h-4 w-4" />
+              )}
+              Import ZIP
+            </Button>
+          </div>
         </CardContent>
       </Card>
 

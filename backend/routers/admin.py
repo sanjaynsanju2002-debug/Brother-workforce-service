@@ -2,14 +2,16 @@
 
 import csv
 import io
+import mimetypes
 import os
 import re
+import zipfile
 
 import boto3
 
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, File, HTTPException, Query, UploadFile
 from fastapi.responses import StreamingResponse
 
 from lib.auth import current_pin, env_pin, set_pin, verify_pin
@@ -178,6 +180,114 @@ async def create_talent(payload: WorkerCreate, pin: str = Query(...)) -> Worker:
     talent = Worker(**payload.model_dump(), source="Talent Bank", status="Available")
     await db.workers.insert_one(talent.model_dump())
     return talent
+
+
+@router.post("/talents/import")
+async def import_talents(file: UploadFile = File(...), pin: str = Query(...)) -> dict:
+    await verify_pin(pin)
+
+    if not (file.filename or "").lower().endswith(".zip"):
+        raise HTTPException(status_code=400, detail="Upload a .zip talent import package")
+
+    raw = await file.read(50 * 1024 * 1024 + 1)
+    if len(raw) > 50 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Import package must be 50 MB or smaller")
+
+    try:
+        archive = zipfile.ZipFile(io.BytesIO(raw))
+    except zipfile.BadZipFile as exc:
+        raise HTTPException(status_code=400, detail="Invalid ZIP file") from exc
+
+    names = {name: name for name in archive.namelist() if not name.endswith("/")}
+    csv_name = next((name for name in names if name.lower().endswith("talents.csv")), None)
+    if not csv_name:
+        raise HTTPException(status_code=400, detail="ZIP must contain talents.csv")
+
+    try:
+        csv_text = archive.read(csv_name).decode("utf-8-sig")
+    except UnicodeDecodeError as exc:
+        raise HTTPException(status_code=400, detail="talents.csv must be UTF-8") from exc
+
+    rows = list(csv.DictReader(io.StringIO(csv_text)))
+    if not rows:
+        raise HTTPException(status_code=400, detail="talents.csv has no candidate rows")
+
+    client = _r2_client()
+    imported = 0
+    skipped = 0
+    errors: list[str] = []
+
+    def value(row: dict, key: str) -> str:
+        return (row.get(key) or "").strip()
+
+    for index, row in enumerate(rows, start=2):
+        full_name = value(row, "full_name")
+        mobile = value(row, "mobile")
+        if not full_name:
+            errors.append(f"Row {index}: full_name is required")
+            continue
+
+        duplicate_query = {"source": "Talent Bank", "full_name": full_name}
+        if mobile:
+            duplicate_query = {"source": "Talent Bank", "mobile": mobile}
+        if await db.workers.find_one(duplicate_query):
+            skipped += 1
+            continue
+
+        payload = WorkerCreate(
+            full_name=full_name,
+            mobile=mobile,
+            whatsapp=value(row, "whatsapp") or None,
+            age=value(row, "age") or None,
+            gender=value(row, "gender") or None,
+            current_location=value(row, "current_location") or "Not provided",
+            education=value(row, "education") or None,
+            experience=value(row, "experience") or None,
+            skill_category=value(row, "skill_category") or "General Worker",
+            skills=value(row, "skills") or None,
+            previous_experience=value(row, "previous_experience") or None,
+            preferred_location=value(row, "preferred_location") or None,
+            expected_salary=value(row, "expected_salary") or None,
+            availability=value(row, "availability") or None,
+        )
+        talent = Worker(**payload.model_dump(), source="Talent Bank", status=value(row, "status") or "Available")
+        doc = talent.model_dump()
+
+        resume_file = value(row, "resume_file")
+        if resume_file:
+            if resume_file not in names:
+                errors.append(f"Row {index}: resume file not found: {resume_file}")
+                continue
+            resume_bytes = archive.read(resume_file)
+            if len(resume_bytes) > 5 * 1024 * 1024:
+                errors.append(f"Row {index}: resume is larger than 5 MB")
+                continue
+            ext = os.path.splitext(resume_file)[1].lower()
+            if ext not in {".pdf", ".doc", ".docx", ".png", ".jpg", ".jpeg"}:
+                errors.append(f"Row {index}: unsupported resume type {ext}")
+                continue
+            if not client:
+                raise HTTPException(status_code=503, detail="Cloudflare R2 storage is not configured")
+
+            safe = re.sub(r"[^A-Za-z0-9._-]", "_", os.path.basename(resume_file))
+            object_key = f"resumes/{talent.id}/{safe}"
+            try:
+                client.put_object(
+                    Bucket=R2_BUCKET,
+                    Key=object_key,
+                    Body=resume_bytes,
+                    ContentType=mimetypes.guess_type(safe)[0] or "application/octet-stream",
+                )
+            except Exception as exc:
+                errors.append(f"Row {index}: could not upload resume for {full_name}")
+                continue
+            doc["resume_filename"] = safe
+            doc["resume_object_key"] = object_key
+
+        await db.workers.insert_one(doc)
+        imported += 1
+
+    return {"ok": True, "imported": imported, "skipped": skipped, "errors": errors}
 
 
 @router.delete("/talents/{worker_id}", response_model=Ok)
