@@ -3,6 +3,7 @@
 export interface WorkerCreate {
   full_name: string;
   mobile: string;
+  email?: string | null;
   whatsapp?: string | null;
   age?: string | null;
   gender?: string | null;

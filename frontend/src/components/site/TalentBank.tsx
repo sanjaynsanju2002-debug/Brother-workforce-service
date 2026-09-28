@@ -40,6 +40,7 @@ const TALENT_STATUS = ["Available", "Contacted", "Shortlisted", "Deployed", "Arc
 const EMPTY_TALENT: WorkerCreate = {
   full_name: "",
   mobile: "",
+  email: "",
   whatsapp: "",
   current_location: "",
   education: "",
@@ -205,6 +206,15 @@ export default function TalentBank({ pin }: { pin: string }) {
                 onChange={(e) => setForm({ ...form, mobile: e.target.value })}
                 placeholder="10-digit mobile number"
                 inputMode="tel"
+              />
+            </div>
+            <div>
+              <Label className="mb-2 block text-sm">Email</Label>
+              <Input
+                type="email"
+                value={form.email ?? ""}
+                onChange={(e) => setForm({ ...form, email: e.target.value })}
+                placeholder="candidate@example.com"
               />
             </div>
             <div>
@@ -418,7 +428,10 @@ export default function TalentBank({ pin }: { pin: string }) {
                     )}
                   </TableCell>
                   <TableCell>
-                    {talent.mobile}
+                    {talent.mobile || <span className="text-slate-400">No mobile</span>}
+                    {talent.email && (
+                      <span className="block text-xs text-slate-500">{talent.email}</span>
+                    )}
                     {talent.whatsapp && talent.whatsapp !== talent.mobile && (
                       <span className="block text-xs text-slate-500">WA: {talent.whatsapp}</span>
                     )}
