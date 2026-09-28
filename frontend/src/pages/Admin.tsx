@@ -16,6 +16,7 @@ import Security from "@/components/site/Security";
 import TrafficChart from "@/components/site/TrafficChart";
 import Shortlists from "@/components/site/Shortlists";
 import JobMatches from "@/components/site/JobMatches";
+import TalentBank from "@/components/site/TalentBank";
 import { waLink, workerMessage, companyMessage } from "@/lib/wa";
 import {
   Table,
@@ -332,6 +333,9 @@ function Dashboard({
             <TabsTrigger value="workers" className="shrink-0 flex-none px-3" data-testid="admin-tab-workers">
               Worker Applications
             </TabsTrigger>
+            <TabsTrigger value="talents" className="shrink-0 flex-none px-3" data-testid="admin-tab-talents">
+              Talent Bank
+            </TabsTrigger>
             <TabsTrigger value="requests" className="shrink-0 flex-none px-3" data-testid="admin-tab-requests">
               Company Enquiries
             </TabsTrigger>
@@ -511,6 +515,10 @@ function Dashboard({
                 </Table>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="talents" className="mt-6">
+            <TalentBank pin={pin} />
           </TabsContent>
 
           <TabsContent value="requests" className="mt-6">
