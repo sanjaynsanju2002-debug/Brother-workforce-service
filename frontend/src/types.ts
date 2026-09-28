@@ -20,6 +20,7 @@ export interface WorkerCreate {
 export interface Worker extends WorkerCreate {
   id: string;
   resume_filename?: string | null;
+  source: string;
   status: string;
   created_at: string;
 }

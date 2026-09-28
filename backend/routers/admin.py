@@ -4,6 +4,9 @@ import csv
 import io
 import os
 import re
+
+import boto3
+
 from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, HTTPException, Query
@@ -23,11 +26,25 @@ from models.bws import (
     SecurityInfo,
     StatusUpdate,
     Worker,
+    WorkerCreate,
     WorkerFilters,
 )
 from models.visits import TrafficStats
 
 router = APIRouter(prefix="/admin")
+
+R2_BUCKET = os.getenv("R2_BUCKET", "")
+R2_ENDPOINT = os.getenv("R2_ENDPOINT", "")
+
+
+def _r2_client():
+    if not R2_BUCKET or not R2_ENDPOINT:
+        return None
+    return boto3.client(
+        "s3",
+        endpoint_url=R2_ENDPOINT,
+        region_name=os.getenv("AWS_DEFAULT_REGION", "auto"),
+    )
 
 
 
@@ -41,7 +58,7 @@ async def login(pin: str = Query(...)) -> Ok:
 async def stats(pin: str = Query(...)) -> AdminStats:
     await verify_pin(pin)
     return AdminStats(
-        workers=await db.workers.count_documents({}),
+        workers=await db.workers.count_documents({"source": {"$ne": "Talent Bank"}}),
         requests=await db.company_requests.count_documents({}),
         open_requests=await db.company_requests.count_documents({"status": "Pending"}),
         active_jobs=await db.jobs.count_documents({"active": True}),
@@ -60,8 +77,8 @@ async def traffic(pin: str = Query(...)) -> TrafficStats:
         visits_total=await db.visits.count_documents({}),
         visits_today=await db.visits.count_documents({"created_at": {"$gte": start_today}}),
         visits_week=await db.visits.count_documents({"created_at": {"$gte": start_week}}),
-        workers_total=await db.workers.count_documents({}),
-        workers_today=await db.workers.count_documents({"created_at": {"$gte": start_today}}),
+        workers_total=await db.workers.count_documents({"source": {"$ne": "Talent Bank"}}),
+        workers_today=await db.workers.count_documents({"source": {"$ne": "Talent Bank"}, "created_at": {"$gte": start_today}}),
         requests_total=await db.company_requests.count_documents({}),
         requests_today=await db.company_requests.count_documents({"created_at": {"$gte": start_today}}),
     )
@@ -94,7 +111,7 @@ async def list_workers(
     q: str | None = Query(None),
 ) -> list[Worker]:
     await verify_pin(pin)
-    query: dict = {}
+    query: dict = {"source": {"$ne": "Talent Bank"}}
     if skill_category:
         query["skill_category"] = skill_category
     if availability:
@@ -128,10 +145,11 @@ async def list_workers(
 async def worker_filters(pin: str = Query(...)) -> WorkerFilters:
     """Distinct values so the admin filters only offer options that exist."""
     await verify_pin(pin)
+    applicant_query = {"source": {"$ne": "Talent Bank"}}
     return WorkerFilters(
-        skill_categories=sorted(x for x in await db.workers.distinct("skill_category") if x),
-        locations=sorted(x for x in await db.workers.distinct("current_location") if x),
-        availabilities=sorted(x for x in await db.workers.distinct("availability") if x),
+        skill_categories=sorted(x for x in await db.workers.distinct("skill_category", applicant_query) if x),
+        locations=sorted(x for x in await db.workers.distinct("current_location", applicant_query) if x),
+        availabilities=sorted(x for x in await db.workers.distinct("availability", applicant_query) if x),
     )
 
 
@@ -145,6 +163,41 @@ async def update_worker(worker_id: str, payload: StatusUpdate, pin: str = Query(
         raise HTTPException(status_code=404, detail="Not found")
     doc.pop("_id", None)
     return Worker(**doc)
+
+
+@router.get("/talents", response_model=list[Worker])
+async def list_talents(pin: str = Query(...)) -> list[Worker]:
+    await verify_pin(pin)
+    docs = await db.workers.find({"source": "Talent Bank"}).sort("created_at", -1).to_list(1000)
+    return [Worker(**d) for d in docs]
+
+
+@router.post("/talents", response_model=Worker)
+async def create_talent(payload: WorkerCreate, pin: str = Query(...)) -> Worker:
+    await verify_pin(pin)
+    talent = Worker(**payload.model_dump(), source="Talent Bank", status="Available")
+    await db.workers.insert_one(talent.model_dump())
+    return talent
+
+
+@router.delete("/talents/{worker_id}", response_model=Ok)
+async def delete_talent(worker_id: str, pin: str = Query(...)) -> Ok:
+    await verify_pin(pin)
+    doc = await db.workers.find_one({"id": worker_id, "source": "Talent Bank"})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Talent not found")
+
+    object_key = doc.get("resume_object_key")
+    client = _r2_client()
+    if client and object_key:
+        try:
+            client.delete_object(Bucket=R2_BUCKET, Key=object_key)
+        except Exception:
+            pass
+
+    await db.shortlists.update_many({}, {"$pull": {"worker_ids": worker_id}})
+    await db.workers.delete_one({"id": worker_id, "source": "Talent Bank"})
+    return Ok(ok=True)
 
 
 @router.get("/company-requests", response_model=list[CompanyRequest])
@@ -265,8 +318,15 @@ def _csv_response(rows: list[dict], columns: list[tuple[str, str]], filename: st
 @router.get("/export/workers.csv")
 async def export_workers(pin: str = Query(...)) -> StreamingResponse:
     await verify_pin(pin)
-    rows = await db.workers.find({}, {"_id": 0}).sort("created_at", -1).to_list(5000)
+    rows = await db.workers.find({"source": {"$ne": "Talent Bank"}}, {"_id": 0}).sort("created_at", -1).to_list(5000)
     return _csv_response(rows, WORKER_COLUMNS, "worker-applications.csv")
+
+
+@router.get("/export/talents.csv")
+async def export_talents(pin: str = Query(...)) -> StreamingResponse:
+    await verify_pin(pin)
+    rows = await db.workers.find({"source": "Talent Bank"}, {"_id": 0}).sort("created_at", -1).to_list(5000)
+    return _csv_response(rows, WORKER_COLUMNS, "talent-bank.csv")
 
 
 @router.get("/export/company-requests.csv")

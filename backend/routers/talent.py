@@ -180,15 +180,18 @@ async def traffic_daily(pin: str = Query(...), days: int = Query(30, ge=1, le=90
         days=days - 1
     )
 
-    async def bucket(collection: str) -> dict[str, int]:
+    async def bucket(collection: str, extra_match: dict | None = None) -> dict[str, int]:
+        match = {"created_at": {"$gte": start}}
+        if extra_match:
+            match.update(extra_match)
         pipeline = [
-            {"$match": {"created_at": {"$gte": start}}},
+            {"$match": match},
             {"$group": {"_id": {"$dateToString": {"format": "%Y-%m-%d", "date": "$created_at"}}, "n": {"$sum": 1}}},
         ]
         return {d["_id"]: d["n"] async for d in db[collection].aggregate(pipeline)}
 
     visits = await bucket("visits")
-    workers = await bucket("workers")
+    workers = await bucket("workers", {"source": {"$ne": "Talent Bank"}})
     requests = await bucket("company_requests")
 
     out: list[DayPoint] = []
