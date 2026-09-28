@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Download, Loader2, MessageSquare, Plus, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
@@ -71,6 +71,7 @@ export default function TalentBank({ pin }: { pin: string }) {
   const [form, setForm] = useState<WorkerCreate>({ ...EMPTY_TALENT });
   const [resume, setResume] = useState<File | null>(null);
   const [importZip, setImportZip] = useState<File | null>(null);
+  const importInputRef = useRef<HTMLInputElement>(null);
 
   const talents = useQuery({
     queryKey: ["admin-talents", pin],
@@ -105,10 +106,9 @@ export default function TalentBank({ pin }: { pin: string }) {
   });
 
   const bulkImport = useMutation({
-    mutationFn: async () => {
-      if (!importZip) throw new Error("Choose a ZIP file");
+    mutationFn: async (file: File) => {
       const body = new FormData();
-      body.append("file", importZip);
+      body.append("file", file);
       const res = await fetch(`/api/admin/talents/import${q}`, {
         method: "POST",
         body,
@@ -352,6 +352,7 @@ export default function TalentBank({ pin }: { pin: string }) {
           </p>
           <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
             <Input
+              ref={importInputRef}
               type="file"
               accept=".zip,application/zip"
               onChange={(e) => setImportZip(e.target.files?.[0] ?? null)}
@@ -359,10 +360,16 @@ export default function TalentBank({ pin }: { pin: string }) {
             />
             <Button
               type="button"
-              variant="outline"
-              disabled={!importZip || bulkImport.isPending}
-              onClick={() => bulkImport.mutate()}
-              className="w-full sm:w-auto"
+              disabled={bulkImport.isPending}
+              onClick={() => {
+                const file = importInputRef.current?.files?.[0] ?? importZip;
+                if (!file) {
+                  toast.error("Choose the Talent Bank ZIP file first");
+                  return;
+                }
+                bulkImport.mutate(file);
+              }}
+              className="w-full bg-[#EA580C] text-white hover:bg-[#C2410C] sm:w-auto"
             >
               {bulkImport.isPending ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
