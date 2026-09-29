@@ -203,7 +203,7 @@ async def delete_worker_application(worker_id: str, pin: str = Query(...)) -> Ok
 @router.get("/talents", response_model=list[Worker])
 async def list_talents(pin: str = Query(...)) -> list[Worker]:
     await verify_pin(pin)
-    docs = await db.workers.find({"source": "Talent Bank"}).sort("created_at", -1).to_list(1000)
+    docs = await db.workers.find({}).sort("created_at", -1).to_list(1000)
     return [Worker(**d) for d in docs]
 
 
@@ -345,7 +345,7 @@ async def import_talents(file: UploadFile = File(...), pin: str = Query(...)) ->
 @router.delete("/talents/{worker_id}", response_model=Ok)
 async def delete_talent(worker_id: str, pin: str = Query(...)) -> Ok:
     await verify_pin(pin)
-    doc = await db.workers.find_one({"id": worker_id, "source": "Talent Bank"})
+    doc = await db.workers.find_one({"id": worker_id})
     if not doc:
         raise HTTPException(status_code=404, detail="Talent not found")
 
@@ -358,7 +358,7 @@ async def delete_talent(worker_id: str, pin: str = Query(...)) -> Ok:
             pass
 
     await db.shortlists.update_many({}, {"$pull": {"worker_ids": worker_id}})
-    await db.workers.delete_one({"id": worker_id, "source": "Talent Bank"})
+    await db.workers.delete_one({"id": worker_id})
     return Ok(ok=True)
 
 
@@ -488,7 +488,7 @@ async def export_workers(pin: str = Query(...)) -> StreamingResponse:
 @router.get("/export/talents.csv")
 async def export_talents(pin: str = Query(...)) -> StreamingResponse:
     await verify_pin(pin)
-    rows = await db.workers.find({"source": "Talent Bank"}, {"_id": 0}).sort("created_at", -1).to_list(5000)
+    rows = await db.workers.find({}, {"_id": 0}).sort("created_at", -1).to_list(5000)
     return _csv_response(rows, WORKER_COLUMNS, "talent-bank.csv")
 
 
