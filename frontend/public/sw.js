@@ -1,4 +1,4 @@
-const CACHE = 'bws-public-v1';
+const CACHE = 'bws-public-v2';
 const PUBLIC_FILES = [
   '/app.html', '/offline.html', '/install.js',
   '/app-icons/icon-192.png', '/app-icons/icon-512.png', '/app-icons/maskable-512.png'
