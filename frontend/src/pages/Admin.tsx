@@ -40,7 +40,7 @@ import type { AdminStats, CompanyRequest, Job, JobCreate, Ok, Shortlist, Traffic
 const EMPTY_FILTERS = { skill_category: "", location: "", availability: "", status: "", q: "" };
 
 const WORKER_STATUS = ["New", "Contacted", "Deployed", "Archived"];
-const REQUEST_STATUS = ["Pending", "Quote Sent", "In Progress", "Closed"];
+const REQUEST_STATUS = ["Pending", "Quote Sent", "In Progress", "Closed"];\nconst ADMIN_SESSION_KEY = "bws_admin_pin";\n\nfunction readAdminSession(): string | null {\n  try {\n    return window.sessionStorage.getItem(ADMIN_SESSION_KEY);\n  } catch {\n    return null;\n  }\n}\n\nfunction writeAdminSession(pin: string | null) {\n  try {\n    if (pin) window.sessionStorage.setItem(ADMIN_SESSION_KEY, pin);\n    else window.sessionStorage.removeItem(ADMIN_SESSION_KEY);\n  } catch {\n    // The admin portal still works if browser storage is unavailable.\n  }\n}
 
 
 
@@ -71,7 +71,7 @@ export default function Admin() {
   }, []);
 
   const [pin, setPin] = useState("");
-  const [authPin, setAuthPin] = useState<string | null>(null);
+  const [authPin, setAuthPin] = useState<string | null>(() => readAdminSession());
 
   const login = useMutation({
     mutationFn: (p: string) => apiPost<Ok>(`/admin/login?pin=${encodeURIComponent(p)}`),
@@ -126,7 +126,7 @@ export default function Admin() {
     );
   }
 
-  return <Dashboard pin={authPin} onLogout={() => setAuthPin(null)} onPinChanged={setAuthPin} />;
+  return (\n    <Dashboard\n      pin={authPin}\n      onLogout={() => {\n        writeAdminSession(null);\n        setAuthPin(null);\n      }}\n      onPinChanged={(nextPin) => {\n        writeAdminSession(nextPin);\n        setAuthPin(nextPin);\n      }}\n    />\n  );
 }
 
 function Dashboard({
