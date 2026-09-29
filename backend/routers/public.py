@@ -1,10 +1,14 @@
 """Public API: worker registrations, company manpower requests, job listings."""
 
+import io
+import logging
 import os
 import re
+from datetime import datetime, timezone
 from pathlib import Path
 
 import boto3
+from bson.binary import Binary
 
 from fastapi import APIRouter, BackgroundTasks, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
@@ -31,6 +35,7 @@ ALLOWED_EXT = {".pdf", ".doc", ".docx", ".png", ".jpg", ".jpeg"}
 MAX_RESUME_SIZE = 5 * 1024 * 1024  # 5 MB
 R2_BUCKET = os.getenv("R2_BUCKET", "")
 R2_ENDPOINT = os.getenv("R2_ENDPOINT", "")
+logger = logging.getLogger(__name__)
 
 
 def _r2():
@@ -86,24 +91,68 @@ async def upload_resume(worker_id: str, file: UploadFile = File(...)) -> Worker:
     safe = re.sub(r"[^A-Za-z0-9._-]", "_", Path(file.filename or "resume").name)
     object_key = f"resumes/{worker_id}/{safe}"
 
-    try:
-        _r2().put_object(
-            Bucket=R2_BUCKET,
-            Key=object_key,
-            Body=contents,
-            ContentType=file.content_type or "application/octet-stream",
-        )
-    except HTTPException:
-        raise
-    except Exception as exc:
-        raise HTTPException(status_code=503, detail="Could not store resume. Please try again.") from exc
+    content_type = file.content_type or "application/octet-stream"
+    stored_in_r2 = False
 
-    await db.workers.update_one(
-        {"id": worker_id},
-        {"$set": {"resume_filename": safe, "resume_object_key": object_key}},
-    )
-    doc["resume_filename"] = safe
-    doc["resume_object_key"] = object_key
+    # Prefer R2 when it is healthy, but never block a job application because
+    # object storage is temporarily unavailable. MongoDB is the persistent fallback.
+    if R2_BUCKET and R2_ENDPOINT:
+        try:
+            _r2().put_object(
+                Bucket=R2_BUCKET,
+                Key=object_key,
+                Body=contents,
+                ContentType=content_type,
+            )
+            stored_in_r2 = True
+        except Exception as exc:
+            logger.warning("R2 resume upload failed for %s; using MongoDB fallback: %s", worker_id, exc)
+
+    if stored_in_r2:
+        await db.resume_files.delete_one({"worker_id": worker_id})
+        await db.workers.update_one(
+            {"id": worker_id},
+            {
+                "$set": {
+                    "resume_filename": safe,
+                    "resume_object_key": object_key,
+                    "resume_storage": "r2",
+                }
+            },
+        )
+        doc["resume_filename"] = safe
+        doc["resume_object_key"] = object_key
+        doc["resume_storage"] = "r2"
+    else:
+        try:
+            await db.resume_files.update_one(
+                {"worker_id": worker_id},
+                {
+                    "$set": {
+                        "worker_id": worker_id,
+                        "filename": safe,
+                        "content_type": content_type,
+                        "data": Binary(contents),
+                        "updated_at": datetime.now(timezone.utc),
+                    }
+                },
+                upsert=True,
+            )
+        except Exception as exc:
+            logger.exception("MongoDB resume fallback failed for %s", worker_id)
+            raise HTTPException(status_code=503, detail="Could not store resume. Please try again.") from exc
+
+        await db.workers.update_one(
+            {"id": worker_id},
+            {
+                "$set": {"resume_filename": safe, "resume_storage": "mongo"},
+                "$unset": {"resume_object_key": ""},
+            },
+        )
+        doc["resume_filename"] = safe
+        doc["resume_storage"] = "mongo"
+        doc.pop("resume_object_key", None)
+
     doc.pop("_id", None)
     return Worker(**doc)
 
@@ -116,7 +165,7 @@ async def download_resume(worker_id: str, pin: str = Query(...)):
         raise HTTPException(status_code=404, detail="No resume on file")
 
     object_key = doc.get("resume_object_key")
-    if object_key:
+    if object_key and R2_BUCKET and R2_ENDPOINT:
         try:
             obj = _r2().get_object(Bucket=R2_BUCKET, Key=object_key)
             return StreamingResponse(
@@ -124,10 +173,18 @@ async def download_resume(worker_id: str, pin: str = Query(...)):
                 media_type=obj.get("ContentType") or "application/octet-stream",
                 headers={"Content-Disposition": f'attachment; filename="{doc["resume_filename"]}"'},
             )
-        except HTTPException:
-            raise
         except Exception as exc:
-            raise HTTPException(status_code=404, detail="No resume on file") from exc
+            logger.warning("R2 resume download failed for %s; trying fallback storage: %s", worker_id, exc)
+
+    mongo_resume = await db.resume_files.find_one({"worker_id": worker_id}, {"_id": 0})
+    if mongo_resume and mongo_resume.get("data") is not None:
+        return StreamingResponse(
+            io.BytesIO(bytes(mongo_resume["data"])),
+            media_type=mongo_resume.get("content_type") or "application/octet-stream",
+            headers={
+                "Content-Disposition": f'attachment; filename="{mongo_resume.get("filename") or doc["resume_filename"]}"'
+            },
+        )
 
     stored = UPLOAD_DIR / f"{worker_id}__{doc['resume_filename']}"
     if not stored.exists():
