@@ -194,6 +194,7 @@ async def delete_worker_application(worker_id: str, pin: str = Query(...)) -> Ok
             pass
 
     await db.shortlists.update_many({}, {"$pull": {"worker_ids": worker_id}})
+    await db.resume_files.delete_one({"worker_id": worker_id})
     result = await db.workers.delete_one({"id": worker_id, "source": {"$ne": "Talent Bank"}})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Worker application not found")
@@ -358,6 +359,7 @@ async def delete_talent(worker_id: str, pin: str = Query(...)) -> Ok:
             pass
 
     await db.shortlists.update_many({}, {"$pull": {"worker_ids": worker_id}})
+    await db.resume_files.delete_one({"worker_id": worker_id})
     await db.workers.delete_one({"id": worker_id})
     return Ok(ok=True)
 
