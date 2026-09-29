@@ -46,21 +46,28 @@ export default function WorkerForm() {
   const mutation = useMutation({
     mutationFn: async (payload: WorkerCreate) => {
       const worker = await apiPost<Worker>("/workers", payload);
+      let resumeUploaded = true;
+
       if (resume) {
         const fd = new FormData();
         fd.append("file", resume);
         const res = await fetch(`/api/workers/${worker.id}/resume`, { method: "POST", body: fd });
-        if (!res.ok) throw new Error("Resume upload failed");
+        resumeUploaded = res.ok;
       }
-      return worker;
+
+      return { worker, resumeUploaded };
     },
-    onSuccess: () => {
+    onSuccess: ({ resumeUploaded }) => {
       setDone(true);
       setForm(EMPTY);
       setResume(null);
-      toast.success("Registration submitted successfully");
+      if (resumeUploaded) {
+        toast.success("Application submitted successfully");
+      } else {
+        toast.warning("Application saved, but the resume could not be uploaded. Please contact us to send the resume.");
+      }
     },
-    onError: () => toast.error("Could not submit your registration. Please try again."),
+    onError: () => toast.error("Could not submit your application. Please try again."),
   });
 
   if (done) {
