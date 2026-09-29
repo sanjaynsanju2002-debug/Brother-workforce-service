@@ -21,7 +21,8 @@ def mount_frontend(app: FastAPI, directory: Path) -> None:
 
     @app.api_route("/admin", methods=["GET", "HEAD"], include_in_schema=False)
     @app.api_route("/admin/", methods=["GET", "HEAD"], include_in_schema=False)
-    async def admin_page():
+    @app.api_route("/admin/{path:path}", methods=["GET", "HEAD"], include_in_schema=False)
+    async def admin_page(path: str = ""):
         return FileResponse(directory / "index.html", headers={"Cache-Control": "no-store"})
 
     @app.api_route("/app", methods=["GET", "HEAD"], include_in_schema=False)
