@@ -16,7 +16,9 @@ export const IMAGES = {
     "https://images.unsplash.com/photo-1741183397795-324643563b7f?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzNTl8MHwxfHNlYXJjaHwzfHxJbmRpYW4lMjBmYWN0b3J5JTIwd29ya2VycyUyMG1hbnVmYWN0dXJpbmd8ZW58MHx8fHwxNzg5MDE0ODUwfDA&ixlib=rb-4.1.0&q=85",
   assembly:
     "https://images.unsplash.com/photo-1741275273537-e172e1411b3a?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMzl8MHwxfHNlYXJjaHwzfHxpbmRpYW4lMjBlbmdpbmVlciUyMGhhcmQlMjBoYXQlMjBmYWN0b3J5fGVufDB8fHx8MTc4OTAxNDg2OHww&ixlib=rb-4.1.0&q=85",
-  safety:\n    "/factory-team.webp",\n};
+  safety:
+    "/factory-team.webp",
+};
 
 export const SKILL_CATEGORIES = ["Skilled", "Semi-skilled", "General Worker"];
 export const WORKFORCE_TYPES = ["Skilled", "Semi-skilled", "General Workers"];
