@@ -1,4 +1,5 @@
 # Cloud Run deployment
+# Artifact Registry retry
 FROM node:24-slim AS frontend-build
 
 WORKDIR /app/frontend
