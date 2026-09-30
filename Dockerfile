@@ -1,3 +1,4 @@
+# Cloud Run deployment
 FROM node:20-slim AS frontend-build
 
 WORKDIR /app/frontend
