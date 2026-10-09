@@ -19,9 +19,17 @@ const LINKS = [
 
 export default function Navbar() {
   const [open, setOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
   const { pathname } = useLocation();
 
   useEffect(() => setOpen(false), [pathname]);
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 24);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
 
   const go = (href: string) => {
     setOpen(false);
@@ -31,7 +39,12 @@ export default function Navbar() {
 
   return (
     <header
-      className="sticky top-0 z-50 w-full border-b border-slate-200/80 bg-white/95 backdrop-blur-md"
+      className={cn(
+        "sticky top-0 z-50 w-full border-b transition-all duration-300",
+        scrolled
+          ? "border-slate-200/80 bg-white/88 shadow-[0_12px_36px_rgba(15,36,68,0.10)] backdrop-blur-xl"
+          : "border-slate-200/60 bg-white/95 backdrop-blur-md",
+      )}
       data-testid="main-navbar"
     >
       <div className="hidden bg-[#0F2444] text-slate-200 md:block">
@@ -52,7 +65,7 @@ export default function Navbar() {
 
       <div className="mx-auto flex max-w-7xl items-center gap-4 px-4 py-3 sm:px-6">
         <Link to="/" className="flex shrink-0 items-center gap-3" data-testid="brand-logo-link">
-          <img src={BRAND.logo} alt="Brothers Workforce Solutions logo" className="h-11 w-11 object-contain" />
+          <img src={BRAND.logo} alt="Brothers Workforce Solutions logo" className="h-11 w-11 object-contain transition-transform duration-300 hover:scale-105" />
           <span className="hidden leading-tight sm:block">
             <span className="block font-[family-name:var(--font-heading)] text-sm font-bold tracking-tight text-[#0F2444]">
               BROTHERS <span className="text-[#EA580C]">WORKFORCE</span>
@@ -67,7 +80,7 @@ export default function Navbar() {
               key={l.href}
               onClick={() => go(l.href)}
               data-testid={`nav-link-${l.href.slice(1)}`}
-              className="rounded px-2.5 py-2 text-sm font-medium text-slate-700 transition-colors duration-150 hover:text-[#EA580C]"
+              className="bws-nav-link rounded px-2.5 py-2 text-sm font-medium text-slate-700 hover:text-[#EA580C]"
             >
               {l.label}
             </button>
