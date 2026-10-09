@@ -370,7 +370,6 @@ export default function Home() {
                 <Card
                   key={j.id}
                   className="bws-card-3d border-slate-200 bg-white"
-                  data-reveal
                   data-testid={`job-card-${j.id}`}
                 >
                   <CardContent className="p-6">
