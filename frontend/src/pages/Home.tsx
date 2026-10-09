@@ -233,6 +233,47 @@ export default function Home() {
         </div>
       </section>
 
+      {/* BROCHURE-INSPIRED WORKFORCE FEATURE */}
+      <section className="bws-brochure-band bg-white py-14">
+        <div className="mx-auto grid max-w-7xl items-center gap-10 px-6 lg:grid-cols-[0.72fr_1.28fr]">
+          <div className="bws-brochure-photo-wrap mx-auto w-full max-w-sm" data-reveal>
+            <div className="bws-brochure-photo">
+              <img
+                src="/brochure-worker.webp"
+                alt="Brothers Workforce Solutions worker image from company brochure"
+                loading="lazy"
+                decoding="async"
+                className="h-[430px] w-full object-cover"
+              />
+            </div>
+            <div className="bws-brochure-ribbon">Skilled People · Better Tomorrow</div>
+          </div>
+
+          <div data-reveal>
+            <p className="bws-overline">Our Brochure Vision</p>
+            <h2 className="mt-3 text-3xl font-bold tracking-tight text-[#0F2444] lg:text-5xl">
+              People. Productivity. Partnership. <span className="text-[#EA580C]">Progress.</span>
+            </h2>
+            <p className="mt-5 max-w-2xl text-base leading-relaxed text-slate-600 sm:text-lg">
+              Reliable workforce support designed around people, process and performance — helping factories,
+              warehouses and industrial teams build stronger operations.
+            </p>
+            <div className="mt-7 grid gap-3 sm:grid-cols-3">
+              {[
+                ["Reliable", "Dependable workforce support"],
+                ["Compliant", "Structured staffing processes"],
+                ["People Focused", "Long-term workforce relationships"],
+              ].map(([title, desc]) => (
+                <div key={title} className="bws-mini-stat">
+                  <p className="font-semibold text-[#0F2444]">{title}</p>
+                  <p className="mt-1 text-xs text-slate-500">{desc}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* ABOUT */}
       <Section id="about" bg="bg-white">
         <div className="grid items-center gap-12 lg:grid-cols-2">
@@ -356,7 +397,26 @@ export default function Home() {
       {/* JOBS */}
       <Section id="jobs" bg="bg-[#F1F5F9]">
         <Heading overline="Recruitment" title="Current Job Openings" subtitle="Direct recruitment opportunities for industrial and factory placements." />
-        <div className="mt-12" data-testid="job-listings">
+        <div className="mt-8 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm backdrop-blur" data-reveal>
+          <div className="flex items-center gap-3">
+            <div className="rounded-xl bg-[#0F2444] p-2.5 text-white shadow-lg">
+              <Briefcase className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-[#0F2444]">
+                {jobs.length > 0 ? `${jobs.length} active opening${jobs.length === 1 ? "" : "s"}` : "Talent registration open"}
+              </p>
+              <p className="text-xs text-slate-500">Apply once and stay visible to our recruitment team.</p>
+            </div>
+          </div>
+          <Button
+            className="bws-btn-3d bg-[#EA580C] text-white hover:bg-[#C2410C]"
+            onClick={() => scrollTo("#worker-registration")}
+          >
+            Quick Apply
+          </Button>
+        </div>
+        <div className="mt-6" data-testid="job-listings">
           {jobs.length === 0 ? (
             <div
               className="rounded-lg border border-dashed border-slate-300 bg-white p-12 text-center"
@@ -428,6 +488,18 @@ export default function Home() {
               Register once and our recruitment team will match you to factory, warehouse and technical roles as
               they open across Karnataka.
             </p>
+            <div className="mt-6 grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
+              {[
+                ["01", "Create Profile"],
+                ["02", "Upload Resume"],
+                ["03", "Get Matched"],
+              ].map(([step, title]) => (
+                <div key={step} className="bws-process-step">
+                  <span>{step}</span>
+                  <strong>{title}</strong>
+                </div>
+              ))}
+            </div>
             <img
               src={IMAGES.assembly}
               alt="Industrial workforce on an assembly line"
@@ -451,6 +523,18 @@ export default function Home() {
             <p className="mt-4 text-slate-600">
               Share your requirement and our workforce team will respond with a deployment plan for your facility.
             </p>
+            <div className="mt-6 grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
+              {[
+                ["01", "Share Requirement"],
+                ["02", "Candidate Screening"],
+                ["03", "Workforce Deployment"],
+              ].map(([step, title]) => (
+                <div key={step} className="bws-process-step bws-process-step-company">
+                  <span>{step}</span>
+                  <strong>{title}</strong>
+                </div>
+              ))}
+            </div>
             <div className="mt-8 space-y-3">
               {["Compliant contract staffing", "Multi-shift deployment", "Skilled to general workforce tiers"].map(
                 (p) => (
@@ -556,10 +640,15 @@ export default function Home() {
               </li>
             </ul>
           </div>
-          <div className="bws-panel-3d grid content-start gap-4 rounded-2xl border border-slate-200 bg-white p-8">
+          <div className="bws-contact-panel bws-panel-3d grid content-start gap-4 rounded-2xl border border-slate-200 bg-white p-8">
+            <div className="mb-2">
+              <p className="bws-overline">Fast Contact</p>
+              <h3 className="mt-2 text-2xl font-semibold text-[#0F2444]">Choose how you want to reach us</h3>
+              <p className="mt-2 text-sm text-slate-500">Our workforce desk will help with jobs, manpower requirements and general enquiries.</p>
+            </div>
             <a
               href={`tel:${BRAND.phoneRaw}`}
-              className="flex items-center justify-center gap-2 rounded-md bg-[#0F2444] px-6 py-4 font-semibold text-white transition-transform duration-150 hover:bg-[#0A172C] active:scale-98"
+              className="bws-contact-action flex items-center justify-center gap-2 rounded-xl bg-[#0F2444] px-6 py-4 font-semibold text-white hover:bg-[#0A172C]"
               data-testid="contact-btn-call"
             >
               <PhoneCall className="h-4 w-4" /> Call Now
@@ -568,14 +657,14 @@ export default function Home() {
               href={BRAND.whatsapp}
               target="_blank"
               rel="noreferrer"
-              className="flex items-center justify-center gap-2 rounded-md bg-[#16A34A] px-6 py-4 font-semibold text-white transition-transform duration-150 hover:bg-[#15803D] active:scale-98"
+              className="bws-contact-action flex items-center justify-center gap-2 rounded-xl bg-[#16A34A] px-6 py-4 font-semibold text-white hover:bg-[#15803D]"
               data-testid="contact-btn-whatsapp"
             >
               <MessageSquare className="h-4 w-4" /> WhatsApp
             </a>
             <a
               href={`mailto:${BRAND.email}`}
-              className="flex items-center justify-center gap-2 rounded-md bg-[#EA580C] px-6 py-4 font-semibold text-white transition-transform duration-150 hover:bg-[#C2410C] active:scale-98"
+              className="bws-contact-action flex items-center justify-center gap-2 rounded-xl bg-[#EA580C] px-6 py-4 font-semibold text-white hover:bg-[#C2410C]"
               data-testid="contact-btn-email"
             >
               <Mail className="h-4 w-4" /> Email
