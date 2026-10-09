@@ -150,7 +150,13 @@ export default function Home() {
 
       {/* HERO */}
       <section id="home" className="bws-hero-3d relative overflow-hidden bg-[#0F2444]">
-        <img src={IMAGES.hero} alt="" className="absolute inset-0 h-full w-full object-cover opacity-30" />
+        <img
+          src={IMAGES.hero}
+          alt=""
+          fetchPriority="high"
+          decoding="async"
+          className="absolute inset-0 h-full w-full object-cover opacity-34"
+        />
         <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(15,36,68,0.97)_0%,rgba(15,36,68,0.88)_52%,rgba(15,36,68,0.65)_100%)]" />
         <div className="bws-industrial-grid absolute inset-0 opacity-25" aria-hidden="true" />
         <div className="bws-hero-orb bws-hero-orb-one" aria-hidden="true" />
@@ -187,9 +193,15 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="bws-hero-visual hidden lg:block" data-reveal>
+          <div className="bws-hero-visual mx-auto w-full max-w-xl lg:mx-0" data-reveal>
             <div className="bws-image-shell bws-image-shell-dark">
-              <img src={IMAGES.safety} alt="Uniformed workforce inside an industrial facility" className="h-[410px] w-full object-cover" />
+              <img
+                src={IMAGES.heroTeam}
+                alt="Uniformed factory workers operating inside a manufacturing facility"
+                loading="eager"
+                decoding="async"
+                className="h-[300px] w-full object-cover sm:h-[360px] lg:h-[410px]"
+              />
               <div className="absolute inset-x-5 bottom-5 rounded-xl border border-white/20 bg-[#091322]/78 p-4 text-white shadow-2xl backdrop-blur-xl">
                 <p className="text-xs font-semibold uppercase tracking-[0.18em] text-orange-300">Workforce Solutions</p>
                 <p className="mt-1 text-lg font-semibold">Factory · Warehouse · Industrial</p>
@@ -247,7 +259,9 @@ export default function Home() {
             <div className="bws-image-shell">
               <img
                 src={IMAGES.safety}
-                alt="Trained workforce team in safety gear"
+                alt="Factory worker in uniform working on a production floor"
+                loading="lazy"
+                decoding="async"
                 className="h-[380px] w-full object-cover"
               />
             </div>
