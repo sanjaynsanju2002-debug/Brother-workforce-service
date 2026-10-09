@@ -115,6 +115,27 @@ export default function Home() {
     trackVisit("/");
     const anchor = window.location.hash.slice(1);
     if (anchor) document.getElementById(anchor)?.scrollIntoView({ behavior: "instant" });
+
+    const revealItems = Array.from(document.querySelectorAll<HTMLElement>("[data-reveal]"));
+    if (!("IntersectionObserver" in window)) {
+      revealItems.forEach((item) => item.setAttribute("data-visible", "true"));
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            (entry.target as HTMLElement).setAttribute("data-visible", "true");
+            observer.unobserve(entry.target);
+          }
+        });
+      },
+      { threshold: 0.12, rootMargin: "0px 0px -40px 0px" },
+    );
+
+    revealItems.forEach((item) => observer.observe(item));
+    return () => observer.disconnect();
   }, []);
 
   const jobsQuery = useQuery({ queryKey: ["jobs"], queryFn: () => apiGet<Job[]>("/jobs") });
@@ -128,10 +149,14 @@ export default function Home() {
       <Navbar />
 
       {/* HERO */}
-      <section id="home" className="relative overflow-hidden bg-[#0F2444]">
+      <section id="home" className="bws-hero-3d relative overflow-hidden bg-[#0F2444]">
         <img src={IMAGES.hero} alt="" className="absolute inset-0 h-full w-full object-cover opacity-30" />
-        <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(15,36,68,0.95)_0%,rgba(15,36,68,0.82)_60%,rgba(15,36,68,0.6)_100%)]" />
+        <div className="absolute inset-0 bg-[linear-gradient(135deg,rgba(15,36,68,0.97)_0%,rgba(15,36,68,0.88)_52%,rgba(15,36,68,0.65)_100%)]" />
+        <div className="bws-industrial-grid absolute inset-0 opacity-25" aria-hidden="true" />
+        <div className="bws-hero-orb bws-hero-orb-one" aria-hidden="true" />
+        <div className="bws-hero-orb bws-hero-orb-two" aria-hidden="true" />
         <div className="relative mx-auto max-w-7xl px-6 py-20 lg:py-28">
+          <div className="grid items-center gap-12 lg:grid-cols-[1.08fr_.92fr]">
           <div className="max-w-3xl bws-rise">
             <p className="bws-overline text-orange-400">Manpower Supply Partner · Mysuru (Mysore), Karnataka</p>
             <h1 className="mt-4 text-4xl font-bold leading-[1.08] tracking-tight text-white sm:text-5xl lg:text-6xl">
@@ -146,7 +171,7 @@ export default function Home() {
             <div className="mt-8 flex flex-wrap gap-3">
               <Button
                 onClick={() => scrollTo("#manpower-request")}
-                className="bg-[#EA580C] px-7 py-6 text-base font-semibold text-white transition-transform duration-150 hover:bg-[#C2410C] active:scale-98"
+                className="bws-btn-3d bg-[#EA580C] px-7 py-6 text-base font-semibold text-white hover:bg-[#C2410C]"
                 data-testid="hero-btn-request-manpower"
               >
                 Request Manpower
@@ -154,7 +179,7 @@ export default function Home() {
               <Button
                 onClick={() => scrollTo("#worker-registration")}
                 variant="outline"
-                className="border-white/40 bg-white/10 px-7 py-6 text-base font-semibold text-white backdrop-blur transition-transform duration-150 hover:bg-white hover:text-[#0F2444] active:scale-98"
+                className="bws-btn-glass border-white/40 bg-white/10 px-7 py-6 text-base font-semibold text-white backdrop-blur hover:bg-white hover:text-[#0F2444]"
                 data-testid="hero-btn-apply-jobs"
               >
                 Apply for Jobs
@@ -162,11 +187,30 @@ export default function Home() {
             </div>
           </div>
 
+          <div className="bws-hero-visual hidden lg:block" data-reveal>
+            <div className="bws-image-shell bws-image-shell-dark">
+              <img src={IMAGES.safety} alt="Uniformed workforce inside an industrial facility" className="h-[410px] w-full object-cover" />
+              <div className="absolute inset-x-5 bottom-5 rounded-xl border border-white/20 bg-[#091322]/78 p-4 text-white shadow-2xl backdrop-blur-xl">
+                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-orange-300">Workforce Solutions</p>
+                <p className="mt-1 text-lg font-semibold">Factory · Warehouse · Industrial</p>
+              </div>
+            </div>
+            <div className="bws-float-chip bws-float-chip-left">
+              <ShieldCheck className="h-5 w-5 text-[#FB923C]" />
+              <span>Compliance-ready staffing</span>
+            </div>
+            <div className="bws-float-chip bws-float-chip-right">
+              <MapPin className="h-5 w-5 text-[#FB923C]" />
+              <span>Mysuru · Karnataka</span>
+            </div>
+          </div>
+          </div>
+
           <div className="mt-14 grid gap-3 sm:grid-cols-2 lg:grid-cols-5" data-testid="hero-trust-badges">
             {TRUST.map((t) => (
               <div
                 key={t.title}
-                className="rounded-md border border-white/20 bg-white/10 p-4 backdrop-blur-sm transition-colors duration-200 hover:border-orange-400/60"
+                className="bws-glass-card rounded-xl border border-white/20 bg-white/10 p-4 backdrop-blur-md hover:border-orange-400/60"
               >
                 <t.icon className="mb-2 h-5 w-5 text-[#FB923C]" />
                 <p className="text-sm font-semibold text-white">{t.title}</p>
@@ -180,7 +224,7 @@ export default function Home() {
       {/* ABOUT */}
       <Section id="about" bg="bg-white">
         <div className="grid items-center gap-12 lg:grid-cols-2">
-          <div>
+          <div data-reveal>
             <p className="bws-overline">About Us</p>
             <h2 className="mt-3 text-3xl font-bold tracking-tight text-[#0F2444] lg:text-4xl">
               Manpower & Workforce Partner in Mysuru, Karnataka
@@ -199,13 +243,15 @@ export default function Home() {
               </p>
             </div>
           </div>
-          <div className="relative">
-            <img
-              src={IMAGES.safety}
-              alt="Trained workforce team in safety gear"
-              className="h-[380px] w-full rounded-lg object-cover shadow-lg"
-            />
-            <div className="absolute -bottom-6 left-6 hidden rounded-md bg-[#0F2444] px-6 py-4 text-white shadow-xl sm:block">
+          <div className="bws-about-visual relative" data-reveal>
+            <div className="bws-image-shell">
+              <img
+                src={IMAGES.safety}
+                alt="Trained workforce team in safety gear"
+                className="h-[380px] w-full object-cover"
+              />
+            </div>
+            <div className="bws-floating-tag absolute -bottom-6 left-6 hidden rounded-xl bg-[#0F2444] px-6 py-4 text-white shadow-2xl sm:block">
               <p className="font-[family-name:var(--font-heading)] text-sm font-bold uppercase tracking-[0.18em] text-[#FB923C]">
                 {BRAND.tagline}
               </p>
@@ -221,7 +267,8 @@ export default function Home() {
           {SERVICES.map((s) => (
             <Card
               key={s.title}
-              className="border-slate-200 bg-white transition-all duration-200 hover:-translate-y-1 hover:border-[#EA580C]/40 hover:shadow-md"
+              className="bws-card-3d border-slate-200 bg-white hover:border-[#EA580C]/45"
+              data-reveal
               data-testid={`service-card-${s.title.toLowerCase().replace(/[^a-z]+/g, "-")}`}
             >
               <CardContent className="p-6">
@@ -253,7 +300,8 @@ export default function Home() {
           {INDUSTRY_CARDS.map((i) => (
             <div
               key={i.name}
-              className="flex items-center gap-4 rounded-md border border-slate-200 bg-[#F8FAFC] p-5 transition-all duration-200 hover:-translate-y-1 hover:border-[#EA580C]/40 hover:bg-white hover:shadow-md"
+              className="bws-industry-card flex items-center gap-4 rounded-xl border border-slate-200 bg-[#F8FAFC] p-5 hover:border-[#EA580C]/45 hover:bg-white"
+              data-reveal
               data-testid={`industry-card-${i.name.toLowerCase().replace(/[^a-z]+/g, "-")}`}
             >
               <i.icon className="h-6 w-6 shrink-0 text-[#EA580C]" />
@@ -279,7 +327,8 @@ export default function Home() {
           {COMPLIANCE.map((c) => (
             <div
               key={c.title}
-              className="rounded-md border border-white/15 bg-white/5 p-6 transition-colors duration-200 hover:border-[#FB923C]/60"
+              className="bws-glass-card rounded-xl border border-white/15 bg-white/5 p-6 hover:border-[#FB923C]/60"
+              data-reveal
               data-testid={`compliance-card-${c.title.toLowerCase().replace(/[^a-z]+/g, "-")}`}
             >
               <c.icon className="mb-4 h-7 w-7 text-[#FB923C]" />
@@ -320,7 +369,7 @@ export default function Home() {
               {jobs.map((j) => (
                 <Card
                   key={j.id}
-                  className="border-slate-200 bg-white transition-all duration-200 hover:-translate-y-1 hover:shadow-md"
+                  className="bws-card-3d border-slate-200 bg-white"
                   data-testid={`job-card-${j.id}`}
                 >
                   <CardContent className="p-6">
@@ -368,10 +417,10 @@ export default function Home() {
             <img
               src={IMAGES.assembly}
               alt="Industrial workforce on an assembly line"
-              className="mt-8 hidden h-64 w-full rounded-lg object-cover lg:block"
+              className="bws-image-soft mt-8 hidden h-64 w-full rounded-2xl object-cover lg:block"
             />
           </div>
-          <div className="rounded-lg border border-slate-200 bg-[#F8FAFC] p-6 sm:p-8">
+          <div className="bws-panel-3d rounded-2xl border border-slate-200 bg-[#F8FAFC] p-6 sm:p-8">
             <WorkerForm />
           </div>
         </div>
@@ -399,7 +448,7 @@ export default function Home() {
               )}
             </div>
           </div>
-          <div className="rounded-lg border border-slate-200 bg-white p-6 sm:p-8">
+          <div className="bws-panel-3d rounded-2xl border border-slate-200 bg-white p-6 sm:p-8">
             <CompanyForm />
           </div>
         </div>
@@ -493,7 +542,7 @@ export default function Home() {
               </li>
             </ul>
           </div>
-          <div className="grid content-start gap-4 rounded-lg border border-slate-200 bg-white p-8">
+          <div className="bws-panel-3d grid content-start gap-4 rounded-2xl border border-slate-200 bg-white p-8">
             <a
               href={`tel:${BRAND.phoneRaw}`}
               className="flex items-center justify-center gap-2 rounded-md bg-[#0F2444] px-6 py-4 font-semibold text-white transition-transform duration-150 hover:bg-[#0A172C] active:scale-98"
@@ -528,15 +577,15 @@ export default function Home() {
 
 function Section({ id, bg, children }: { id: string; bg: string; children: React.ReactNode }) {
   return (
-    <section id={id} className={`${bg} py-20`}>
-      <div className="mx-auto max-w-7xl px-6">{children}</div>
+    <section id={id} className={`bws-section ${bg} py-20`}>
+      <div className="relative mx-auto max-w-7xl px-6">{children}</div>
     </section>
   );
 }
 
 function Heading({ overline, title, subtitle }: { overline: string; title: string; subtitle: string }) {
   return (
-    <div className="max-w-2xl">
+    <div className="max-w-2xl" data-reveal>
       <p className="bws-overline">{overline}</p>
       <h2 className="mt-3 text-3xl font-bold tracking-tight text-[#0F2444] lg:text-4xl">{title}</h2>
       <p className="mt-4 text-slate-600">{subtitle}</p>
