@@ -95,7 +95,7 @@ export default function WorkerForm() {
 
   return (
     <form
-      className="grid gap-5 sm:grid-cols-2"
+      className="bws-premium-form grid gap-5 sm:grid-cols-2"
       data-testid="worker-registration-form"
       onSubmit={(e) => {
         e.preventDefault();
@@ -230,7 +230,7 @@ export default function WorkerForm() {
 
       <div className="sm:col-span-2">
         <Label className="mb-2 block text-sm font-medium text-slate-700">Resume Upload <span className="font-normal text-slate-500">(maximum 5 MB)</span></Label>
-        <label className="flex cursor-pointer items-center gap-3 rounded-md border border-dashed border-slate-300 bg-white px-4 py-3 text-sm text-slate-600 transition-colors hover:border-[#EA580C]">
+        <label className="bws-upload-zone flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-slate-300 bg-white px-4 py-4 text-sm text-slate-600 hover:border-[#EA580C]">
           <Upload className="h-4 w-4 text-[#EA580C]" />
           <span data-testid="worker-resume-name">{resume ? `${resume.name} (${(resume.size / 1024 / 1024).toFixed(1)} MB)` : "Upload PDF / DOC / image — max 5 MB (optional)"}</span>
           <input
@@ -256,7 +256,7 @@ export default function WorkerForm() {
         <Button
           type="submit"
           disabled={mutation.isPending}
-          className="w-full bg-[#EA580C] py-6 text-base font-semibold text-white transition-transform duration-150 hover:bg-[#C2410C] active:scale-98 sm:w-auto sm:px-10"
+          className="bws-btn-3d w-full bg-[#EA580C] py-6 text-base font-semibold text-white hover:bg-[#C2410C] sm:w-auto sm:px-10"
           data-testid="worker-registration-submit"
         >
           {mutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -269,7 +269,7 @@ export default function WorkerForm() {
 
 function Field({ label, children, full }: { label: string; children: React.ReactNode; full?: boolean }) {
   return (
-    <div className={full ? "sm:col-span-2" : undefined}>
+    <div className={`bws-form-field ${full ? "sm:col-span-2" : ""}`}>
       <Label className="mb-2 block text-sm font-medium text-slate-700">{label}</Label>
       {children}
     </div>
