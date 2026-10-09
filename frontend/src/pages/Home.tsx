@@ -202,14 +202,6 @@ export default function Home() {
                 decoding="async"
                 className="h-[300px] w-full object-cover sm:h-[360px] lg:h-[410px]"
               />
-              <div className="absolute inset-x-5 bottom-5 rounded-xl border border-white/20 bg-[#091322]/78 p-4 text-white shadow-2xl backdrop-blur-xl">
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-orange-300">Workforce Solutions</p>
-                <p className="mt-1 text-lg font-semibold">Factory · Warehouse · Industrial</p>
-              </div>
-            </div>
-            <div className="bws-float-chip bws-float-chip-left">
-              <ShieldCheck className="h-5 w-5 text-[#FB923C]" />
-              <span>Compliance-ready staffing</span>
             </div>
             <div className="bws-float-chip bws-float-chip-right">
               <MapPin className="h-5 w-5 text-[#FB923C]" />
@@ -239,13 +231,13 @@ export default function Home() {
           <div className="bws-brochure-photo-wrap mx-auto w-full max-w-sm" data-reveal>
             <div className="bws-brochure-photo">
               <img
-                src="/brochure-worker.jpg"
-                alt="Brothers Workforce Solutions worker image from company brochure"
+                src="/brochure-team-v2.webp"
+                alt="Indian industrial workforce team in a modern factory"
                 loading="lazy"
                 decoding="async"
                 onError={(event) => {
                   event.currentTarget.onerror = null;
-                  event.currentTarget.src = "/factory-team.webp";
+                  event.currentTarget.src = "/brochure-team-v2.webp";
                 }}
                 className="h-[430px] w-full object-cover"
               />
