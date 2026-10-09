@@ -476,6 +476,83 @@ export default function Home() {
         </div>
       </Section>
 
+      {/* HOW IT WORKS */}
+      <Section id="how-it-works" bg="bg-[#0B1B33]">
+        <div className="text-center" data-reveal>
+          <p className="bws-overline text-[#FB923C]">How It Works</p>
+          <h2 className="mt-3 text-3xl font-bold tracking-tight text-white lg:text-5xl">
+            Simple for Workers. Structured for Companies.
+          </h2>
+          <p className="mx-auto mt-4 max-w-2xl text-slate-300">
+            One clear process for job seekers and one reliable process for employers looking for manpower.
+          </p>
+        </div>
+
+        <div className="mt-12 grid gap-8 lg:grid-cols-2">
+          <div className="bws-flow-panel" data-reveal>
+            <div className="bws-flow-heading">
+              <Users className="h-6 w-6" />
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-orange-300">For Job Seekers</p>
+                <h3 className="mt-1 text-2xl font-semibold text-white">From profile to opportunity</h3>
+              </div>
+            </div>
+            <div className="mt-7 space-y-4">
+              {[
+                ["01", "Create your profile", "Share your education, skills, experience and preferred location."],
+                ["02", "Upload your resume", "Add your resume once so our recruitment team can review your profile."],
+                ["03", "Get matched", "We connect suitable candidates with current and upcoming workforce requirements."],
+              ].map(([step, title, desc]) => (
+                <div key={step} className="bws-flow-step">
+                  <span>{step}</span>
+                  <div>
+                    <h4>{title}</h4>
+                    <p>{desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <Button
+              onClick={() => scrollTo("#worker-registration")}
+              className="bws-btn-3d mt-7 bg-[#EA580C] text-white hover:bg-[#C2410C]"
+            >
+              Register for Jobs
+            </Button>
+          </div>
+
+          <div className="bws-flow-panel bws-flow-panel-orange" data-reveal>
+            <div className="bws-flow-heading">
+              <Factory className="h-6 w-6" />
+              <div>
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-orange-300">For Employers</p>
+                <h3 className="mt-1 text-2xl font-semibold text-white">From requirement to deployment</h3>
+              </div>
+            </div>
+            <div className="mt-7 space-y-4">
+              {[
+                ["01", "Share your requirement", "Tell us the role, workforce type, quantity, shift and work location."],
+                ["02", "Screening & coordination", "Our team reviews matching profiles and coordinates candidate readiness."],
+                ["03", "Workforce deployment", "Selected candidates are coordinated for joining based on your requirement."],
+              ].map(([step, title, desc]) => (
+                <div key={step} className="bws-flow-step">
+                  <span>{step}</span>
+                  <div>
+                    <h4>{title}</h4>
+                    <p>{desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <Button
+              onClick={() => scrollTo("#manpower-request")}
+              className="bws-btn-3d mt-7 bg-[#EA580C] text-white hover:bg-[#C2410C]"
+            >
+              Request Manpower
+            </Button>
+          </div>
+        </div>
+      </Section>
+
       {/* WORKER REGISTRATION */}
       <Section id="worker-registration" bg="bg-white">
         <div className="grid gap-10 lg:grid-cols-[1fr_1.5fr]">
