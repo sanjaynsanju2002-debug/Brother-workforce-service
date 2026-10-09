@@ -74,7 +74,7 @@ export default function CompanyForm() {
 
   return (
     <form
-      className="grid gap-5 sm:grid-cols-2"
+      className="bws-premium-form grid gap-5 sm:grid-cols-2"
       data-testid="company-manpower-request-form"
       onSubmit={(e) => {
         e.preventDefault();
@@ -225,7 +225,7 @@ export default function CompanyForm() {
         <Button
           type="submit"
           disabled={mutation.isPending}
-          className="w-full bg-[#EA580C] py-6 text-base font-semibold text-white transition-transform duration-150 hover:bg-[#C2410C] active:scale-98 sm:w-auto sm:px-10"
+          className="bws-btn-3d w-full bg-[#EA580C] py-6 text-base font-semibold text-white hover:bg-[#C2410C] sm:w-auto sm:px-10"
           data-testid="manpower-request-submit"
         >
           {mutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -238,7 +238,7 @@ export default function CompanyForm() {
 
 function Field({ label, children, full }: { label: string; children: React.ReactNode; full?: boolean }) {
   return (
-    <div className={full ? "sm:col-span-2" : undefined}>
+    <div className={`bws-form-field ${full ? "sm:col-span-2" : ""}`}>
       <Label className="mb-2 block text-sm font-medium text-slate-700">{label}</Label>
       {children}
     </div>
