@@ -239,10 +239,14 @@ export default function Home() {
           <div className="bws-brochure-photo-wrap mx-auto w-full max-w-sm" data-reveal>
             <div className="bws-brochure-photo">
               <img
-                src="/brochure-worker.webp"
+                src="/brochure-worker.jpg"
                 alt="Brothers Workforce Solutions worker image from company brochure"
                 loading="lazy"
                 decoding="async"
+                onError={(event) => {
+                  event.currentTarget.onerror = null;
+                  event.currentTarget.src = "/factory-team.webp";
+                }}
                 className="h-[430px] w-full object-cover"
               />
             </div>
