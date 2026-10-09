@@ -193,19 +193,15 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="bws-hero-visual mx-auto w-full max-w-xl lg:mx-0" data-reveal>
+          <div className="bws-hero-visual mx-auto w-full max-w-[470px] lg:mx-0" data-reveal>
             <div className="bws-image-shell bws-image-shell-dark">
               <img
                 src={IMAGES.heroTeam}
-                alt="Uniformed factory workers operating inside a manufacturing facility"
+                alt="Industrial workforce in a factory, representing our staffing services"
                 loading="eager"
                 decoding="async"
-                className="h-[300px] w-full object-cover sm:h-[360px] lg:h-[410px]"
+                className="aspect-[4/5] w-full object-cover"
               />
-            </div>
-            <div className="bws-float-chip bws-float-chip-right">
-              <MapPin className="h-5 w-5 text-[#FB923C]" />
-              <span>Mysuru · Karnataka</span>
             </div>
           </div>
           </div>
@@ -231,13 +227,13 @@ export default function Home() {
           <div className="bws-brochure-photo-wrap mx-auto w-full max-w-sm" data-reveal>
             <div className="bws-brochure-photo">
               <img
-                src="/brochure-team-v2.webp"
-                alt="Indian industrial workforce team in a modern factory"
+                src="/brochure-team-oct2026.webp"
+                alt="Uniformed workers in a modern industrial processing facility"
                 loading="lazy"
                 decoding="async"
                 onError={(event) => {
                   event.currentTarget.onerror = null;
-                  event.currentTarget.src = "/brochure-team-v2.webp";
+                  event.currentTarget.src = "/factory-team.webp";
                 }}
                 className="h-[430px] w-full object-cover"
               />
@@ -575,7 +571,9 @@ export default function Home() {
             </div>
             <img
               src={IMAGES.assembly}
-              alt="Industrial workforce on an assembly line"
+              alt="Technicians collaborating at a precision assembly workstation"
+              loading="lazy"
+              decoding="async"
               className="bws-image-soft mt-8 hidden h-64 w-full rounded-2xl object-cover lg:block"
             />
           </div>
