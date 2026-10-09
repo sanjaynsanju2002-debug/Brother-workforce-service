@@ -15,8 +15,7 @@ export const IMAGES = {
   // Distinct high-resolution images for the public homepage.
   hero:
     "https://images.pexels.com/photos/35082108/pexels-photo-35082108.jpeg?auto=compress&cs=tinysrgb&w=2200",
-  heroTeam:
-    "https://images.pexels.com/photos/32399719/pexels-photo-32399719.jpeg?auto=compress&cs=tinysrgb&w=1800",
+  heroTeam: "/hero-team-v2.webp",
   assembly:
     "https://images.unsplash.com/photo-1741275273537-e172e1411b3a?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMzl8MHwxfHNlYXJjaHwzfHxpbmRpYW4lMjBlbmdpbmVlciUyMGhhcmQlMjBoYXQlMjBmYWN0b3J5fGVufDB8fHx8MTc4OTAxNDg2OHww&ixlib=rb-4.1.0&q=92&w=1800",
   safety:
