@@ -300,8 +300,8 @@ async def import_talents(file: UploadFile = File(...), pin: str = Query(...)) ->
             else:
                 resume_bytes = archive.read(resume_file)
                 ext = os.path.splitext(resume_file)[1].lower()
-                if len(resume_bytes) > 5 * 1024 * 1024:
-                    errors.append(f"Row {index} ({full_name}): resume is larger than 5 MB")
+                if len(resume_bytes) > 2 * 1024 * 1024:
+                    errors.append(f"Row {index} ({full_name}): resume is larger than 2 MB")
                 elif ext not in {".pdf", ".doc", ".docx", ".png", ".jpg", ".jpeg"}:
                     errors.append(f"Row {index} ({full_name}): unsupported resume type {ext}")
                 elif not client:
