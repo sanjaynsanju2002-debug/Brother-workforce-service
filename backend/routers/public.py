@@ -32,7 +32,7 @@ UPLOAD_DIR = Path(__file__).parent.parent / "uploads"
 UPLOAD_DIR.mkdir(exist_ok=True)
 
 ALLOWED_EXT = {".pdf", ".doc", ".docx", ".png", ".jpg", ".jpeg"}
-MAX_RESUME_SIZE = 5 * 1024 * 1024  # 5 MB
+MAX_RESUME_SIZE = 2 * 1024 * 1024  # 2 MB
 R2_BUCKET = os.getenv("R2_BUCKET", "")
 R2_ENDPOINT = os.getenv("R2_ENDPOINT", "")
 logger = logging.getLogger(__name__)
@@ -86,7 +86,7 @@ async def upload_resume(worker_id: str, file: UploadFile = File(...)) -> Worker:
 
     contents = await file.read(MAX_RESUME_SIZE + 1)
     if len(contents) > MAX_RESUME_SIZE:
-        raise HTTPException(status_code=413, detail="Resume must be 5 MB or smaller")
+        raise HTTPException(status_code=413, detail="Resume must be 2 MB or smaller")
 
     safe = re.sub(r"[^A-Za-z0-9._-]", "_", Path(file.filename or "resume").name)
     object_key = f"resumes/{worker_id}/{safe}"
