@@ -904,6 +904,77 @@
   }
 }
 
+/* Phase 3 — comfortable depth on touch screens and accessible motion. */
+@media (hover: none), (pointer: coarse) {
+  .bws-image-shell,
+  .bws-brochure-photo,
+  .bws-card-3d,
+  .bws-industry-card,
+  .bws-panel-3d,
+  .bws-flow-panel {
+    transform: none;
+  }
+
+  .bws-image-shell:hover,
+  .bws-brochure-photo:hover,
+  .bws-card-3d:hover,
+  .bws-industry-card:hover,
+  .bws-panel-3d:hover,
+  .bws-flow-panel:hover {
+    transform: none;
+  }
+
+  .bws-float-chip { animation: none; }
+}
+
+@media (max-width: 640px) {
+  .bws-hero-visual { perspective: none; }
+  .bws-hero-visual::before,
+  .bws-hero-visual::after { display: none; }
+  .bws-brochure-photo-wrap { perspective: none; }
+  .bws-brochure-photo-wrap::before { inset: 1.2rem .4rem .7rem 1.2rem; }
+  .bws-brochure-ribbon { right: .5rem; max-width: 90%; }
+  .bws-card-3d,
+  .bws-industry-card,
+  .bws-panel-3d,
+  .bws-flow-panel { box-shadow: 0 12px 30px rgba(15,36,68,.10); }
+}
+
+.bws-btn-3d:focus-visible,
+.bws-btn-glass:focus-visible,
+.bws-nav-link:focus-visible,
+.bws-contact-action:focus-visible,
+.bws-card-3d a:focus-visible,
+.bws-industry-card a:focus-visible {
+  outline: 3px solid #FB923C;
+  outline-offset: 4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .bws-brochure-photo,
+  .bws-flow-panel,
+  .bws-flow-step,
+  .bws-mini-stat,
+  .bws-process-step,
+  .bws-upload-zone,
+  .bws-contact-action,
+  .bws-nav-link::after,
+  .bws-card-3d::before,
+  .bws-industry-card::after {
+    transition: none !important;
+    animation: none !important;
+  }
+  .bws-image-shell:hover,
+  .bws-brochure-photo:hover,
+  .bws-card-3d:hover,
+  .bws-industry-card:hover,
+  .bws-panel-3d:hover,
+  .bws-flow-panel:hover {
+    transform: none;
+  }
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
