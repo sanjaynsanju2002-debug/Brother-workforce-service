@@ -448,7 +448,7 @@ export default function Home() {
                     </p>
                     <dl className="mt-4 space-y-1.5 text-sm text-slate-600">
                       {j.experience && <Row k="Experience" v={j.experience} />}
-                      {j.salary && <Row k="Salary" v={j.salary} />}
+                      {j.salary && <Row k="Salary" v={/^\d+$/.test(j.salary.trim()) ? `₹${Number(j.salary).toLocaleString("en-IN")}` : j.salary} />}
                       {j.shift && <Row k="Shift" v={j.shift} />}
                       <Row k="Openings" v={String(j.openings)} />
                     </dl>
@@ -660,7 +660,7 @@ export default function Home() {
                     )}
                     {c.headcount && (
                       <Badge variant="secondary" className="text-[10px]">
-                        {c.headcount}
+                        Headcount: {c.headcount}
                       </Badge>
                     )}
                   </div>
