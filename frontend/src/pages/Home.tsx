@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Activity,
@@ -640,16 +640,10 @@ export default function Home() {
                     }`}
                     data-testid={`client-card-${c.id}`}
                   >
-                    {c.logo_filename ? (
-                      <img
-                        src={`/api/clients/${c.id}/logo`}
-                        alt={c.name}
-                        className="h-12 w-full max-w-[120px] object-contain"
-                      />
-                    ) : isCta ? (
+                    {isCta ? (
                       <Handshake className="h-7 w-7 text-[#EA580C]" />
                     ) : (
-                      <Building2 className="h-7 w-7 text-slate-400" />
+                      <ClientLogo client={c} />
                     )}
                     <p className="text-sm font-semibold text-[#0F2444]">{c.name}</p>
                     {c.industry && <p className="text-xs text-slate-500">{c.industry}</p>}
@@ -773,5 +767,20 @@ function Row({ k, v }: { k: string; v: string }) {
       <dt className="text-slate-500">{k}</dt>
       <dd className="font-medium text-[#0F2444]">{v}</dd>
     </div>
+  );
+}
+
+function ClientLogo({ client }: { client: Client }) {
+  const [failed, setFailed] = useState(false);
+  if (!client.logo_filename || failed) {
+    return <Building2 className="h-7 w-7 text-slate-400" aria-hidden="true" />;
+  }
+  return (
+    <img
+      src={`/api/clients/${client.id}/logo`}
+      alt={client.name}
+      className="h-12 w-full max-w-[120px] object-contain"
+      onError={() => setFailed(true)}
+    />
   );
 }
