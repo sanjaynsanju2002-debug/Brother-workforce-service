@@ -41,10 +41,21 @@ export default function WorkforceManager({ pin }: { pin: string }) {
   const key = ["admin-assignments", pin];
   const [form, setForm] = useState<Form>(EMPTY);
   const [companyFilter, setCompanyFilter] = useState("");
+  const [newCompany, setNewCompany] = useState("");
   const clients = useQuery({ queryKey: ["admin-clients", pin], queryFn: () => apiGet<Client[]>(`/admin/clients${q}`) });
   const workers = useQuery({ queryKey: ["assignment-workers", pin], queryFn: () => apiGet<Worker[]>(`/admin/workers${q}`) });
   const assignments = useQuery({ queryKey: key, queryFn: () => apiGet<Assignment[]>(`/admin/assignments${q}`) });
   const refresh = () => qc.invalidateQueries({ queryKey: key });
+  const createCompany = useMutation({
+    mutationFn: (name: string) => apiPost<Client>(`/admin/clients${q}`, { name: name.trim(), visible: false }),
+    onSuccess: (client) => {
+      qc.invalidateQueries({ queryKey: ["admin-clients", pin] });
+      setForm((current) => ({ ...current, client_id: client.id }));
+      setNewCompany("");
+      toast.success("Private company added");
+    },
+    onError: (e) => toast.error(errorMessage(e)),
+  });
 
   const add = useMutation({
     mutationFn: (value: Form) => apiPost<Assignment>(`/admin/assignments${q}`, {
@@ -86,6 +97,15 @@ export default function WorkforceManager({ pin }: { pin: string }) {
       <Card className="border-slate-200 bg-white"><CardContent className="p-5 sm:p-6">
         <h3 className="text-lg font-semibold text-[#0F2444]">Add a person working at a company</h3>
         <p className="mt-1 text-sm text-slate-500">Select an existing applicant or enter someone manually. This roster is visible only in the admin dashboard.</p>
+        <div className="mt-5 flex flex-wrap items-end gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
+          <div className="min-w-[220px] flex-1"><Label className="mb-2 block">New company (private)</Label>
+            <Input value={newCompany} onChange={(e) => setNewCompany(e.target.value)} placeholder="Company name" data-testid="assignment-new-company" />
+          </div>
+          <Button type="button" variant="outline" disabled={createCompany.isPending || !newCompany.trim()} onClick={() => createCompany.mutate(newCompany)}>
+            Add private company
+          </Button>
+          <p className="w-full text-xs text-slate-500">Private companies will not appear in Businesses We Support on the public website.</p>
+        </div>
         <form className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3" onSubmit={(e) => {
           e.preventDefault();
           if (!form.client_id || !form.full_name.trim()) { toast.error("Choose a company and enter a worker name"); return; }
