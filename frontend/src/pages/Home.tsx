@@ -770,17 +770,27 @@ function Row({ k, v }: { k: string; v: string }) {
   );
 }
 
+const CLIENT_LOGO_FALLBACKS: Record<string, string> = {
+  "SSB Technologies": "/client-logos/ssbt.png",
+  "Dhatu Organics & Naturals": "/client-logos/dhatu.jpg",
+};
+
 function ClientLogo({ client }: { client: Client }) {
-  const [failed, setFailed] = useState(false);
-  if (!client.logo_filename || failed) {
+  const [step, setStep] = useState(0);
+  const suppliedLogo = CLIENT_LOGO_FALLBACKS[client.name];
+  const source = step === 0 && client.logo_filename
+    ? `/api/clients/${client.id}/logo`
+    : step <= 1 ? suppliedLogo : undefined;
+
+  if (!source) {
     return <Building2 className="h-7 w-7 text-slate-400" aria-hidden="true" />;
   }
   return (
     <img
-      src={`/api/clients/${client.id}/logo`}
+      src={source}
       alt={client.name}
       className="h-12 w-full max-w-[120px] object-contain"
-      onError={() => setFailed(true)}
+      onError={() => setStep(step === 0 && client.logo_filename ? 1 : 2)}
     />
   );
 }
