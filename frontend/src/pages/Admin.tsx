@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import EmailSettings from "@/components/site/EmailSettings";
 import ClientsManager from "@/components/site/ClientsManager";
+import WorkforceManager from "@/components/site/WorkforceManager";
 import Security from "@/components/site/Security";
 import TrafficChart from "@/components/site/TrafficChart";
 import Shortlists from "@/components/site/Shortlists";
@@ -374,31 +375,16 @@ function Dashboard({
         <TrafficChart pin={pin} />
 
         <Tabs defaultValue="workers" className="mt-8">
-          <TabsList className="max-w-full justify-start overflow-x-auto" data-testid="admin-tabs">
-            <TabsTrigger value="workers" className="shrink-0 flex-none px-3" data-testid="admin-tab-workers">
-              Worker Applications
-            </TabsTrigger>
-            <TabsTrigger value="talents" className="shrink-0 flex-none px-3" data-testid="admin-tab-talents">
-              Talent Bank
-            </TabsTrigger>
-            <TabsTrigger value="requests" className="shrink-0 flex-none px-3" data-testid="admin-tab-requests">
-              Company Enquiries
-            </TabsTrigger>
-            <TabsTrigger value="jobs" className="shrink-0 flex-none px-3" data-testid="admin-tab-jobs">
-              Job Postings
-            </TabsTrigger>
-            <TabsTrigger value="email" className="shrink-0 flex-none px-3" data-testid="admin-tab-email">
-              Email Settings
-            </TabsTrigger>
-            <TabsTrigger value="clients" className="shrink-0 flex-none px-3" data-testid="admin-tab-clients">
-              Clients
-            </TabsTrigger>
-            <TabsTrigger value="security" className="shrink-0 flex-none px-3" data-testid="admin-tab-security">
-              Security
-            </TabsTrigger>
-            <TabsTrigger value="shortlists" className="shrink-0 flex-none px-3" data-testid="admin-tab-shortlists">
-              Shortlists
-            </TabsTrigger>
+          <TabsList className="grid w-full grid-cols-2 gap-2 bg-slate-100 p-2 group-data-horizontal/tabs:h-auto sm:grid-cols-3" data-testid="admin-tabs">
+            <TabsTrigger value="workers" className="min-h-10 w-full px-2 text-center whitespace-normal" data-testid="admin-tab-workers">Worker Applications</TabsTrigger>
+            <TabsTrigger value="talents" className="min-h-10 w-full px-2 text-center whitespace-normal" data-testid="admin-tab-talents">Talent Bank</TabsTrigger>
+            <TabsTrigger value="workforce" className="min-h-10 w-full px-2 text-center whitespace-normal" data-testid="admin-tab-workforce">Company Workforce</TabsTrigger>
+            <TabsTrigger value="requests" className="min-h-10 w-full px-2 text-center whitespace-normal" data-testid="admin-tab-requests">Company Enquiries</TabsTrigger>
+            <TabsTrigger value="clients" className="min-h-10 w-full px-2 text-center whitespace-normal" data-testid="admin-tab-clients">Clients</TabsTrigger>
+            <TabsTrigger value="jobs" className="min-h-10 w-full px-2 text-center whitespace-normal" data-testid="admin-tab-jobs">Job Postings</TabsTrigger>
+            <TabsTrigger value="email" className="min-h-10 w-full px-2 text-center whitespace-normal" data-testid="admin-tab-email">Email Settings</TabsTrigger>
+            <TabsTrigger value="security" className="min-h-10 w-full px-2 text-center whitespace-normal" data-testid="admin-tab-security">Security</TabsTrigger>
+            <TabsTrigger value="shortlists" className="min-h-10 w-full px-2 text-center whitespace-normal" data-testid="admin-tab-shortlists">Shortlists</TabsTrigger>
           </TabsList>
 
           <TabsContent value="workers" className="mt-6">
@@ -855,6 +841,10 @@ function Dashboard({
 
           <TabsContent value="email" className="mt-6">
             <EmailSettings pin={pin} />
+          </TabsContent>
+
+          <TabsContent value="workforce" className="mt-6">
+            <WorkforceManager pin={pin} />
           </TabsContent>
 
           <TabsContent value="clients" className="mt-6">
