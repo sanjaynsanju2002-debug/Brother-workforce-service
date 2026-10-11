@@ -64,6 +64,7 @@ from routers.public import router as public_router  # noqa: E402
 from routers.admin import router as admin_router  # noqa: E402
 from routers.email_admin import router as email_router  # noqa: E402
 from routers.clients import router as clients_router  # noqa: E402
+from routers.assignments import router as assignments_router  # noqa: E402
 from routers.cron import router as cron_router  # noqa: E402
 from routers.talent import router as talent_router  # noqa: E402
 
@@ -72,6 +73,7 @@ api_router.include_router(public_router)
 api_router.include_router(admin_router)
 api_router.include_router(talent_router)
 api_router.include_router(clients_router)
+api_router.include_router(assignments_router)
 api_router.include_router(cron_router)
 
 # Include the router in the main app
