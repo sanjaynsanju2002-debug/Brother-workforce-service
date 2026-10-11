@@ -14,7 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { apiPost } from "@/lib/api";
-import { AVAILABILITY, SKILL_CATEGORIES } from "@/lib/brand";
+import { AVAILABILITY, BRAND, SKILL_CATEGORIES } from "@/lib/brand";
 import type { Worker, WorkerCreate } from "@/types";
 
 const MAX_RESUME_SIZE = 2 * 1024 * 1024;
@@ -262,6 +262,12 @@ export default function WorkerForm() {
           {mutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
           Apply Now
         </Button>
+        <p className="mt-4 max-w-2xl text-xs leading-relaxed text-slate-600">
+          Your application details and optional resume go to Brothers Workforce Solutions so our team can review your profile and contact you about suitable work. For questions about your details or to request their removal, email{" "}
+          <a className="font-medium text-[#0F2444] underline underline-offset-2 hover:text-[#EA580C]" href={`mailto:${BRAND.email}`}>
+            {BRAND.email}
+          </a>.
+        </p>
       </div>
     </form>
   );
