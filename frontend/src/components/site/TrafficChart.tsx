@@ -33,7 +33,7 @@ export default function TrafficChart({ pin }: { pin: string }) {
     <div className="mt-6 rounded-lg border border-slate-200 bg-white p-4 sm:p-6" data-testid="traffic-chart">
       <h2 className="text-base font-semibold text-[#0F2444]">Last 30 Days</h2>
       <p className="mt-1 text-sm text-slate-500">
-        Daily website visits against job applications and manpower requests.
+        Daily website visits against worker registrations and manpower requests.
       </p>
 
       <div className="mt-5 h-[230px] w-full sm:h-[280px]">
@@ -73,7 +73,7 @@ export default function TrafficChart({ pin }: { pin: string }) {
               <Line
                 type="monotone"
                 dataKey="applications"
-                name="Applications"
+                name="Worker Registrations"
                 stroke="#EA580C"
                 strokeWidth={2.5}
                 dot={false}
