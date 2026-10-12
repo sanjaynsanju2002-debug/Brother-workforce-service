@@ -114,6 +114,7 @@ function scrollTo(id: string) {
 
 export default function Home() {
   useEffect(() => {
+    document.title = "Brothers Workforce Solutions | Manpower Services in Mysuru, Karnataka";
     trackVisit("/");
     const anchor = window.location.hash.slice(1);
     if (anchor) document.getElementById(anchor)?.scrollIntoView({ behavior: "instant" });
@@ -411,7 +412,16 @@ export default function Home() {
           </Button>
         </div>
         <div className="mt-6" data-testid="job-listings">
-          {jobs.length === 0 ? (
+          {jobsQuery.isPending ? (
+            <div className="rounded-lg border border-dashed border-slate-300 bg-white p-12 text-center text-slate-600" role="status">
+              Loading current openings…
+            </div>
+          ) : jobsQuery.isError ? (
+            <div className="rounded-lg border border-dashed border-slate-300 bg-white p-12 text-center">
+              <p className="text-lg font-semibold text-[#0F2444]">Current openings could not be loaded.</p>
+              <Button variant="outline" className="mt-5" onClick={() => jobsQuery.refetch()}>Try Again</Button>
+            </div>
+          ) : jobs.length === 0 ? (
             <div
               className="rounded-lg border border-dashed border-slate-300 bg-white p-12 text-center"
               data-testid="jobs-empty-state"

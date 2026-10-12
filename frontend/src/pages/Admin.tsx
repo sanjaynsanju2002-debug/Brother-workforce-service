@@ -388,7 +388,7 @@ function Dashboard({
                   />
                   <Funnel
                     icon={Users}
-                    label="Applied for Jobs"
+                    label="Registered for Work"
                     total={t?.workers_total ?? 0}
                     today={t?.workers_today ?? 0}
                     testid="funnel-applications"
