@@ -16,10 +16,13 @@ export interface WorkerCreate {
   preferred_location?: string | null;
   expected_salary?: string | null;
   availability?: string | null;
+  job_id?: string | null;
+  consent_to_share?: boolean;
 }
 
 export interface Worker extends WorkerCreate {
   id: string;
+  job_title?: string | null;
   resume_filename?: string | null;
   source: string;
   status: string;
@@ -31,10 +34,10 @@ export interface CompanyRequestCreate {
   contact_person: string;
   designation?: string | null;
   mobile: string;
-  email: string;
+  email?: string | null;
   company_location: string;
-  industry: string;
-  workforce_type: string;
+  industry?: string | null;
+  workforce_type?: string | null;
   job_role: string;
   worker_count: string;
   shift_details?: string | null;
@@ -165,6 +168,17 @@ export interface DayPoint {
 }
 
 export interface SecurityInfo {
-  pin: string;
   is_default: boolean;
+}
+
+export interface JobApplicationCount {
+  job_id: string;
+  title: string;
+  applications: number;
+}
+
+export interface EnquiryAging {
+  pending_total: number;
+  older_than_2_days: number;
+  oldest_days: number;
 }

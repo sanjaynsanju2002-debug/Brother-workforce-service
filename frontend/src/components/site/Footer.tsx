@@ -21,12 +21,13 @@ export default function Footer() {
           <p className="bws-overline mb-4 text-[#FB923C]">Quick Links</p>
           <ul className="space-y-2 text-sm">
             {[
-              ["Services", "#services"],
-              ["Industries", "#industries"],
-              ["Compliance", "#compliance"],
-              ["Job Listings", "#jobs"],
-              ["Worker Registration", "#worker-registration"],
-              ["Manpower Request", "#manpower-request"],
+              ["Services", "/#services"],
+              ["Industries", "/#industries"],
+              ["Compliance", "/#compliance"],
+              ["Job Listings", "/#jobs"],
+              ["Worker Registration", "/#worker-registration"],
+              ["Manpower Request", "/#manpower-request"],
+              ["Privacy Notice", "/privacy"],
             ].map(([label, href]) => (
               <li key={href}>
                 <a href={href} className="transition-colors hover:text-[#FB923C]">
@@ -41,7 +42,7 @@ export default function Footer() {
           <p className="bws-overline mb-4 text-[#FB923C]">Contact</p>
           <ul className="space-y-3 text-sm">
             <li className="flex gap-3">
-              <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-[#FB923C]" /> {BRAND.location}
+              <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-[#FB923C]" /> {BRAND.officeAddress || BRAND.location}
             </li>
             <li className="flex gap-3">
               <Phone className="mt-0.5 h-4 w-4 shrink-0 text-[#FB923C]" />
@@ -57,6 +58,7 @@ export default function Footer() {
             </li>
           </ul>
           <p className="mt-4 text-xs text-slate-500">GST No: {BRAND.gst}</p>
+          {BRAND.labourLicenceNumber && <p className="mt-1 text-xs text-slate-500">Labour Licence No: {BRAND.labourLicenceNumber}</p>}
         </div>
       </div>
       <div className="border-t border-slate-800 py-5 text-center text-xs text-slate-500">

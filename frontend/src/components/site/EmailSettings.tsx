@@ -49,7 +49,7 @@ function statusTone(status: string): { label: string; className: string } {
 
 export default function EmailSettings({ pin }: { pin: string }) {
   const qc = useQueryClient();
-  const q = `?pin=${encodeURIComponent(pin)}`;
+  const q = "";
   const key = ["admin-email", pin];
 
   const status = useQuery({ queryKey: key, queryFn: () => apiGet<EmailStatus>(`/admin/email/status${q}`) });

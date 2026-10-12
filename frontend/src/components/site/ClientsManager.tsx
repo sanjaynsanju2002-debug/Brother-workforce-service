@@ -30,7 +30,7 @@ const EMPTY = { name: "", industry: "", location: "", headcount: "" };
 
 export default function ClientsManager({ pin }: { pin: string }) {
   const qc = useQueryClient();
-  const q = `?pin=${encodeURIComponent(pin)}`;
+  const q = "";
   const key = ["admin-clients", pin];
 
   const clients = useQuery({ queryKey: key, queryFn: () => apiGet<Client[]>(`/admin/clients${q}`) });

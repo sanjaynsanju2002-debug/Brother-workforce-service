@@ -1,14 +1,14 @@
-"""Client companies: public read + PIN-protected admin CRUD with logo upload."""
+"""Client companies: public read and session-protected admin CRUD with logo upload."""
 
 import os
 import re
 from pathlib import Path
 
-from fastapi import APIRouter, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse, Response
 from bson.binary import Binary
 
-from lib.auth import verify_pin
+from lib.auth import require_admin
 from lib.db import db
 from models.clients import Client, ClientCreate, ClientUpdate
 from models.bws import Ok
@@ -50,25 +50,22 @@ async def get_logo(client_id: str) -> Response:
 
 
 # ---------- admin ----------
-@router.get("/admin/clients", response_model=list[Client])
-async def list_all_clients(pin: str = Query(...)) -> list[Client]:
-    await verify_pin(pin)
+@router.get("/admin/clients", response_model=list[Client], dependencies=[Depends(require_admin)])
+async def list_all_clients() -> list[Client]:
     docs = await db.clients.find({}, {"_id": 0}).sort("sort_order", 1).to_list(200)
     return [Client(**d) for d in docs]
 
 
-@router.post("/admin/clients", response_model=Client)
-async def create_client(payload: ClientCreate, pin: str = Query(...)) -> Client:
-    await verify_pin(pin)
+@router.post("/admin/clients", response_model=Client, dependencies=[Depends(require_admin)])
+async def create_client(payload: ClientCreate) -> Client:
     count = await db.clients.count_documents({})
     client = Client(**payload.model_dump(), sort_order=count)
     await db.clients.insert_one(client.model_dump())
     return client
 
 
-@router.patch("/admin/clients/{client_id}", response_model=Client)
-async def update_client(client_id: str, payload: ClientUpdate, pin: str = Query(...)) -> Client:
-    await verify_pin(pin)
+@router.patch("/admin/clients/{client_id}", response_model=Client, dependencies=[Depends(require_admin)])
+async def update_client(client_id: str, payload: ClientUpdate) -> Client:
     changes = {k: v for k, v in payload.model_dump().items() if v is not None}
     if not changes:
         raise HTTPException(status_code=400, detail="Nothing to update")
@@ -80,9 +77,8 @@ async def update_client(client_id: str, payload: ClientUpdate, pin: str = Query(
     return Client(**doc)
 
 
-@router.post("/admin/clients/{client_id}/logo", response_model=Client)
-async def upload_logo(client_id: str, pin: str = Query(...), file: UploadFile = File(...)) -> Client:
-    await verify_pin(pin)
+@router.post("/admin/clients/{client_id}/logo", response_model=Client, dependencies=[Depends(require_admin)])
+async def upload_logo(client_id: str, file: UploadFile = File(...)) -> Client:
     doc = await db.clients.find_one({"id": client_id}, {"_id": 0})
     if not doc:
         raise HTTPException(status_code=404, detail="Client not found")
@@ -106,9 +102,8 @@ async def upload_logo(client_id: str, pin: str = Query(...), file: UploadFile = 
     return Client(**doc)
 
 
-@router.delete("/admin/clients/{client_id}", response_model=Ok)
-async def delete_client(client_id: str, pin: str = Query(...)) -> Ok:
-    await verify_pin(pin)
+@router.delete("/admin/clients/{client_id}", response_model=Ok, dependencies=[Depends(require_admin)])
+async def delete_client(client_id: str) -> Ok:
     res = await db.clients.delete_one({"id": client_id})
     if res.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Client not found")

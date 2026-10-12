@@ -4,13 +4,13 @@ from datetime import datetime, timezone
 from typing import Literal
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from lib.auth import verify_pin
+from lib.auth import require_admin
 from lib.db import db
 
-router = APIRouter(prefix="/admin")
+router = APIRouter(prefix="/admin", dependencies=[Depends(require_admin)])
 
 
 class AssignmentCreate(BaseModel):
@@ -35,15 +35,13 @@ class Assignment(AssignmentCreate):
 
 
 @router.get("/assignments", response_model=list[Assignment])
-async def list_assignments(pin: str = Query(...)) -> list[Assignment]:
-    await verify_pin(pin)
+async def list_assignments() -> list[Assignment]:
     docs = await db.assignments.find({}, {"_id": 0}).sort("created_at", -1).to_list(2000)
     return [Assignment(**doc) for doc in docs]
 
 
 @router.post("/assignments", response_model=Assignment)
-async def create_assignment(payload: AssignmentCreate, pin: str = Query(...)) -> Assignment:
-    await verify_pin(pin)
+async def create_assignment(payload: AssignmentCreate) -> Assignment:
     client = await db.clients.find_one({"id": payload.client_id})
     if not client:
         raise HTTPException(status_code=404, detail="Company not found. Add it in Clients first.")
@@ -77,8 +75,7 @@ async def create_assignment(payload: AssignmentCreate, pin: str = Query(...)) ->
 
 
 @router.patch("/assignments/{assignment_id}", response_model=Assignment)
-async def update_assignment(assignment_id: str, payload: AssignmentUpdate, pin: str = Query(...)) -> Assignment:
-    await verify_pin(pin)
+async def update_assignment(assignment_id: str, payload: AssignmentUpdate) -> Assignment:
     doc = await db.assignments.find_one_and_update(
         {"id": assignment_id}, {"$set": {"status": payload.status}}, return_document=True,
     )
@@ -89,8 +86,7 @@ async def update_assignment(assignment_id: str, payload: AssignmentUpdate, pin: 
 
 
 @router.delete("/assignments/{assignment_id}")
-async def delete_assignment(assignment_id: str, pin: str = Query(...)) -> dict[str, bool]:
-    await verify_pin(pin)
+async def delete_assignment(assignment_id: str) -> dict[str, bool]:
     result = await db.assignments.delete_one({"id": assignment_id})
     if not result.deleted_count:
         raise HTTPException(status_code=404, detail="Assignment not found")

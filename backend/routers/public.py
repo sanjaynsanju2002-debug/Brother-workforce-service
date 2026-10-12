@@ -10,10 +10,10 @@ from pathlib import Path
 import boto3
 from bson.binary import Binary
 
-from fastapi import APIRouter, BackgroundTasks, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, BackgroundTasks, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 
-from lib.auth import verify_pin
+from lib.auth import require_admin
 from lib.db import db
 from lib.notify import build_html, send_notification
 from models.bws import (
@@ -46,7 +46,15 @@ def _r2():
 
 @router.post("/workers", response_model=Worker)
 async def create_worker(payload: WorkerCreate, background: BackgroundTasks) -> Worker:
-    worker = Worker(**payload.model_dump())
+    if not payload.consent_to_share:
+        raise HTTPException(status_code=400, detail="Please agree to recruitment use of your profile")
+    job_title = None
+    if payload.job_id:
+        job = await db.jobs.find_one({"id": payload.job_id, "active": True}, {"_id": 0, "title": 1})
+        if not job:
+            raise HTTPException(status_code=404, detail="This job is no longer open. You can still register your profile.")
+        job_title = job["title"]
+    worker = Worker(**payload.model_dump(), job_title=job_title)
     await db.workers.insert_one(worker.model_dump())
     background.add_task(
         send_notification,
@@ -55,6 +63,8 @@ async def create_worker(payload: WorkerCreate, background: BackgroundTasks) -> W
             "New Worker Registration",
             [
                 ("Full Name", worker.full_name),
+                ("Applied For", worker.job_title or "General registration"),
+                ("Recruitment Consent", "Yes"),
                 ("Mobile", worker.mobile),
                 ("WhatsApp", worker.whatsapp),
                 ("Age", worker.age),
@@ -157,9 +167,8 @@ async def upload_resume(worker_id: str, file: UploadFile = File(...)) -> Worker:
     return Worker(**doc)
 
 
-@router.get("/workers/{worker_id}/resume")
-async def download_resume(worker_id: str, pin: str = Query(...)):
-    await verify_pin(pin)
+@router.get("/workers/{worker_id}/resume", dependencies=[Depends(require_admin)])
+async def download_resume(worker_id: str):
     doc = await db.workers.find_one({"id": worker_id})
     if not doc or not doc.get("resume_filename"):
         raise HTTPException(status_code=404, detail="No resume on file")
@@ -228,6 +237,14 @@ async def create_company_request(
 async def list_jobs() -> list[Job]:
     docs = await db.jobs.find({"active": True}).sort("created_at", -1).to_list(200)
     return [Job(**d) for d in docs]
+
+
+@router.get("/jobs/{job_id}", response_model=Job)
+async def get_job(job_id: str) -> Job:
+    doc = await db.jobs.find_one({"id": job_id, "active": True}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="This job is no longer open")
+    return Job(**doc)
 
 
 @router.post("/visits", response_model=Ok)

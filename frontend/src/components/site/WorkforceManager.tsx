@@ -37,7 +37,7 @@ function errorMessage(error: unknown): string {
 
 export default function WorkforceManager({ pin }: { pin: string }) {
   const qc = useQueryClient();
-  const q = `?pin=${encodeURIComponent(pin)}`;
+  const q = "";
   const key = ["admin-assignments", pin];
   const [form, setForm] = useState<Form>(EMPTY);
   const [companyFilter, setCompanyFilter] = useState("");

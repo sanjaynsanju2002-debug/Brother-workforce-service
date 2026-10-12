@@ -23,6 +23,9 @@ from lib.db import client, db, ensure_indexes
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     app.state.index_task = asyncio.create_task(ensure_indexes())  # background: a big index build must not block boot
+    # Correct the existing public post without changing its role or pay range.
+    await db.jobs.update_many({"title": "Telicaller"}, {"$set": {"title": "Telecaller"}})
+    await db.jobs.update_many({"salary": "20,000-25000"}, {"$set": {"salary": "₹20,000–₹25,000"}})
     yield
     client.close()
 
@@ -62,6 +65,7 @@ async def get_status_checks():
 
 from routers.public import router as public_router  # noqa: E402
 from routers.admin import router as admin_router  # noqa: E402
+from routers.auth_admin import router as auth_admin_router  # noqa: E402
 from routers.email_admin import router as email_router  # noqa: E402
 from routers.clients import router as clients_router  # noqa: E402
 from routers.assignments import router as assignments_router  # noqa: E402
@@ -70,6 +74,7 @@ from routers.talent import router as talent_router  # noqa: E402
 
 admin_router.include_router(email_router)
 api_router.include_router(public_router)
+api_router.include_router(auth_admin_router)
 api_router.include_router(admin_router)
 api_router.include_router(talent_router)
 api_router.include_router(clients_router)
@@ -82,7 +87,10 @@ app.include_router(api_router)
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
+    allow_origins=os.environ.get(
+        'CORS_ORIGINS',
+        'https://brothersworkforcesolutions.in,https://brother-workforce-service.onrender.com',
+    ).split(','),
     allow_methods=["*"],
     allow_headers=["*"],
 )

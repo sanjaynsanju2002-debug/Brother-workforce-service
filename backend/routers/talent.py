@@ -7,15 +7,15 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from lib.auth import verify_pin
+from lib.auth import require_admin
 from lib.db import db
 from models.bws import Ok, Worker
 
-router = APIRouter(prefix="/admin")
+router = APIRouter(prefix="/admin", dependencies=[Depends(require_admin)])
 
 
 # ---------- models ----------
@@ -44,15 +44,13 @@ class DayPoint(BaseModel):
 
 # ---------- shortlists ----------
 @router.get("/shortlists", response_model=list[Shortlist])
-async def list_shortlists(pin: str = Query(...)) -> list[Shortlist]:
-    await verify_pin(pin)
+async def list_shortlists() -> list[Shortlist]:
     docs = await db.shortlists.find({}, {"_id": 0}).sort("created_at", -1).to_list(200)
     return [Shortlist(**d) for d in docs]
 
 
 @router.post("/shortlists", response_model=Shortlist)
-async def create_shortlist(payload: ShortlistCreate, pin: str = Query(...)) -> Shortlist:
-    await verify_pin(pin)
+async def create_shortlist(payload: ShortlistCreate) -> Shortlist:
     if not payload.name.strip():
         raise HTTPException(status_code=400, detail="Shortlist name is required")
     sl = Shortlist(**payload.model_dump())
@@ -61,8 +59,7 @@ async def create_shortlist(payload: ShortlistCreate, pin: str = Query(...)) -> S
 
 
 @router.post("/shortlists/{sl_id}/workers", response_model=Shortlist)
-async def add_worker(sl_id: str, payload: WorkerRef, pin: str = Query(...)) -> Shortlist:
-    await verify_pin(pin)
+async def add_worker(sl_id: str, payload: WorkerRef) -> Shortlist:
     if not await db.workers.find_one({"id": payload.worker_id}):
         raise HTTPException(status_code=404, detail="Candidate not found")
     doc = await db.shortlists.find_one_and_update(
@@ -77,8 +74,7 @@ async def add_worker(sl_id: str, payload: WorkerRef, pin: str = Query(...)) -> S
 
 
 @router.delete("/shortlists/{sl_id}/workers/{worker_id}", response_model=Shortlist)
-async def remove_worker(sl_id: str, worker_id: str, pin: str = Query(...)) -> Shortlist:
-    await verify_pin(pin)
+async def remove_worker(sl_id: str, worker_id: str) -> Shortlist:
     doc = await db.shortlists.find_one_and_update(
         {"id": sl_id},
         {"$pull": {"worker_ids": worker_id}},
@@ -91,8 +87,7 @@ async def remove_worker(sl_id: str, worker_id: str, pin: str = Query(...)) -> Sh
 
 
 @router.get("/shortlists/{sl_id}/workers", response_model=list[Worker])
-async def shortlist_workers(sl_id: str, pin: str = Query(...)) -> list[Worker]:
-    await verify_pin(pin)
+async def shortlist_workers(sl_id: str) -> list[Worker]:
     sl = await db.shortlists.find_one({"id": sl_id}, {"_id": 0})
     if not sl:
         raise HTTPException(status_code=404, detail="Shortlist not found")
@@ -101,8 +96,7 @@ async def shortlist_workers(sl_id: str, pin: str = Query(...)) -> list[Worker]:
 
 
 @router.delete("/shortlists/{sl_id}", response_model=Ok)
-async def delete_shortlist(sl_id: str, pin: str = Query(...)) -> Ok:
-    await verify_pin(pin)
+async def delete_shortlist(sl_id: str) -> Ok:
     res = await db.shortlists.delete_one({"id": sl_id})
     if res.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Shortlist not found")
@@ -124,8 +118,7 @@ SHORTLIST_COLUMNS = [
 
 
 @router.get("/shortlists/{sl_id}/export.csv")
-async def export_shortlist(sl_id: str, pin: str = Query(...)) -> StreamingResponse:
-    await verify_pin(pin)
+async def export_shortlist(sl_id: str) -> StreamingResponse:
     sl = await db.shortlists.find_one({"id": sl_id}, {"_id": 0})
     if not sl:
         raise HTTPException(status_code=404, detail="Shortlist not found")
@@ -148,9 +141,8 @@ async def export_shortlist(sl_id: str, pin: str = Query(...)) -> StreamingRespon
 
 # ---------- job matching (alerts) ----------
 @router.get("/jobs/{job_id}/matches", response_model=list[Worker])
-async def job_matches(job_id: str, pin: str = Query(...)) -> list[Worker]:
+async def job_matches(job_id: str) -> list[Worker]:
     """Candidates whose skill category matches the job, ranked location-first."""
-    await verify_pin(pin)
     job = await db.jobs.find_one({"id": job_id}, {"_id": 0})
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -173,9 +165,8 @@ async def job_matches(job_id: str, pin: str = Query(...)) -> list[Worker]:
 
 # ---------- traffic history ----------
 @router.get("/traffic/daily", response_model=list[DayPoint])
-async def traffic_daily(pin: str = Query(...), days: int = Query(30, ge=1, le=90)) -> list[DayPoint]:
+async def traffic_daily(days: int = Query(30, ge=1, le=90)) -> list[DayPoint]:
     """One point per day for the last `days` days, zero-filled. Anchored server-side (UTC)."""
-    await verify_pin(pin)
     start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(
         days=days - 1
     )

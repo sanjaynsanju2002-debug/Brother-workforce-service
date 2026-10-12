@@ -34,36 +34,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { apiDelete, apiGet, apiPatch, apiPost } from "@/lib/api";
+import { ApiError, apiDelete, apiGet, apiPatch, apiPost, apiPut } from "@/lib/api";
 import { BRAND, SKILL_CATEGORIES } from "@/lib/brand";
-import type { AdminStats, CompanyRequest, Job, JobCreate, Ok, Shortlist, TrafficStats, Worker, WorkerFilters } from "@/types";
+import type { AdminStats, CompanyRequest, EnquiryAging, Job, JobApplicationCount, JobCreate, Ok, Shortlist, TrafficStats, Worker, WorkerFilters } from "@/types";
 
 const EMPTY_FILTERS = { skill_category: "", location: "", availability: "", status: "", q: "" };
 
 const WORKER_STATUS = ["New", "Contacted", "Deployed", "Archived"];
 const REQUEST_STATUS = ["Pending", "Quote Sent", "In Progress", "Closed"];
-const ADMIN_SESSION_KEY = "bws_admin_pin";
-
-function readAdminSession(): string | null {
-  try {
-    return window.sessionStorage.getItem(ADMIN_SESSION_KEY);
-  } catch {
-    return null;
-  }
-}
-
-function writeAdminSession(pin: string | null) {
-  try {
-    if (pin) window.sessionStorage.setItem(ADMIN_SESSION_KEY, pin);
-    else window.sessionStorage.removeItem(ADMIN_SESSION_KEY);
-  } catch {
-    // The admin portal still works if browser storage is unavailable.
-  }
-}
-
-
-
-
 export default function Admin() {
   useEffect(() => {
     const previousTitle = document.title;
@@ -90,19 +68,32 @@ export default function Admin() {
   }, []);
 
   const [pin, setPin] = useState("");
-  const [authPin, setAuthPin] = useState<string | null>(() => readAdminSession());
-
-  const login = useMutation({
-    mutationFn: (p: string) => apiPost<Ok>(`/admin/login?pin=${encodeURIComponent(p)}`),
-    onSuccess: (_d, p) => {
-      writeAdminSession(p);
-      setAuthPin(p);
-      toast.success("Signed in");
-    },
-    onError: () => toast.error("Invalid PIN"),
+  const [authenticated, setAuthenticated] = useState(false);
+  const [loggedOut, setLoggedOut] = useState(false);
+  const qc = useQueryClient();
+  const session = useQuery({
+    queryKey: ["admin-me"],
+    queryFn: () => apiGet<Ok>("/admin/me"),
+    retry: false,
   });
 
-  if (!authPin) {
+  const login = useMutation({
+    mutationFn: (p: string) => apiPost<Ok>("/admin/login", { pin: p }),
+    onSuccess: () => {
+      setPin("");
+      qc.clear();
+      setLoggedOut(false);
+      setAuthenticated(true);
+      toast.success("Signed in");
+    },
+    onError: (error) => toast.error(error instanceof ApiError && error.status === 429 ? "Too many attempts. Try again in 15 minutes." : "Invalid PIN"),
+  });
+
+  if (session.isPending && !authenticated) {
+    return <div className="flex min-h-screen items-center justify-center bg-[#0F2444] text-white"><Loader2 className="h-7 w-7 animate-spin" /></div>;
+  }
+
+  if (!authenticated && (loggedOut || !session.isSuccess)) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#0F2444] px-6">
         <Card className="w-full max-w-sm border-slate-200 bg-white" data-testid="admin-login-card">
@@ -148,14 +139,18 @@ export default function Admin() {
 
   return (
     <Dashboard
-      pin={authPin}
-      onLogout={() => {
-        writeAdminSession(null);
-        setAuthPin(null);
+      pin="session"
+      onLogout={async () => {
+        try { await apiPost<Ok>("/admin/logout"); } finally {
+          qc.clear();
+          setLoggedOut(true);
+          setAuthenticated(false);
+        }
       }}
-      onPinChanged={(nextPin) => {
-        writeAdminSession(nextPin);
-        setAuthPin(nextPin);
+      onPinChanged={() => {
+        qc.clear();
+        setLoggedOut(true);
+        setAuthenticated(false);
       }}
     />
   );
@@ -168,10 +163,10 @@ function Dashboard({
 }: {
   pin: string;
   onLogout: () => void;
-  onPinChanged: (p: string) => void;
+  onPinChanged: () => void;
 }) {
   const qc = useQueryClient();
-  const q = `?pin=${encodeURIComponent(pin)}`;
+  const q = "";
   const [filters, setFilters] = useState(EMPTY_FILTERS);
   const [matchJobId, setMatchJobId] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -200,7 +195,7 @@ function Dashboard({
   const workers = useQuery({
     queryKey: ["admin-workers", pin, filters],
     queryFn: () => {
-      const p = new URLSearchParams({ pin });
+      const p = new URLSearchParams();
       if (filters.skill_category) p.set("skill_category", filters.skill_category);
       if (filters.location) p.set("location", filters.location);
       if (filters.availability) p.set("availability", filters.availability);
@@ -218,10 +213,19 @@ function Dashboard({
     queryFn: () => apiGet<CompanyRequest[]>(`/admin/company-requests${q}`),
   });
   const jobs = useQuery({ queryKey: ["admin-jobs", pin], queryFn: () => apiGet<Job[]>(`/admin/jobs${q}`) });
+  const applicationsByJob = useQuery({
+    queryKey: ["admin-job-applications", pin],
+    queryFn: () => apiGet<JobApplicationCount[]>("/admin/job-applications"),
+  });
+  const enquiryAging = useQuery({
+    queryKey: ["admin-enquiry-aging", pin],
+    queryFn: () => apiGet<EnquiryAging>("/admin/enquiry-aging"),
+  });
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ["admin-stats", pin] });
     qc.invalidateQueries({ queryKey: ["admin-jobs", pin] });
+    qc.invalidateQueries({ queryKey: ["admin-job-applications", pin] });
     qc.invalidateQueries({ queryKey: ["jobs"] });
   };
 
@@ -240,6 +244,7 @@ function Dashboard({
       qc.invalidateQueries({ queryKey: ["admin-workers", pin] });
       qc.invalidateQueries({ queryKey: ["admin-worker-filters", pin] });
       qc.invalidateQueries({ queryKey: ["admin-stats", pin] });
+      qc.invalidateQueries({ queryKey: ["admin-job-applications", pin] });
       qc.invalidateQueries({ queryKey: ["admin-traffic", pin] });
       qc.invalidateQueries({ queryKey: ["admin-shortlists", pin] });
       qc.invalidateQueries({ queryKey: ["shortlist-members", pin] });
@@ -254,6 +259,7 @@ function Dashboard({
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-requests", pin] });
       qc.invalidateQueries({ queryKey: ["admin-stats", pin] });
+      qc.invalidateQueries({ queryKey: ["admin-enquiry-aging", pin] });
       toast.success("Status updated");
     },
   });
@@ -290,6 +296,17 @@ function Dashboard({
     shift: "",
     openings: 1,
     description: "",
+  });
+  const [editingJobId, setEditingJobId] = useState<string | null>(null);
+  const editJob = useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: JobCreate }) => apiPut<Job>(`/admin/jobs/${id}`, payload),
+    onSuccess: () => {
+      invalidate();
+      setEditingJobId(null);
+      setJob({ title: "", location: "", skill_category: "Skilled", experience: "", salary: "", shift: "", openings: 1, description: "" });
+      toast.success("Job updated");
+    },
+    onError: () => toast.error("Could not update job"),
   });
 
   const s = stats.data;
@@ -387,6 +404,26 @@ function Dashboard({
               </div>
 
               <TrafficChart pin={pin} />
+              <div className="mt-6 grid gap-4 md:grid-cols-2" data-testid="admin-action-metrics">
+                <div className="rounded-lg border border-slate-200 bg-white p-5">
+                  <h2 className="font-semibold text-[#0F2444]">Pending enquiry follow-up</h2>
+                  <p className="mt-3 text-3xl font-bold text-[#EA580C]">{enquiryAging.data?.older_than_2_days ?? 0}</p>
+                  <p className="text-sm text-slate-600">Pending for more than 2 days</p>
+                  <p className="mt-2 text-xs text-slate-500">{enquiryAging.data?.pending_total ?? 0} pending total · oldest {enquiryAging.data?.oldest_days ?? 0} days</p>
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-white p-5">
+                  <h2 className="font-semibold text-[#0F2444]">Applications by job</h2>
+                  <div className="mt-3 max-h-44 space-y-2 overflow-auto text-sm">
+                    {(applicationsByJob.data ?? []).length === 0 && <p className="text-slate-500">No posted jobs yet.</p>}
+                    {(applicationsByJob.data ?? []).map((item) => (
+                      <div key={item.job_id} className="flex justify-between gap-4 border-b pb-2">
+                        <span className="truncate">{item.title}</span><strong>{item.applications}</strong>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="mt-2 text-xs text-slate-500">Counts applications linked to each listed role; general registrations are separate.</p>
+                </div>
+              </div>
 
               {s && !s.email_configured && (
                 <div
@@ -471,6 +508,7 @@ function Dashboard({
                     <TableRow>
                       <TableHead>Name</TableHead>
                       <TableHead>Mobile</TableHead>
+                      <TableHead>Applied For</TableHead>
                       <TableHead>Category</TableHead>
                       <TableHead>Location</TableHead>
                       <TableHead>Resume</TableHead>
@@ -481,7 +519,7 @@ function Dashboard({
                   <TableBody>
                     {(workers.data ?? []).length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={7} className="py-10 text-center text-slate-500">
+                        <TableCell colSpan={8} className="py-10 text-center text-slate-500">
                           No worker applications yet.
                         </TableCell>
                       </TableRow>
@@ -490,6 +528,7 @@ function Dashboard({
                       <TableRow key={w.id} data-testid={`admin-worker-row-${w.id}`}>
                         <TableCell className="font-medium text-[#0F2444]">{w.full_name}</TableCell>
                         <TableCell>{w.mobile}</TableCell>
+                        <TableCell>{w.job_title || "General registration"}</TableCell>
                         <TableCell>{w.skill_category}</TableCell>
                         <TableCell>{w.current_location}</TableCell>
                         <TableCell>
@@ -668,7 +707,7 @@ function Dashboard({
           <TabsContent value="jobs" className="mt-6 grid gap-6 lg:grid-cols-[1fr_1.4fr]">
             <Card className="border-slate-200 bg-white">
               <CardContent className="p-4 sm:p-6">
-                <h3 className="mb-4 text-lg font-semibold text-[#0F2444]">Post a New Job</h3>
+                <h3 className="mb-4 text-lg font-semibold text-[#0F2444]">{editingJobId ? "Edit Job" : "Post a New Job"}</h3>
                 <form
                   className="space-y-3"
                   data-testid="admin-job-form"
@@ -680,6 +719,10 @@ function Dashboard({
                     }
                     if (!Number.isInteger(job.openings) || job.openings < 1) {
                       toast.error("Enter at least 1 opening");
+                      return;
+                    }
+                    if (editingJobId) {
+                      editJob.mutate({ id: editingJobId, payload: job });
                       return;
                     }
                     createJob.mutate(job, {
@@ -773,12 +816,18 @@ function Dashboard({
                   />
                   <Button
                     type="submit"
-                    disabled={createJob.isPending}
+                    disabled={createJob.isPending || editJob.isPending}
                     className="w-full bg-[#EA580C] text-white hover:bg-[#C2410C]"
                     data-testid="admin-job-submit"
                   >
-                    <Plus className="mr-2 h-4 w-4" /> Post Job
+                    <Plus className="mr-2 h-4 w-4" /> {editingJobId ? "Save Changes" : "Post Job"}
                   </Button>
+                  {editingJobId && (
+                    <Button type="button" variant="outline" className="w-full" onClick={() => {
+                      setEditingJobId(null);
+                      setJob({ title: "", location: "", skill_category: "Skilled", experience: "", salary: "", shift: "", openings: 1, description: "" });
+                    }}>Cancel edit</Button>
+                  )}
                 </form>
               </CardContent>
             </Card>
@@ -815,6 +864,11 @@ function Dashboard({
                         </TableCell>
                         <TableCell>
                           <div className="flex flex-wrap gap-2">
+                            <Button size="xs" variant="outline" onClick={() => {
+                              setEditingJobId(j.id);
+                              setJob({ title: j.title, location: j.location, skill_category: j.skill_category, experience: j.experience ?? "", salary: j.salary ?? "", shift: j.shift ?? "", openings: j.openings, description: j.description ?? "" });
+                            }} data-testid={`admin-job-edit-${j.id}`}>Edit</Button>
+                            <Link to={`/jobs/${j.id}`} target="_blank" className="inline-flex items-center rounded-md border border-slate-200 px-2.5 text-xs font-medium">View</Link>
                             <Button
                               size="xs"
                               variant="outline"
