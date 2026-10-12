@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import Navbar from "@/components/site/Navbar";
 import Footer from "@/components/site/Footer";
+import BusinessChat from "@/components/site/BusinessChat";
 import WorkerForm from "@/components/site/WorkerForm";
 import CompanyForm from "@/components/site/CompanyForm";
 import { Badge } from "@/components/ui/badge";
@@ -739,6 +740,7 @@ export default function Home() {
       </Section>
 
       <Footer />
+      <BusinessChat jobs={jobsQuery.data ?? null} />
     </div>
   );
 }
