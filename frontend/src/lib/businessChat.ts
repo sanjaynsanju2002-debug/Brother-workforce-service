@@ -1,5 +1,5 @@
 import { BRAND, INDUSTRIES } from "@/lib/brand";
-import type { Job } from "@/types";
+import type { Client, Job } from "@/types";
 
 export type ChatAction = { label: string; href: string };
 export type ChatAnswer = { text: string; actions?: ChatAction[] };
@@ -16,7 +16,7 @@ function mentions(question: string, ...terms: string[]) {
 }
 
 /** Answers use only approved website facts. No visitor message is sent to a server. */
-export function getBusinessAnswer(rawQuestion: string, jobs: Job[] | null): ChatAnswer {
+export function getBusinessAnswer(rawQuestion: string, jobs: Job[] | null, clients: Client[] | null = null): ChatAnswer {
   const q = rawQuestion.toLowerCase().replace(/[^a-z0-9₹]+/g, " ").trim();
 
   if (mentions(q, "pin", "password", "admin", "login", "log in")) {
@@ -34,8 +34,14 @@ export function getBusinessAnswer(rawQuestion: string, jobs: Job[] | null): Chat
   }
 
   if (mentions(q, "fee", "charge", "cost", "price", "pricing", "rate", "quotation", "quote", "commission")) {
+    if (mentions(q, "candidate", "applicant", "job seeker", "job", "apply", "application")) {
+      return {
+        text: "Brothers Workforce Solutions does not request service charges from candidates for job placement. You can register through the worker form, or contact our team if you have a question about an opportunity.",
+        actions: [apply, whatsapp],
+      };
+    }
     return {
-      text: "Pricing and other commercial terms depend on the requirement. Please share the role, number of workers, shift and location with our team for a quote. For candidate service charges, please confirm the current policy with our workforce desk.",
+      text: "Pricing and other commercial terms for employers depend on the requirement. Please share the role, number of workers, shift and location with our team for a quote.",
       actions: [request, whatsapp],
     };
   }
@@ -100,6 +106,21 @@ export function getBusinessAnswer(rawQuestion: string, jobs: Job[] | null): Chat
     return {
       text: `Brothers Workforce Solutions is a licensed labour contractor, GST registered (GST ${BRAND.gst}), MSME registered, and supports ESIC employee coverage and EPF services for deployed workforce. Contact the team for any document or arrangement specific to your requirement.`,
       actions: [{ label: "Compliance details", href: "#compliance" }, contact],
+    };
+  }
+
+  if (mentions(q, "client", "customers", "partner companies", "companies you work with", "who do you work with")) {
+    const publicClients = clients?.filter((client) => client.visible && !/could be here/i.test(client.name)) ?? [];
+    if (publicClients.length > 0) {
+      const names = publicClients.slice(0, 5).map((client) => client.name).join(", ");
+      return {
+        text: `Businesses featured on our website include ${names}${publicClients.length > 5 ? " and others" : ""}. Please see the clients section for the currently published list.`,
+        actions: [{ label: "Businesses we support", href: "#clients" }, request],
+      };
+    }
+    return {
+      text: "Please see the businesses we support on this page, or contact our team for an example relevant to your industry.",
+      actions: [{ label: "Businesses we support", href: "#clients" }, contact],
     };
   }
 

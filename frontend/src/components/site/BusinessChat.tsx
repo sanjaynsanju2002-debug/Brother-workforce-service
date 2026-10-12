@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ArrowUp, MessageCircle, X } from "lucide-react";
 import { BRAND } from "@/lib/brand";
 import { getBusinessAnswer, type ChatAnswer } from "@/lib/businessChat";
-import type { Job } from "@/types";
+import type { Client, Job } from "@/types";
 
 type ChatMessage = {
   id: number;
@@ -13,7 +13,7 @@ type ChatMessage = {
 
 const STARTERS = ["What services do you offer?", "How do I apply for a job?", "I need workers", "Contact details"];
 
-export default function BusinessChat({ jobs }: { jobs: Job[] | null }) {
+export default function BusinessChat({ jobs, clients }: { jobs: Job[] | null; clients: Client[] | null }) {
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([
@@ -44,7 +44,7 @@ export default function BusinessChat({ jobs }: { jobs: Job[] | null }) {
   const ask = (value: string) => {
     const question = value.trim();
     if (!question) return;
-    const answer = getBusinessAnswer(question, jobs);
+    const answer = getBusinessAnswer(question, jobs, clients);
     setMessages((previous) => [
       ...previous,
       { id: nextId.current++, from: "visitor", text: question },
