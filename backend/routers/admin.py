@@ -8,6 +8,7 @@ import re
 import zipfile
 
 import boto3
+from bson.binary import Binary
 
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -248,6 +249,7 @@ async def import_talents(file: UploadFile = File(...), pin: str = Query(...)) ->
 
     client = _r2_client()
     imported = 0
+    attached = 0
     skipped = 0
     errors: list[str] = []
     seen: list[tuple[str, str, str]] = []
@@ -287,7 +289,6 @@ async def import_talents(file: UploadFile = File(...), pin: str = Query(...)) ->
             skipped += 1
             continue
 
-        # Match both formatted phone numbers and case variations in names.
         name_pattern = r"^\s*" + r"\s+".join(re.escape(part) for part in full_name.split()) + r"\s*$"
         clauses = [{"full_name": {"$regex": name_pattern, "$options": "i"}}]
         if len(mobile_key) == 10:
@@ -295,33 +296,42 @@ async def import_talents(file: UploadFile = File(...), pin: str = Query(...)) ->
             clauses.append({"mobile": {"$regex": tail_pattern}})
         candidates = await db.workers.find(
             {"$or": clauses},
-            {"full_name": 1, "mobile": 1, "current_location": 1},
+            {"id": 1, "full_name": 1, "mobile": 1, "current_location": 1, "resume_filename": 1},
         ).to_list(500)
-        if any(same_candidate(name_key, mobile_key, location_key, candidate) for candidate in candidates):
+        existing = next(
+            (candidate for candidate in candidates if same_candidate(name_key, mobile_key, location_key, candidate)),
+            None,
+        )
+        resume_file = value(row, "resume_file")
+        if existing and (existing.get("resume_filename") or not resume_file):
             skipped += 1
             continue
 
-        payload = WorkerCreate(
-            full_name=full_name,
-            mobile=mobile,
-            email=value(row, "email") or None,
-            whatsapp=value(row, "whatsapp") or None,
-            age=value(row, "age") or None,
-            gender=value(row, "gender") or None,
-            current_location=location,
-            education=value(row, "education") or None,
-            experience=value(row, "experience") or None,
-            skill_category=value(row, "skill_category") or "General Worker",
-            skills=value(row, "skills") or None,
-            previous_experience=value(row, "previous_experience") or None,
-            preferred_location=value(row, "preferred_location") or None,
-            expected_salary=value(row, "expected_salary") or None,
-            availability=value(row, "availability") or None,
-        )
-        talent = Worker(**payload.model_dump(), source="Talent Bank", status=value(row, "status") or "Available")
-        doc = talent.model_dump()
+        doc = None
+        if existing:
+            talent_id = existing["id"]
+        else:
+            payload = WorkerCreate(
+                full_name=full_name,
+                mobile=mobile,
+                email=value(row, "email") or None,
+                whatsapp=value(row, "whatsapp") or None,
+                age=value(row, "age") or None,
+                gender=value(row, "gender") or None,
+                current_location=location,
+                education=value(row, "education") or None,
+                experience=value(row, "experience") or None,
+                skill_category=value(row, "skill_category") or "General Worker",
+                skills=value(row, "skills") or None,
+                previous_experience=value(row, "previous_experience") or None,
+                preferred_location=value(row, "preferred_location") or None,
+                expected_salary=value(row, "expected_salary") or None,
+                availability=value(row, "availability") or None,
+            )
+            talent = Worker(**payload.model_dump(), source="Talent Bank", status=value(row, "status") or "Available")
+            talent_id = talent.id
+            doc = talent.model_dump()
 
-        resume_file = value(row, "resume_file")
         if resume_file:
             if resume_file not in names:
                 errors.append(f"Row {index} ({full_name}): resume file not found: {resume_file}")
@@ -334,33 +344,68 @@ async def import_talents(file: UploadFile = File(...), pin: str = Query(...)) ->
             if ext not in {".pdf", ".doc", ".docx", ".png", ".jpg", ".jpeg"}:
                 errors.append(f"Row {index} ({full_name}): unsupported resume type {ext}")
                 continue
-            if not client:
-                errors.append(f"Row {index} ({full_name}): Cloudflare R2 storage is not configured")
-                continue
 
+            resume_bytes = archive.read(resume_file)
             safe = re.sub(r"[^A-Za-z0-9._-]", "_", os.path.basename(resume_file))
-            object_key = f"resumes/{talent.id}/{safe}"
-            try:
-                client.put_object(
-                    Bucket=R2_BUCKET,
-                    Key=object_key,
-                    Body=archive.read(resume_file),
-                    ContentType=mimetypes.guess_type(safe)[0] or "application/octet-stream",
-                )
-                doc["resume_filename"] = safe
-                doc["resume_object_key"] = object_key
-            except Exception as exc:
-                detail = str(exc).replace("\n", " ")[:180]
-                errors.append(
-                    f"Row {index} ({full_name}): resume storage error - {type(exc).__name__}: {detail}"
-                )
-                continue
+            content_type = mimetypes.guess_type(safe)[0] or "application/octet-stream"
+            object_key = f"resumes/{talent_id}/{safe}"
+            stored_in_r2 = False
+            if client:
+                try:
+                    client.put_object(
+                        Bucket=R2_BUCKET,
+                        Key=object_key,
+                        Body=resume_bytes,
+                        ContentType=content_type,
+                    )
+                    stored_in_r2 = True
+                except Exception:
+                    # Match the public resume endpoint's persistent MongoDB fallback.
+                    pass
 
-        await db.workers.insert_one(doc)
-        imported += 1
+            if stored_in_r2:
+                resume_update = {
+                    "resume_filename": safe,
+                    "resume_object_key": object_key,
+                    "resume_storage": "r2",
+                }
+                if existing:
+                    await db.workers.update_one({"id": talent_id}, {"$set": resume_update})
+                else:
+                    doc.update(resume_update)
+            else:
+                try:
+                    await db.resume_files.update_one(
+                        {"worker_id": talent_id},
+                        {"$set": {
+                            "worker_id": talent_id,
+                            "filename": safe,
+                            "content_type": content_type,
+                            "data": Binary(resume_bytes),
+                            "updated_at": datetime.now(timezone.utc),
+                        }},
+                        upsert=True,
+                    )
+                    resume_update = {"resume_filename": safe, "resume_storage": "mongo"}
+                    if existing:
+                        await db.workers.update_one(
+                            {"id": talent_id},
+                            {"$set": resume_update, "$unset": {"resume_object_key": ""}},
+                        )
+                    else:
+                        doc.update(resume_update)
+                except Exception as exc:
+                    errors.append(f"Row {index} ({full_name}): resume storage failed ({type(exc).__name__})")
+                    continue
+
+        if existing:
+            attached += 1
+        else:
+            await db.workers.insert_one(doc)
+            imported += 1
         seen.append((name_key, mobile_key, location_key))
 
-    return {"ok": True, "imported": imported, "skipped": skipped, "errors": errors}
+    return {"ok": True, "imported": imported, "attached": attached, "skipped": skipped, "errors": errors}
 
 
 @router.delete("/talents/{worker_id}", response_model=Ok)
