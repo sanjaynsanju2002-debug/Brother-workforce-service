@@ -326,8 +326,7 @@ function Dashboard({
             <div id="admin-sidebar-menu" className={`${sidebarOpen ? "block" : "hidden"} mt-2 lg:mt-0 lg:block`}>
               <p className="mb-2 hidden px-3 text-xs font-bold uppercase tracking-widest text-slate-500 lg:block">Dashboard</p>
               <TabsList className="flex h-auto w-full flex-col items-stretch gap-1 rounded-xl border border-slate-200 bg-white p-2 shadow-sm group-data-vertical/tabs:h-auto" data-testid="admin-sidebar" onClick={() => setSidebarOpen(false)}>
-                <TabsTrigger value="overview" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-overview">Overview Graph</TabsTrigger>
-                <TabsTrigger value="statistics" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-statistics">Statistics</TabsTrigger>
+                <TabsTrigger value="overview" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-overview">Overview</TabsTrigger>
                 <TabsTrigger value="workers" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-workers">Worker Applications</TabsTrigger>
                 <TabsTrigger value="talents" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-talents">Talent Bank</TabsTrigger>
                 <TabsTrigger value="workforce" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-workforce">Company Workforce</TabsTrigger>
@@ -342,63 +341,66 @@ function Dashboard({
           </aside>
           <div className="min-w-0">
             <TabsContent value="overview" className="mt-0">
+              <div className="mb-5">
+                <h1 className="text-2xl font-bold text-[#0F2444]">Overview</h1>
+                <p className="mt-1 text-sm text-slate-500">Key totals and website activity in one place.</p>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4" data-testid="admin-stats">
+                <Stat icon={Users} label="Worker Applications" value={s?.workers ?? 0} testid="stat-workers" />
+                <Stat icon={FileText} label="Company Enquiries" value={s?.requests ?? 0} testid="stat-requests" />
+                <Stat icon={FileText} label="Pending Enquiries" value={s?.open_requests ?? 0} testid="stat-open-requests" />
+                <Stat icon={Briefcase} label="Active Jobs" value={s?.active_jobs ?? 0} testid="stat-active-jobs" />
+              </div>
+
+              <div className="mt-6 rounded-lg border border-slate-200 bg-white p-4 sm:p-6" data-testid="admin-traffic">
+                <h2 className="flex items-center gap-2 text-base font-semibold text-[#0F2444]">
+                  <TrendingUp className="h-4 w-4 text-[#EA580C]" /> Website Activity
+                </h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  Anonymous visit counts — one per visitor session. No personal data is tracked.
+                </p>
+                <div className="mt-5 grid gap-4 sm:grid-cols-3">
+                  <Funnel
+                    icon={Eye}
+                    label="People Visited"
+                    total={t?.visits_total ?? 0}
+                    today={t?.visits_today ?? 0}
+                    week={t?.visits_week}
+                    testid="funnel-visits"
+                  />
+                  <Funnel
+                    icon={Users}
+                    label="Applied for Jobs"
+                    total={t?.workers_total ?? 0}
+                    today={t?.workers_today ?? 0}
+                    testid="funnel-applications"
+                  />
+                  <Funnel
+                    icon={Building2}
+                    label="Requested Manpower"
+                    total={t?.requests_total ?? 0}
+                    today={t?.requests_today ?? 0}
+                    testid="funnel-requests"
+                  />
+                </div>
+              </div>
+
               <TrafficChart pin={pin} />
-            </TabsContent>
-            <TabsContent value="statistics" className="mt-0">
-<div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4" data-testid="admin-stats">
-          <Stat icon={Users} label="Worker Applications" value={s?.workers ?? 0} testid="stat-workers" />
-          <Stat icon={FileText} label="Company Enquiries" value={s?.requests ?? 0} testid="stat-requests" />
-          <Stat icon={FileText} label="Pending Enquiries" value={s?.open_requests ?? 0} testid="stat-open-requests" />
-          <Stat icon={Briefcase} label="Active Jobs" value={s?.active_jobs ?? 0} testid="stat-active-jobs" />
-        </div>
 
-        {/* Website traffic + conversion funnel */}
-        <div className="mt-6 rounded-lg border border-slate-200 bg-white p-4 sm:p-6" data-testid="admin-traffic">
-          <h2 className="flex items-center gap-2 text-base font-semibold text-[#0F2444]">
-            <TrendingUp className="h-4 w-4 text-[#EA580C]" /> Website Activity
-          </h2>
-          <p className="mt-1 text-sm text-slate-500">
-            Anonymous visit counts — one per visitor session. No personal data is tracked.
-          </p>
-          <div className="mt-5 grid gap-4 sm:grid-cols-3">
-            <Funnel
-              icon={Eye}
-              label="People Visited"
-              total={t?.visits_total ?? 0}
-              today={t?.visits_today ?? 0}
-              week={t?.visits_week}
-              testid="funnel-visits"
-            />
-            <Funnel
-              icon={Users}
-              label="Applied for Jobs"
-              total={t?.workers_total ?? 0}
-              today={t?.workers_today ?? 0}
-              testid="funnel-applications"
-            />
-            <Funnel
-              icon={Building2}
-              label="Requested Manpower"
-              total={t?.requests_total ?? 0}
-              today={t?.requests_today ?? 0}
-              testid="funnel-requests"
-            />
-          </div>
-        </div>
-
-        {s && !s.email_configured && (
-          <div
-            className="mt-4 flex items-start gap-3 rounded-md border border-amber-200 bg-amber-50 p-4"
-            data-testid="admin-email-warning"
-          >
-            <MailWarning className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
-            <div className="text-sm text-amber-900">
-              <strong>Email alerts are not active yet.</strong> Submissions are still saved and shown here.
-              Add your Resend API key as <code className="rounded bg-amber-100 px-1">RESEND_API_KEY</code> in
-              the backend environment, then use the <strong>Email Settings</strong> tab to send a test.
-            </div>
-          </div>
-        )}
+              {s && !s.email_configured && (
+                <div
+                  className="mt-4 flex items-start gap-3 rounded-md border border-amber-200 bg-amber-50 p-4"
+                  data-testid="admin-email-warning"
+                >
+                  <MailWarning className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+                  <div className="text-sm text-amber-900">
+                    <strong>Email alerts are not active yet.</strong> Submissions are still saved and shown here.
+                    Add your Resend API key as <code className="rounded bg-amber-100 px-1">RESEND_API_KEY</code> in
+                    the backend environment, then use the <strong>Email Settings</strong> tab to send a test.
+                  </div>
+                </div>
+              )}
             </TabsContent>
           <TabsContent value="workers" className="mt-6">
             <div className="mb-4 rounded-lg border border-slate-200 bg-white p-4" data-testid="worker-filters">
