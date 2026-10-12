@@ -58,7 +58,7 @@ export default function Footer() {
             </li>
           </ul>
           <p className="mt-4 text-xs text-slate-500">GST No: {BRAND.gst}</p>
-          {BRAND.labourLicenceNumber && <p className="mt-1 text-xs text-slate-500">Labour Licence No: {BRAND.labourLicenceNumber}</p>}
+          <p className="mt-1 text-xs text-slate-500">Establishment Reg. No: {BRAND.establishmentRegistrationNumber}</p>
         </div>
       </div>
       <div className="border-t border-slate-800 py-5 text-center text-xs text-slate-500">
