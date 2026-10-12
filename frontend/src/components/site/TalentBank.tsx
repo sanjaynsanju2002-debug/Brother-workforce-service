@@ -30,6 +30,7 @@ import type { Ok, Worker, WorkerCreate } from "@/types";
 type TalentImportResult = {
   ok: boolean;
   imported: number;
+  attached: number;
   skipped: number;
   errors: string[];
 };
@@ -133,7 +134,7 @@ export default function TalentBank({ pin }: { pin: string }) {
       qc.invalidateQueries({ queryKey: ["admin-talents", pin] });
       setImportZip(null);
       if (importInputRef.current) importInputRef.current.value = "";
-      const summary = `${result.imported} imported${result.skipped ? `, ${result.skipped} skipped` : ""}`;
+      const summary = `${result.imported} new, ${result.attached} resumes added${result.skipped ? `, ${result.skipped} skipped` : ""}`;
       if (result.errors.length) {
         toast.warning(`${summary}. ${result.errors.length} row(s) need attention.`);
       } else {
@@ -359,12 +360,12 @@ export default function TalentBank({ pin }: { pin: string }) {
         <CardContent className="p-4 sm:p-6">
           <h3 className="text-base font-semibold text-[#0F2444]">Bulk Import Talents</h3>
           <p className="mt-1 text-sm text-slate-500">
-            Upload a prepared ZIP package containing talents.csv and the matching resume files. Existing candidates are skipped.
+            Upload a prepared ZIP package containing talents.csv and the matching resume files. Existing candidates with a resume are skipped; missing resumes are added to their existing profiles.
           </p>
           {lastImport && (
             <div className={`mt-4 rounded-md border p-3 text-sm ${lastImport.errors.length ? "border-amber-300 bg-amber-50 text-amber-900" : "border-emerald-300 bg-emerald-50 text-emerald-900"}`}>
               <div className="font-semibold">
-                {lastImport.imported} imported{lastImport.skipped ? `, ${lastImport.skipped} skipped` : ""}.
+                {lastImport.imported} new, {lastImport.attached} resumes added{lastImport.skipped ? `, ${lastImport.skipped} skipped` : ""}.
               </div>
               {lastImport.errors.length > 0 && (
                 <div className="mt-2">
