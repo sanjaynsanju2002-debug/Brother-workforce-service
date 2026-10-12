@@ -72,12 +72,20 @@ export default function TalentBank({ pin }: { pin: string }) {
   const [resume, setResume] = useState<File | null>(null);
   const [importZip, setImportZip] = useState<File | null>(null);
   const [lastImport, setLastImport] = useState<TalentImportResult | null>(null);
+  const [regionQuery, setRegionQuery] = useState("");
   const importInputRef = useRef<HTMLInputElement>(null);
 
   const talents = useQuery({
     queryKey: ["admin-talents", pin],
     queryFn: () => apiGet<Worker[]>(`/admin/talents${q}`),
   });
+
+  const normalizedRegion = regionQuery.trim().toLocaleLowerCase();
+  const filteredTalents = (talents.data ?? []).filter((talent) =>
+    `${talent.current_location} ${talent.preferred_location ?? ""}`
+      .toLocaleLowerCase()
+      .includes(normalizedRegion),
+  );
 
   const createTalent = useMutation({
     mutationFn: async () => {
@@ -124,6 +132,7 @@ export default function TalentBank({ pin }: { pin: string }) {
       setLastImport(result);
       qc.invalidateQueries({ queryKey: ["admin-talents", pin] });
       setImportZip(null);
+      if (importInputRef.current) importInputRef.current.value = "";
       const summary = `${result.imported} imported${result.skipped ? `, ${result.skipped} skipped` : ""}`;
       if (result.errors.length) {
         toast.warning(`${summary}. ${result.errors.length} row(s) need attention.`);
@@ -350,7 +359,7 @@ export default function TalentBank({ pin }: { pin: string }) {
         <CardContent className="p-4 sm:p-6">
           <h3 className="text-base font-semibold text-[#0F2444]">Bulk Import Talents</h3>
           <p className="mt-1 text-sm text-slate-500">
-            Upload a prepared ZIP package containing talents.csv and the matching resume files.
+            Upload a prepared ZIP package containing talents.csv and the matching resume files. Existing candidates are skipped.
           </p>
           {lastImport && (
             <div className={`mt-4 rounded-md border p-3 text-sm ${lastImport.errors.length ? "border-amber-300 bg-amber-50 text-amber-900" : "border-emerald-300 bg-emerald-50 text-emerald-900"}`}>
@@ -420,6 +429,20 @@ export default function TalentBank({ pin }: { pin: string }) {
         </a>
       </div>
 
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
+        <Label htmlFor="talent-region" className="text-sm font-medium text-[#0F2444]">Filter by region</Label>
+        <Input
+          id="talent-region"
+          className="w-full sm:max-w-xs"
+          placeholder="City, district or state"
+          value={regionQuery}
+          onChange={(e) => setRegionQuery(e.target.value)}
+        />
+        <span className="text-sm text-slate-500">
+          Showing {filteredTalents.length} of {talents.data?.length ?? 0} candidates
+        </span>
+      </div>
+
       <Card className="border-slate-200 bg-white">
         <CardContent className="p-0">
           <Table className="min-w-[900px]">
@@ -449,7 +472,14 @@ export default function TalentBank({ pin }: { pin: string }) {
                   </TableCell>
                 </TableRow>
               )}
-              {(talents.data ?? []).map((talent) => (
+              {!talents.isLoading && (talents.data ?? []).length > 0 && filteredTalents.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={7} className="py-10 text-center text-slate-500">
+                    No candidates match this region.
+                  </TableCell>
+                </TableRow>
+              )}
+              {filteredTalents.map((talent) => (
                 <TableRow key={talent.id}>
                   <TableCell className="font-medium text-[#0F2444]">
                     {talent.full_name}
@@ -470,7 +500,12 @@ export default function TalentBank({ pin }: { pin: string }) {
                     {talent.skills || talent.skill_category}
                     <span className="block text-xs text-slate-500">{talent.skill_category}</span>
                   </TableCell>
-                  <TableCell>{talent.current_location}</TableCell>
+                  <TableCell>
+                    {talent.current_location}
+                    {talent.preferred_location && (
+                      <span className="block text-xs text-slate-500">Preferred: {talent.preferred_location}</span>
+                    )}
+                  </TableCell>
                   <TableCell>
                     <div className="flex flex-wrap items-center gap-2">
                       {talent.resume_filename ? (
