@@ -250,21 +250,56 @@ async def import_talents(file: UploadFile = File(...), pin: str = Query(...)) ->
     imported = 0
     skipped = 0
     errors: list[str] = []
+    seen: list[tuple[str, str, str]] = []
 
     def value(row: dict, key: str) -> str:
         return (row.get(key) or "").strip()
 
+    def normalize_mobile(mobile: str) -> str:
+        return re.sub(r"\D", "", mobile)[-10:]
+
+    def same_candidate(name: str, mobile: str, location: str, other: dict) -> bool:
+        other_mobile = normalize_mobile(other.get("mobile") or "")
+        if mobile and other_mobile:
+            return mobile == other_mobile
+        return (
+            name == " ".join((other.get("full_name") or "").casefold().split())
+            and location == " ".join((other.get("current_location") or "").casefold().split())
+        )
+
     for index, row in enumerate(rows, start=2):
         full_name = value(row, "full_name")
         mobile = value(row, "mobile")
+        location = value(row, "current_location") or "Not provided"
         if not full_name:
             errors.append(f"Row {index}: full_name is required")
             continue
 
-        duplicate_query = {"source": "Talent Bank", "full_name": full_name}
-        if mobile:
-            duplicate_query = {"source": "Talent Bank", "mobile": mobile}
-        existing = await db.workers.find_one(duplicate_query)
+        name_key = " ".join(full_name.casefold().split())
+        mobile_key = normalize_mobile(mobile)
+        location_key = " ".join(location.casefold().split())
+        if any(
+            same_candidate(name_key, mobile_key, location_key, {
+                "full_name": seen_name, "mobile": seen_mobile, "current_location": seen_location
+            })
+            for seen_name, seen_mobile, seen_location in seen
+        ):
+            skipped += 1
+            continue
+
+        # Match both formatted phone numbers and case variations in names.
+        name_pattern = r"^\s*" + r"\s+".join(re.escape(part) for part in full_name.split()) + r"\s*$"
+        clauses = [{"full_name": {"$regex": name_pattern, "$options": "i"}}]
+        if len(mobile_key) == 10:
+            tail_pattern = r"\D*".join(mobile_key[-6:]) + r"\D*$"
+            clauses.append({"mobile": {"$regex": tail_pattern}})
+        candidates = await db.workers.find(
+            {"$or": clauses},
+            {"full_name": 1, "mobile": 1, "current_location": 1},
+        ).to_list(500)
+        if any(same_candidate(name_key, mobile_key, location_key, candidate) for candidate in candidates):
+            skipped += 1
+            continue
 
         payload = WorkerCreate(
             full_name=full_name,
@@ -273,7 +308,7 @@ async def import_talents(file: UploadFile = File(...), pin: str = Query(...)) ->
             whatsapp=value(row, "whatsapp") or None,
             age=value(row, "age") or None,
             gender=value(row, "gender") or None,
-            current_location=value(row, "current_location") or "Not provided",
+            current_location=location,
             education=value(row, "education") or None,
             experience=value(row, "experience") or None,
             skill_category=value(row, "skill_category") or "General Worker",
@@ -283,62 +318,47 @@ async def import_talents(file: UploadFile = File(...), pin: str = Query(...)) ->
             expected_salary=value(row, "expected_salary") or None,
             availability=value(row, "availability") or None,
         )
-
-        if existing:
-            talent_id = existing["id"]
-            doc = existing
-        else:
-            talent = Worker(**payload.model_dump(), source="Talent Bank", status=value(row, "status") or "Available")
-            talent_id = talent.id
-            doc = talent.model_dump()
+        talent = Worker(**payload.model_dump(), source="Talent Bank", status=value(row, "status") or "Available")
+        doc = talent.model_dump()
 
         resume_file = value(row, "resume_file")
-        resume_uploaded = False
         if resume_file:
             if resume_file not in names:
                 errors.append(f"Row {index} ({full_name}): resume file not found: {resume_file}")
-            else:
-                resume_bytes = archive.read(resume_file)
-                ext = os.path.splitext(resume_file)[1].lower()
-                if len(resume_bytes) > 2 * 1024 * 1024:
-                    errors.append(f"Row {index} ({full_name}): resume is larger than 2 MB")
-                elif ext not in {".pdf", ".doc", ".docx", ".png", ".jpg", ".jpeg"}:
-                    errors.append(f"Row {index} ({full_name}): unsupported resume type {ext}")
-                elif not client:
-                    errors.append(f"Row {index} ({full_name}): Cloudflare R2 storage is not configured")
-                else:
-                    safe = re.sub(r"[^A-Za-z0-9._-]", "_", os.path.basename(resume_file))
-                    object_key = f"resumes/{talent_id}/{safe}"
-                    try:
-                        client.put_object(
-                            Bucket=R2_BUCKET,
-                            Key=object_key,
-                            Body=resume_bytes,
-                            ContentType=mimetypes.guess_type(safe)[0] or "application/octet-stream",
-                        )
-                        doc["resume_filename"] = safe
-                        doc["resume_object_key"] = object_key
-                        resume_uploaded = True
-                    except Exception as exc:
-                        detail = str(exc).replace("\n", " ")[:180]
-                        errors.append(
-                            f"Row {index} ({full_name}): resume storage error - {type(exc).__name__}: {detail}"
-                        )
+                continue
+            resume_info = archive.getinfo(resume_file)
+            ext = os.path.splitext(resume_file)[1].lower()
+            if resume_info.file_size > 2 * 1024 * 1024:
+                errors.append(f"Row {index} ({full_name}): resume is larger than 2 MB")
+                continue
+            if ext not in {".pdf", ".doc", ".docx", ".png", ".jpg", ".jpeg"}:
+                errors.append(f"Row {index} ({full_name}): unsupported resume type {ext}")
+                continue
+            if not client:
+                errors.append(f"Row {index} ({full_name}): Cloudflare R2 storage is not configured")
+                continue
 
-        if existing:
-            update_doc = payload.model_dump()
-            update_doc["status"] = value(row, "status") or existing.get("status", "Available")
-            if resume_uploaded:
-                update_doc["resume_filename"] = doc.get("resume_filename")
-                update_doc["resume_object_key"] = doc.get("resume_object_key")
-            await db.workers.update_one({"id": talent_id}, {"$set": update_doc})
-            if existing.get("resume_object_key") and not resume_uploaded:
-                skipped += 1
-            else:
-                imported += 1
-        else:
-            await db.workers.insert_one(doc)
-            imported += 1
+            safe = re.sub(r"[^A-Za-z0-9._-]", "_", os.path.basename(resume_file))
+            object_key = f"resumes/{talent.id}/{safe}"
+            try:
+                client.put_object(
+                    Bucket=R2_BUCKET,
+                    Key=object_key,
+                    Body=archive.read(resume_file),
+                    ContentType=mimetypes.guess_type(safe)[0] or "application/octet-stream",
+                )
+                doc["resume_filename"] = safe
+                doc["resume_object_key"] = object_key
+            except Exception as exc:
+                detail = str(exc).replace("\n", " ")[:180]
+                errors.append(
+                    f"Row {index} ({full_name}): resume storage error - {type(exc).__name__}: {detail}"
+                )
+                continue
+
+        await db.workers.insert_one(doc)
+        imported += 1
+        seen.append((name_key, mobile_key, location_key))
 
     return {"ok": True, "imported": imported, "skipped": skipped, "errors": errors}
 
