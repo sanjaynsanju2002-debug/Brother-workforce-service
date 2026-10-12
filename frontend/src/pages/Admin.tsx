@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Briefcase, Building2, Download, Eye, FileText, Loader2, Lock, MailWarning, MessageSquare, Plus, Trash2, TrendingUp, Users } from "lucide-react";
+import { ArrowLeft, Briefcase, Building2, Download, Eye, FileText, Loader2, Lock, MailWarning, Menu, MessageSquare, Plus, Trash2, TrendingUp, Users } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -174,6 +174,7 @@ function Dashboard({
   const q = `?pin=${encodeURIComponent(pin)}`;
   const [filters, setFilters] = useState(EMPTY_FILTERS);
   const [matchJobId, setMatchJobId] = useState<string | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const shortlists = useQuery({
     queryKey: ["admin-shortlists", pin],
@@ -317,7 +318,34 @@ function Dashboard({
       </header>
 
       <main className="mx-auto max-w-7xl px-3 py-5 sm:px-6 sm:py-8">
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4" data-testid="admin-stats">
+        <Tabs defaultValue="overview" orientation="vertical" className="flex flex-col gap-6 lg:grid lg:grid-cols-[240px_minmax(0,1fr)]">
+          <aside className="min-w-0 lg:sticky lg:top-4 lg:self-start" aria-label="Admin sections">
+            <button type="button" className="flex w-full items-center justify-between rounded-lg border border-slate-200 bg-white px-4 py-3 font-semibold text-[#0F2444] lg:hidden" onClick={() => setSidebarOpen((open) => !open)} aria-expanded={sidebarOpen} aria-controls="admin-sidebar-menu" data-testid="admin-sidebar-toggle">
+              Dashboard menu <Menu className="h-5 w-5" />
+            </button>
+            <div id="admin-sidebar-menu" className={`${sidebarOpen ? "block" : "hidden"} mt-2 lg:mt-0 lg:block`}>
+              <p className="mb-2 hidden px-3 text-xs font-bold uppercase tracking-widest text-slate-500 lg:block">Dashboard</p>
+              <TabsList className="flex h-auto w-full flex-col items-stretch gap-1 rounded-xl border border-slate-200 bg-white p-2 shadow-sm group-data-vertical/tabs:h-auto" data-testid="admin-sidebar" onClick={() => setSidebarOpen(false)}>
+                <TabsTrigger value="overview" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-overview">Overview Graph</TabsTrigger>
+                <TabsTrigger value="statistics" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-statistics">Statistics</TabsTrigger>
+                <TabsTrigger value="workers" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-workers">Worker Applications</TabsTrigger>
+                <TabsTrigger value="talents" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-talents">Talent Bank</TabsTrigger>
+                <TabsTrigger value="workforce" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-workforce">Company Workforce</TabsTrigger>
+                <TabsTrigger value="requests" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-requests">Company Enquiries</TabsTrigger>
+                <TabsTrigger value="clients" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-clients">Clients</TabsTrigger>
+                <TabsTrigger value="jobs" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-jobs">Job Postings</TabsTrigger>
+                <TabsTrigger value="email" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-email">Email Settings</TabsTrigger>
+                <TabsTrigger value="security" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-security">Security</TabsTrigger>
+                <TabsTrigger value="shortlists" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-shortlists">Shortlists</TabsTrigger>
+              </TabsList>
+            </div>
+          </aside>
+          <div className="min-w-0">
+            <TabsContent value="overview" className="mt-0">
+              <TrafficChart pin={pin} />
+            </TabsContent>
+            <TabsContent value="statistics" className="mt-0">
+<div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4" data-testid="admin-stats">
           <Stat icon={Users} label="Worker Applications" value={s?.workers ?? 0} testid="stat-workers" />
           <Stat icon={FileText} label="Company Enquiries" value={s?.requests ?? 0} testid="stat-requests" />
           <Stat icon={FileText} label="Pending Enquiries" value={s?.open_requests ?? 0} testid="stat-open-requests" />
@@ -371,22 +399,7 @@ function Dashboard({
             </div>
           </div>
         )}
-
-        <TrafficChart pin={pin} />
-
-        <Tabs defaultValue="workers" className="mt-8">
-          <TabsList className="grid w-full grid-cols-2 gap-2 bg-slate-100 p-2 group-data-horizontal/tabs:h-auto sm:grid-cols-3" data-testid="admin-tabs">
-            <TabsTrigger value="workers" className="min-h-10 w-full px-2 text-center whitespace-normal" data-testid="admin-tab-workers">Worker Applications</TabsTrigger>
-            <TabsTrigger value="talents" className="min-h-10 w-full px-2 text-center whitespace-normal" data-testid="admin-tab-talents">Talent Bank</TabsTrigger>
-            <TabsTrigger value="workforce" className="min-h-10 w-full px-2 text-center whitespace-normal" data-testid="admin-tab-workforce">Company Workforce</TabsTrigger>
-            <TabsTrigger value="requests" className="min-h-10 w-full px-2 text-center whitespace-normal" data-testid="admin-tab-requests">Company Enquiries</TabsTrigger>
-            <TabsTrigger value="clients" className="min-h-10 w-full px-2 text-center whitespace-normal" data-testid="admin-tab-clients">Clients</TabsTrigger>
-            <TabsTrigger value="jobs" className="min-h-10 w-full px-2 text-center whitespace-normal" data-testid="admin-tab-jobs">Job Postings</TabsTrigger>
-            <TabsTrigger value="email" className="min-h-10 w-full px-2 text-center whitespace-normal" data-testid="admin-tab-email">Email Settings</TabsTrigger>
-            <TabsTrigger value="security" className="min-h-10 w-full px-2 text-center whitespace-normal" data-testid="admin-tab-security">Security</TabsTrigger>
-            <TabsTrigger value="shortlists" className="min-h-10 w-full px-2 text-center whitespace-normal" data-testid="admin-tab-shortlists">Shortlists</TabsTrigger>
-          </TabsList>
-
+            </TabsContent>
           <TabsContent value="workers" className="mt-6">
             <div className="mb-4 rounded-lg border border-slate-200 bg-white p-4" data-testid="worker-filters">
               <div className="flex flex-wrap items-end gap-3">
@@ -858,6 +871,8 @@ function Dashboard({
           <TabsContent value="shortlists" className="mt-6">
             <Shortlists pin={pin} />
           </TabsContent>
+
+          </div>
         </Tabs>
       </main>
     </div>
