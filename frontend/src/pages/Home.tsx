@@ -740,7 +740,7 @@ export default function Home() {
       </Section>
 
       <Footer />
-      <BusinessChat jobs={jobsQuery.data ?? null} />
+      <BusinessChat jobs={jobsQuery.data ?? null} clients={clientsQuery.data ?? null} />
     </div>
   );
 }
@@ -796,3 +796,4 @@ function ClientLogo({ client }: { client: Client }) {
     />
   );
 }
+
