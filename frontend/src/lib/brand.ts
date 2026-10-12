@@ -9,6 +9,9 @@ export const BRAND = {
   email: "brothersworkforcesolutions@gmail.com",
   whatsapp: "https://wa.me/919606333542",
   gst: "29EQOPR8753K1ZM",
+  // Public credentials appear only after the owner supplies verified details.
+  labourLicenceNumber: import.meta.env.VITE_LABOUR_LICENCE_NUMBER || "",
+  officeAddress: import.meta.env.VITE_OFFICE_ADDRESS || "",
 };
 
 export const IMAGES = {

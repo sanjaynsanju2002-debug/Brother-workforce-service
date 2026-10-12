@@ -1,4 +1,4 @@
-"""PIN-protected admin API. PIN comes from ADMIN_PIN in backend/.env."""
+"""Session-protected admin API."""
 
 import csv
 import io
@@ -13,10 +13,10 @@ from bson.binary import Binary
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from fastapi import APIRouter, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, Response
 from fastapi.responses import StreamingResponse
 
-from lib.auth import current_pin, env_pin, set_pin, verify_pin
+from lib.auth import set_pin, uses_setup_pin, require_admin
 from lib.db import db
 from lib.notify import email_configured
 from models.bws import (
@@ -25,6 +25,8 @@ from models.bws import (
     CompanyRequest,
     Job,
     JobCreate,
+    JobApplicationCount,
+    EnquiryAging,
     Ok,
     PinChange,
     SecurityInfo,
@@ -35,7 +37,7 @@ from models.bws import (
 )
 from models.visits import TrafficStats
 
-router = APIRouter(prefix="/admin")
+router = APIRouter(prefix="/admin", dependencies=[Depends(require_admin)])
 
 R2_BUCKET = os.getenv("R2_BUCKET", "")
 R2_ENDPOINT = os.getenv("R2_ENDPOINT", "")
@@ -52,15 +54,8 @@ def _r2_client():
 
 
 
-@router.post("/login", response_model=Ok)
-async def login(pin: str = Query(...)) -> Ok:
-    await verify_pin(pin)
-    return Ok(ok=True)
-
-
 @router.get("/stats", response_model=AdminStats)
-async def stats(pin: str = Query(...)) -> AdminStats:
-    await verify_pin(pin)
+async def stats() -> AdminStats:
     return AdminStats(
         workers=await db.workers.count_documents({"source": {"$ne": "Talent Bank"}}),
         requests=await db.company_requests.count_documents({}),
@@ -71,9 +66,8 @@ async def stats(pin: str = Query(...)) -> AdminStats:
 
 
 @router.get("/traffic", response_model=TrafficStats)
-async def traffic(pin: str = Query(...)) -> TrafficStats:
+async def traffic() -> TrafficStats:
     """Visitor + conversion counts. 'Today' is anchored server-side (pod clock is UTC)."""
-    await verify_pin(pin)
     now = datetime.now(timezone.utc)
     start_today = now.replace(hour=0, minute=0, second=0, microsecond=0)
     start_week = start_today - timedelta(days=6)
@@ -88,33 +82,59 @@ async def traffic(pin: str = Query(...)) -> TrafficStats:
     )
 
 
+@router.get("/job-applications", response_model=list[JobApplicationCount])
+async def job_applications() -> list[JobApplicationCount]:
+    jobs = await db.jobs.find({}, {"_id": 0, "id": 1, "title": 1}).sort("created_at", -1).to_list(500)
+    counts = []
+    for job in jobs:
+        counts.append(JobApplicationCount(
+            job_id=job["id"],
+            title=job["title"],
+            applications=await db.workers.count_documents({"job_id": job["id"], "source": {"$ne": "Talent Bank"}}),
+        ))
+    return counts
+
+
+@router.get("/enquiry-aging", response_model=EnquiryAging)
+async def enquiry_aging() -> EnquiryAging:
+    now = datetime.now(timezone.utc)
+    pending = {"status": "Pending"}
+    oldest = await db.company_requests.find_one(pending, {"_id": 0, "created_at": 1}, sort=[("created_at", 1)])
+    created = oldest.get("created_at") if oldest else None
+    if created and created.tzinfo is None:
+        created = created.replace(tzinfo=timezone.utc)
+    return EnquiryAging(
+        pending_total=await db.company_requests.count_documents(pending),
+        older_than_2_days=await db.company_requests.count_documents({
+            **pending, "created_at": {"$lt": now - timedelta(days=2)},
+        }),
+        oldest_days=max(0, (now - created).days) if created else 0,
+    )
+
+
 @router.get("/security", response_model=SecurityInfo)
-async def security_info(pin: str = Query(...)) -> SecurityInfo:
-    """Returns the active PIN — only reachable by someone who already knows it."""
-    await verify_pin(pin)
-    return SecurityInfo(pin=await current_pin(), is_default=await current_pin() == env_pin())
+async def security_info() -> SecurityInfo:
+    return SecurityInfo(is_default=await uses_setup_pin())
 
 
 @router.post("/security/pin", response_model=SecurityInfo)
-async def change_pin(payload: PinChange, pin: str = Query(...)) -> SecurityInfo:
-    await verify_pin(pin)
+async def change_pin(payload: PinChange, response: Response) -> SecurityInfo:
     new_pin = payload.new_pin.strip()
-    if not new_pin.isdigit() or not (4 <= len(new_pin) <= 12):
-        raise HTTPException(status_code=400, detail="PIN must be 4 to 12 digits")
+    if not new_pin.isdigit() or not (8 <= len(new_pin) <= 12):
+        raise HTTPException(status_code=400, detail="PIN must be 8 to 12 digits")
     await set_pin(new_pin)
-    return SecurityInfo(pin=new_pin, is_default=new_pin == env_pin())
+    response.delete_cookie("bws_admin_session", path="/api")
+    return SecurityInfo(is_default=False)
 
 
 @router.get("/workers", response_model=list[Worker])
 async def list_workers(
-    pin: str = Query(...),
     skill_category: str | None = Query(None),
     location: str | None = Query(None),
     availability: str | None = Query(None),
     status: str | None = Query(None),
     q: str | None = Query(None),
 ) -> list[Worker]:
-    await verify_pin(pin)
     query: dict = {"source": {"$ne": "Talent Bank"}}
     if skill_category:
         query["skill_category"] = skill_category
@@ -146,9 +166,8 @@ async def list_workers(
 
 
 @router.get("/worker-filters", response_model=WorkerFilters)
-async def worker_filters(pin: str = Query(...)) -> WorkerFilters:
+async def worker_filters() -> WorkerFilters:
     """Distinct values so the admin filters only offer options that exist."""
-    await verify_pin(pin)
     applicant_query = {"source": {"$ne": "Talent Bank"}}
     return WorkerFilters(
         skill_categories=sorted(x for x in await db.workers.distinct("skill_category", applicant_query) if x),
@@ -158,8 +177,7 @@ async def worker_filters(pin: str = Query(...)) -> WorkerFilters:
 
 
 @router.patch("/workers/{worker_id}", response_model=Worker)
-async def update_worker(worker_id: str, payload: StatusUpdate, pin: str = Query(...)) -> Worker:
-    await verify_pin(pin)
+async def update_worker(worker_id: str, payload: StatusUpdate) -> Worker:
     doc = await db.workers.find_one_and_update(
         {"id": worker_id}, {"$set": {"status": payload.status}}, return_document=True
     )
@@ -170,9 +188,8 @@ async def update_worker(worker_id: str, payload: StatusUpdate, pin: str = Query(
 
 
 @router.delete("/workers/{worker_id}", response_model=Ok)
-async def delete_worker_application(worker_id: str, pin: str = Query(...)) -> Ok:
+async def delete_worker_application(worker_id: str) -> Ok:
     """Permanently delete a website worker application and its stored resume."""
-    await verify_pin(pin)
     doc = await db.workers.find_one({"id": worker_id, "source": {"$ne": "Talent Bank"}})
     if not doc:
         raise HTTPException(status_code=404, detail="Worker application not found")
@@ -203,23 +220,20 @@ async def delete_worker_application(worker_id: str, pin: str = Query(...)) -> Ok
 
 
 @router.get("/talents", response_model=list[Worker])
-async def list_talents(pin: str = Query(...)) -> list[Worker]:
-    await verify_pin(pin)
+async def list_talents() -> list[Worker]:
     docs = await db.workers.find({}).sort("created_at", -1).to_list(1000)
     return [Worker(**d) for d in docs]
 
 
 @router.post("/talents", response_model=Worker)
-async def create_talent(payload: WorkerCreate, pin: str = Query(...)) -> Worker:
-    await verify_pin(pin)
+async def create_talent(payload: WorkerCreate) -> Worker:
     talent = Worker(**payload.model_dump(), source="Talent Bank", status="Available")
     await db.workers.insert_one(talent.model_dump())
     return talent
 
 
 @router.post("/talents/import")
-async def import_talents(file: UploadFile = File(...), pin: str = Query(...)) -> dict:
-    await verify_pin(pin)
+async def import_talents(file: UploadFile = File(...)) -> dict:
 
     if not (file.filename or "").lower().endswith(".zip"):
         raise HTTPException(status_code=400, detail="Upload a .zip talent import package")
@@ -409,8 +423,7 @@ async def import_talents(file: UploadFile = File(...), pin: str = Query(...)) ->
 
 
 @router.delete("/talents/{worker_id}", response_model=Ok)
-async def delete_talent(worker_id: str, pin: str = Query(...)) -> Ok:
-    await verify_pin(pin)
+async def delete_talent(worker_id: str) -> Ok:
     doc = await db.workers.find_one({"id": worker_id})
     if not doc:
         raise HTTPException(status_code=404, detail="Talent not found")
@@ -430,15 +443,13 @@ async def delete_talent(worker_id: str, pin: str = Query(...)) -> Ok:
 
 
 @router.get("/company-requests", response_model=list[CompanyRequest])
-async def list_requests(pin: str = Query(...)) -> list[CompanyRequest]:
-    await verify_pin(pin)
+async def list_requests() -> list[CompanyRequest]:
     docs = await db.company_requests.find().sort("created_at", -1).to_list(500)
     return [CompanyRequest(**d) for d in docs]
 
 
 @router.patch("/company-requests/{req_id}", response_model=CompanyRequest)
-async def update_request(req_id: str, payload: StatusUpdate, pin: str = Query(...)) -> CompanyRequest:
-    await verify_pin(pin)
+async def update_request(req_id: str, payload: StatusUpdate) -> CompanyRequest:
     doc = await db.company_requests.find_one_and_update(
         {"id": req_id}, {"$set": {"status": payload.status}}, return_document=True
     )
@@ -449,23 +460,31 @@ async def update_request(req_id: str, payload: StatusUpdate, pin: str = Query(..
 
 
 @router.get("/jobs", response_model=list[Job])
-async def admin_jobs(pin: str = Query(...)) -> list[Job]:
-    await verify_pin(pin)
+async def admin_jobs() -> list[Job]:
     docs = await db.jobs.find().sort("created_at", -1).to_list(500)
     return [Job(**d) for d in docs]
 
 
 @router.post("/jobs", response_model=Job)
-async def create_job(payload: JobCreate, pin: str = Query(...)) -> Job:
-    await verify_pin(pin)
+async def create_job(payload: JobCreate) -> Job:
     job = Job(**payload.model_dump())
     await db.jobs.insert_one(job.model_dump())
     return job
 
 
+@router.put("/jobs/{job_id}", response_model=Job)
+async def edit_job(job_id: str, payload: JobCreate) -> Job:
+    doc = await db.jobs.find_one_and_update(
+        {"id": job_id}, {"$set": payload.model_dump()}, return_document=True,
+    )
+    if not doc:
+        raise HTTPException(status_code=404, detail="Not found")
+    doc.pop("_id", None)
+    return Job(**doc)
+
+
 @router.patch("/jobs/{job_id}", response_model=Job)
-async def toggle_job(job_id: str, payload: ActiveUpdate, pin: str = Query(...)) -> Job:
-    await verify_pin(pin)
+async def toggle_job(job_id: str, payload: ActiveUpdate) -> Job:
     doc = await db.jobs.find_one_and_update(
         {"id": job_id}, {"$set": {"active": payload.active}}, return_document=True
     )
@@ -476,8 +495,7 @@ async def toggle_job(job_id: str, payload: ActiveUpdate, pin: str = Query(...)) 
 
 
 @router.delete("/jobs/{job_id}", response_model=Ok)
-async def delete_job(job_id: str, pin: str = Query(...)) -> Ok:
-    await verify_pin(pin)
+async def delete_job(job_id: str) -> Ok:
     res = await db.jobs.delete_one({"id": job_id})
     if res.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Not found")
@@ -487,6 +505,8 @@ async def delete_job(job_id: str, pin: str = Query(...)) -> Ok:
 WORKER_COLUMNS = [
     ("created_at", "Application Date"),
     ("full_name", "Full Name"),
+    ("job_title", "Applied For"),
+    ("job_id", "Job ID"),
     ("mobile", "Mobile"),
     ("email", "Email"),
     ("whatsapp", "WhatsApp"),
@@ -546,21 +566,18 @@ def _csv_response(rows: list[dict], columns: list[tuple[str, str]], filename: st
 
 
 @router.get("/export/workers.csv")
-async def export_workers(pin: str = Query(...)) -> StreamingResponse:
-    await verify_pin(pin)
+async def export_workers() -> StreamingResponse:
     rows = await db.workers.find({"source": {"$ne": "Talent Bank"}}, {"_id": 0}).sort("created_at", -1).to_list(5000)
     return _csv_response(rows, WORKER_COLUMNS, "worker-applications.csv")
 
 
 @router.get("/export/talents.csv")
-async def export_talents(pin: str = Query(...)) -> StreamingResponse:
-    await verify_pin(pin)
+async def export_talents() -> StreamingResponse:
     rows = await db.workers.find({}, {"_id": 0}).sort("created_at", -1).to_list(5000)
     return _csv_response(rows, WORKER_COLUMNS, "talent-bank.csv")
 
 
 @router.get("/export/company-requests.csv")
-async def export_requests(pin: str = Query(...)) -> StreamingResponse:
-    await verify_pin(pin)
+async def export_requests() -> StreamingResponse:
     rows = await db.company_requests.find({}, {"_id": 0}).sort("created_at", -1).to_list(5000)
     return _csv_response(rows, REQUEST_COLUMNS, "company-enquiries.csv")

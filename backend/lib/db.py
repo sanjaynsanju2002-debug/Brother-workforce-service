@@ -22,6 +22,7 @@ INDEXES: dict[str, list[IndexModel]] = {
     "workers": [
         IndexModel([("id", ASCENDING)], name="id", unique=True),
         IndexModel([("created_at", DESCENDING)], name="created_desc"),
+        IndexModel([("job_id", ASCENDING), ("created_at", DESCENDING)], name="job_created"),
     ],
     "resume_files": [
         IndexModel([("worker_id", ASCENDING)], name="worker_id", unique=True),
@@ -39,6 +40,14 @@ INDEXES: dict[str, list[IndexModel]] = {
         IndexModel([("visible", ASCENDING), ("sort_order", ASCENDING)], name="visible_order"),
     ],
     "settings": [IndexModel([("id", ASCENDING)], name="id", unique=True)],
+    "admin_sessions": [
+        IndexModel([("token_hash", ASCENDING)], name="token_hash", unique=True),
+        IndexModel([("expires_at", ASCENDING)], name="expires_ttl", expireAfterSeconds=0),
+    ],
+    "admin_login_attempts": [
+        IndexModel([("id", ASCENDING)], name="id", unique=True),
+        IndexModel([("expires_at", ASCENDING)], name="expires_ttl", expireAfterSeconds=0),
+    ],
     "visits": [IndexModel([("created_at", DESCENDING)], name="created_desc")],
     "cron_runs": [
         IndexModel([("run_id", ASCENDING)], name="run_id", unique=True),

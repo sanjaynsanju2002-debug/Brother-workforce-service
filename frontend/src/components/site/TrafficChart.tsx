@@ -17,7 +17,7 @@ function shortDate(iso: string): string {
 }
 
 export default function TrafficChart({ pin }: { pin: string }) {
-  const q = `?pin=${encodeURIComponent(pin)}&days=30`;
+  const q = "?days=30";
   const daily = useQuery({
     queryKey: ["admin-traffic-daily", pin],
     queryFn: () => apiGet<DayPoint[]>(`/admin/traffic/daily${q}`),

@@ -14,8 +14,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { apiPost } from "@/lib/api";
+import { ApiError } from "@/lib/api";
 import { AVAILABILITY, BRAND, SKILL_CATEGORIES } from "@/lib/brand";
-import type { Worker, WorkerCreate } from "@/types";
+import type { Job, Worker, WorkerCreate } from "@/types";
+import { Link } from "react-router-dom";
 
 const MAX_RESUME_SIZE = 2 * 1024 * 1024;
 
@@ -36,16 +38,19 @@ const EMPTY: WorkerCreate = {
   availability: "",
 };
 
-export default function WorkerForm() {
+export default function WorkerForm({ job }: { job?: Job }) {
   const [form, setForm] = useState<WorkerCreate>(EMPTY);
   const [resume, setResume] = useState<File | null>(null);
   const [done, setDone] = useState(false);
+  const [consent, setConsent] = useState(false);
 
   const set = (k: keyof WorkerCreate, v: string) => setForm((f) => ({ ...f, [k]: v }));
 
   const mutation = useMutation({
     mutationFn: async (payload: WorkerCreate) => {
-      const worker = await apiPost<Worker>("/workers", payload);
+      const worker = await apiPost<Worker>("/workers", {
+        ...payload, job_id: job?.id ?? null, consent_to_share: true,
+      });
       let resumeUploaded = true;
 
       if (resume) {
@@ -61,13 +66,17 @@ export default function WorkerForm() {
       setDone(true);
       setForm(EMPTY);
       setResume(null);
+      setConsent(false);
       if (resumeUploaded) {
         toast.success("Application submitted successfully");
       } else {
         toast.warning("Application saved, but the resume could not be uploaded. Please contact us to send the resume.");
       }
     },
-    onError: () => toast.error("Could not submit your application. Please try again."),
+    onError: (error) => {
+      const detail = error instanceof ApiError ? (error.body as { detail?: unknown } | null)?.detail : null;
+      toast.error(typeof detail === "string" ? detail : "Could not submit your application. Please try again.");
+    },
   });
 
   if (done) {
@@ -78,8 +87,8 @@ export default function WorkerForm() {
       >
         <CheckCircle2 className="mx-auto mb-3 h-10 w-10 text-green-600" />
         <p className="text-lg font-semibold text-[#0F2444]">
-          Thank you for registering. Our recruitment team will contact you when suitable opportunities are
-          available.
+          {job ? `Thank you for applying for ${job.title}. Our recruitment team will review your profile.` :
+            "Thank you for registering. Our recruitment team will contact you when suitable opportunities are available."}
         </p>
         <Button
           variant="outline"
@@ -103,9 +112,18 @@ export default function WorkerForm() {
           toast.error("Please fill all required fields");
           return;
         }
+        if (!consent) {
+          toast.error("Please agree to the recruitment use of your profile");
+          return;
+        }
         mutation.mutate(form);
       }}
     >
+      {job && (
+        <div className="sm:col-span-2 rounded-lg border border-[#EA580C]/30 bg-orange-50 p-4 text-sm" data-testid="worker-selected-job">
+          Applying for <strong>{job.title}</strong> · {job.location}
+        </div>
+      )}
       <Field label="Full Name *">
         <Input
           required
@@ -253,6 +271,10 @@ export default function WorkerForm() {
       </div>
 
       <div className="sm:col-span-2">
+        <label className="mb-4 flex items-start gap-3 text-sm text-slate-700">
+          <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} required className="mt-1" />
+          <span>I agree that Brothers Workforce Solutions may use my profile and resume to contact me about jobs and share a relevant profile with an employer for recruitment. Read the <Link to="/privacy" className="text-[#0F2444] underline">Privacy Notice</Link>.</span>
+        </label>
         <Button
           type="submit"
           disabled={mutation.isPending}
@@ -263,7 +285,7 @@ export default function WorkerForm() {
           Apply Now
         </Button>
         <p className="mt-4 max-w-2xl text-xs leading-relaxed text-slate-600">
-          Your application details and optional resume go to Brothers Workforce Solutions so our team can review your profile and contact you about suitable work. For questions about your details or to request their removal, email{" "}
+          For questions about your details or to request their removal, email{" "}
           <a className="font-medium text-[#0F2444] underline underline-offset-2 hover:text-[#EA580C]" href={`mailto:${BRAND.email}`}>
             {BRAND.email}
           </a>.

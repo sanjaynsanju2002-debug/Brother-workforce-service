@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import {
   Activity,
   Award,
@@ -92,7 +93,7 @@ const INDUSTRY_CARDS = [
 ];
 
 const COMPLIANCE = [
-  { title: "Licensed Labour Contractor", desc: "Authorized contract labour operations.", icon: FileBadge },
+  { title: "Licensed Labour Contractor", desc: BRAND.labourLicenceNumber ? `Licence No: ${BRAND.labourLicenceNumber}` : "Authorized contract labour operations.", icon: FileBadge },
   { title: "GST Registered", desc: `GST No: ${BRAND.gst}`, icon: ReceiptText },
   { title: "ESIC Employee Coverage", desc: "Employee welfare supported through ESIC compliance.", icon: ShieldCheck },
   { title: "EPF Services", desc: "Employee provident fund enrolment and monthly remittance handled for deployed workforce.", icon: PiggyBank },
@@ -449,18 +450,17 @@ export default function Home() {
                     </p>
                     <dl className="mt-4 space-y-1.5 text-sm text-slate-600">
                       {j.experience && <Row k="Experience" v={j.experience} />}
-                      {j.salary && <Row k="Salary" v={/^\d+$/.test(j.salary.trim()) ? `₹${Number(j.salary).toLocaleString("en-IN")}` : j.salary} />}
+                      <Row k="Salary" v={j.salary ? (/^\d+$/.test(j.salary.trim()) ? `₹${Number(j.salary).toLocaleString("en-IN")}` : j.salary) : "Discuss during screening"} />
                       {j.shift && <Row k="Shift" v={j.shift} />}
                       <Row k="Openings" v={String(j.openings)} />
+                      <Row k="Posted" v={new Date(j.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })} />
                     </dl>
                     {j.description && <p className="mt-3 text-sm text-slate-500">{j.description}</p>}
-                    <Button
-                      className="mt-5 w-full bg-[#EA580C] text-white hover:bg-[#C2410C]"
-                      onClick={() => scrollTo("#worker-registration")}
+                    <Link
+                      to={`/jobs/${j.id}`}
+                      className="mt-5 inline-flex w-full items-center justify-center rounded-md bg-[#EA580C] px-4 py-2 font-semibold text-white hover:bg-[#C2410C]"
                       data-testid={`job-apply-${j.id}`}
-                    >
-                      Apply
-                    </Button>
+                    >View &amp; Apply</Link>
                   </CardContent>
                 </Card>
               ))}
@@ -653,11 +653,6 @@ export default function Home() {
                         <MapPin className="h-3 w-3" /> {c.location}
                       </p>
                     )}
-                    {c.headcount && (
-                      <Badge variant="secondary" className="text-[10px]">
-                        Headcount: {c.headcount}
-                      </Badge>
-                    )}
                   </div>
                 );
               })
@@ -691,7 +686,7 @@ export default function Home() {
                 <MapPin className="mt-1 h-5 w-5 shrink-0 text-[#EA580C]" />
                 <span>
                   <strong className="block text-[#0F2444]">{BRAND.name}</strong>
-                  {BRAND.location}
+                  {BRAND.officeAddress || BRAND.location}
                 </span>
               </li>
               <li className="flex gap-3">
@@ -796,4 +791,3 @@ function ClientLogo({ client }: { client: Client }) {
     />
   );
 }
-

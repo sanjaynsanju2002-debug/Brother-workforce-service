@@ -21,7 +21,7 @@ function apiMessage(err: unknown, fallback: string): string {
 
 export default function Shortlists({ pin }: { pin: string }) {
   const qc = useQueryClient();
-  const q = `?pin=${encodeURIComponent(pin)}`;
+  const q = "";
   const key = ["admin-shortlists", pin];
 
   const lists = useQuery({ queryKey: key, queryFn: () => apiGet<Shortlist[]>(`/admin/shortlists${q}`) });

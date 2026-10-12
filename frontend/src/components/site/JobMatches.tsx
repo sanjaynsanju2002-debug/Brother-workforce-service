@@ -6,7 +6,7 @@ import { jobAlertMessage, waLink } from "@/lib/wa";
 import type { Job, Worker } from "@/types";
 
 export default function JobMatches({ pin, job }: { pin: string; job: Job }) {
-  const q = `?pin=${encodeURIComponent(pin)}`;
+  const q = "";
   const matches = useQuery({
     queryKey: ["job-matches", pin, job.id],
     queryFn: () => apiGet<Worker[]>(`/admin/jobs/${job.id}/matches${q}`),

@@ -10,7 +10,7 @@ import logging
 import os
 import re
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
 
 from lib.notify import build_html, email_configured, send_email
 from lib.settings import get_email_settings, save_email_settings
@@ -23,9 +23,9 @@ from models.bws import (
     TestEmail,
     TestEmailResult,
 )
-from lib.auth import verify_pin
+from lib.auth import require_admin
 
-router = APIRouter(prefix="/email")
+router = APIRouter(prefix="/email", dependencies=[Depends(require_admin)])
 logger = logging.getLogger(__name__)
 
 SHARED_SENDERS = {"onboarding@resend.dev", "delivered@resend.dev"}
@@ -67,8 +67,7 @@ def _to_domain(raw: dict) -> EmailDomain:
 
 
 @router.get("/status", response_model=EmailStatus)
-async def email_status(pin: str = Query(...)) -> EmailStatus:
-    await verify_pin(pin)
+async def email_status() -> EmailStatus:
     cfg = await get_email_settings()
     status = EmailStatus(
         key_configured=email_configured(),
@@ -92,8 +91,7 @@ async def email_status(pin: str = Query(...)) -> EmailStatus:
 
 
 @router.post("/domains", response_model=EmailDomain)
-async def add_domain(payload: DomainCreate, pin: str = Query(...)) -> EmailDomain:
-    await verify_pin(pin)
+async def add_domain(payload: DomainCreate) -> EmailDomain:
     name = payload.name.strip().lower().removeprefix("http://").removeprefix("https://").strip("/")
     name = name.removeprefix("www.")
     if not DOMAIN_RE.match(name):
@@ -115,8 +113,7 @@ async def add_domain(payload: DomainCreate, pin: str = Query(...)) -> EmailDomai
 
 
 @router.post("/domains/{domain_id}/verify", response_model=EmailDomain)
-async def verify_domain(domain_id: str, pin: str = Query(...)) -> EmailDomain:
-    await verify_pin(pin)
+async def verify_domain(domain_id: str) -> EmailDomain:
     resend = _resend()
     try:
         await asyncio.to_thread(resend.Domains.verify, domain_id)
@@ -127,8 +124,7 @@ async def verify_domain(domain_id: str, pin: str = Query(...)) -> EmailDomain:
 
 
 @router.delete("/domains/{domain_id}", response_model=Ok)
-async def remove_domain(domain_id: str, pin: str = Query(...)) -> Ok:
-    await verify_pin(pin)
+async def remove_domain(domain_id: str) -> Ok:
     resend = _resend()
     try:
         await asyncio.to_thread(resend.Domains.remove, domain_id)
@@ -138,8 +134,7 @@ async def remove_domain(domain_id: str, pin: str = Query(...)) -> Ok:
 
 
 @router.put("/settings", response_model=EmailStatus)
-async def update_settings(payload: EmailSettingsUpdate, pin: str = Query(...)) -> EmailStatus:
-    await verify_pin(pin)
+async def update_settings(payload: EmailSettingsUpdate) -> EmailStatus:
     sender = payload.sender.strip()
     recipients = [r.strip() for r in payload.recipients if r.strip()]
     if "@" not in sender:
@@ -150,12 +145,11 @@ async def update_settings(payload: EmailSettingsUpdate, pin: str = Query(...)) -
         if "@" not in r:
             raise HTTPException(status_code=400, detail=f"Invalid recipient address: {r}")
     await save_email_settings(sender, recipients)
-    return await email_status(pin=pin)
+    return await email_status()
 
 
 @router.post("/test", response_model=TestEmailResult)
-async def send_test(payload: TestEmail, pin: str = Query(...)) -> TestEmailResult:
-    await verify_pin(pin)
+async def send_test(payload: TestEmail) -> TestEmailResult:
     if not email_configured():
         raise HTTPException(status_code=400, detail="RESEND_API_KEY is not configured on the server")
     cfg = await get_email_settings()

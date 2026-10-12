@@ -68,7 +68,7 @@ async function uploadResume(workerId: string, file: File): Promise<void> {
 
 export default function TalentBank({ pin }: { pin: string }) {
   const qc = useQueryClient();
-  const q = `?pin=${encodeURIComponent(pin)}`;
+  const q = "";
   const [form, setForm] = useState<WorkerCreate>({ ...EMPTY_TALENT });
   const [resume, setResume] = useState<File | null>(null);
   const [importZip, setImportZip] = useState<File | null>(null);

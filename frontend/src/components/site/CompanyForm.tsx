@@ -16,6 +16,7 @@ import {
 import { apiPost } from "@/lib/api";
 import { INDUSTRIES, WORKFORCE_TYPES } from "@/lib/brand";
 import type { CompanyRequest, CompanyRequestCreate } from "@/types";
+import { Link } from "react-router-dom";
 
 const EMPTY: CompanyRequestCreate = {
   company_name: "",
@@ -58,7 +59,7 @@ export default function CompanyForm() {
       >
         <CheckCircle2 className="mx-auto mb-3 h-10 w-10 text-green-600" />
         <p className="text-lg font-semibold text-[#0F2444]">
-          Thank you. Our workforce team will contact you shortly.
+          Thank you. Our workforce team will review your requirement and contact you to confirm the details.
         </p>
         <Button
           variant="outline"
@@ -82,10 +83,7 @@ export default function CompanyForm() {
           "company_name",
           "contact_person",
           "mobile",
-          "email",
           "company_location",
-          "industry",
-          "workforce_type",
           "job_role",
           "worker_count",
         ];
@@ -112,28 +110,12 @@ export default function CompanyForm() {
           data-testid="company-input-contact-person"
         />
       </Field>
-      <Field label="Designation">
-        <Input
-          value={form.designation ?? ""}
-          onChange={(e) => set("designation", e.target.value)}
-          data-testid="company-input-designation"
-        />
-      </Field>
       <Field label="Mobile Number *">
         <Input
           required
           value={form.mobile}
           onChange={(e) => set("mobile", e.target.value)}
           data-testid="company-input-mobile"
-        />
-      </Field>
-      <Field label="Email *">
-        <Input
-          required
-          type="email"
-          value={form.email}
-          onChange={(e) => set("email", e.target.value)}
-          data-testid="company-input-email"
         />
       </Field>
       <Field label="Company Location *">
@@ -143,34 +125,6 @@ export default function CompanyForm() {
           onChange={(e) => set("company_location", e.target.value)}
           data-testid="company-input-location"
         />
-      </Field>
-      <Field label="Industry *">
-        <Select value={form.industry} onValueChange={(v: string) => set("industry", v)}>
-          <SelectTrigger data-testid="company-select-industry">
-            <SelectValue placeholder="Select industry" />
-          </SelectTrigger>
-          <SelectContent>
-            {INDUSTRIES.map((i) => (
-              <SelectItem key={i} value={i}>
-                {i}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </Field>
-      <Field label="Required Workforce Type *">
-        <Select value={form.workforce_type} onValueChange={(v: string) => set("workforce_type", v)}>
-          <SelectTrigger data-testid="company-select-workforce-type">
-            <SelectValue placeholder="Select type" />
-          </SelectTrigger>
-          <SelectContent>
-            {WORKFORCE_TYPES.map((w) => (
-              <SelectItem key={w} value={w}>
-                {w}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
       </Field>
       <Field label="Required Job Role *">
         <Input
@@ -189,37 +143,61 @@ export default function CompanyForm() {
           data-testid="company-input-worker-count"
         />
       </Field>
-      <Field label="Shift Details">
-        <Input
-          placeholder="Day / Night / Rotational"
-          value={form.shift_details ?? ""}
-          onChange={(e) => set("shift_details", e.target.value)}
-          data-testid="company-input-shift"
-        />
-      </Field>
-      <Field label="Expected Joining Date">
-        <Input
-          type="date"
-          value={form.joining_date ?? ""}
-          onChange={(e) => set("joining_date", e.target.value)}
-          data-testid="company-input-joining-date"
-        />
-      </Field>
-      <Field label="Work Location" full>
-        <Input
-          value={form.work_location ?? ""}
-          onChange={(e) => set("work_location", e.target.value)}
-          data-testid="company-input-work-location"
-        />
-      </Field>
-      <Field label="Requirement Description" full>
-        <Textarea
-          rows={4}
-          value={form.description ?? ""}
-          onChange={(e) => set("description", e.target.value)}
-          data-testid="company-input-description"
-        />
-      </Field>
+      <details className="sm:col-span-2 rounded-lg border border-slate-200 bg-white p-4">
+        <summary className="cursor-pointer font-semibold text-[#0F2444]">Add optional details</summary>
+        <p className="mt-2 text-sm text-slate-500">You can also discuss these with our team after we receive your request.</p>
+        <div className="mt-4 grid gap-5 sm:grid-cols-2">
+          <Field label="Designation">
+            <Input value={form.designation ?? ""} onChange={(e) => set("designation", e.target.value)} data-testid="company-input-designation" />
+          </Field>
+          <Field label="Email">
+            <Input type="email" value={form.email ?? ""} onChange={(e) => set("email", e.target.value)} data-testid="company-input-email" />
+          </Field>
+          <Field label="Industry">
+            <Select value={form.industry ?? ""} onValueChange={(v: string) => set("industry", v)}>
+              <SelectTrigger data-testid="company-select-industry"><SelectValue placeholder="Select industry" /></SelectTrigger>
+              <SelectContent>{INDUSTRIES.map((i) => <SelectItem key={i} value={i}>{i}</SelectItem>)}</SelectContent>
+            </Select>
+          </Field>
+          <Field label="Workforce Type">
+            <Select value={form.workforce_type ?? ""} onValueChange={(v: string) => set("workforce_type", v)}>
+              <SelectTrigger data-testid="company-select-workforce-type"><SelectValue placeholder="Select type" /></SelectTrigger>
+              <SelectContent>{WORKFORCE_TYPES.map((w) => <SelectItem key={w} value={w}>{w}</SelectItem>)}</SelectContent>
+            </Select>
+          </Field>
+          <Field label="Shift Details">
+            <Input
+              placeholder="Day / Night / Rotational"
+              value={form.shift_details ?? ""}
+              onChange={(e) => set("shift_details", e.target.value)}
+              data-testid="company-input-shift"
+            />
+          </Field>
+          <Field label="Expected Joining Date">
+            <Input
+              type="date"
+              value={form.joining_date ?? ""}
+              onChange={(e) => set("joining_date", e.target.value)}
+              data-testid="company-input-joining-date"
+            />
+          </Field>
+          <Field label="Work Location" full>
+            <Input
+              value={form.work_location ?? ""}
+              onChange={(e) => set("work_location", e.target.value)}
+              data-testid="company-input-work-location"
+            />
+          </Field>
+          <Field label="Requirement Description" full>
+            <Textarea
+              rows={4}
+              value={form.description ?? ""}
+              onChange={(e) => set("description", e.target.value)}
+              data-testid="company-input-description"
+            />
+          </Field>
+        </div>
+      </details>
 
       <div className="sm:col-span-2">
         <Button
@@ -231,6 +209,9 @@ export default function CompanyForm() {
           {mutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
           Request Manpower
         </Button>
+        <p className="mt-3 text-xs leading-relaxed text-slate-600">
+          We use your details to respond to this request. Read our <Link to="/privacy" className="text-[#0F2444] underline">Privacy Notice</Link>.
+        </p>
       </div>
     </form>
   );

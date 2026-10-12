@@ -32,10 +32,13 @@ class WorkerCreate(BaseModel):
     preferred_location: Optional[str] = None
     expected_salary: Optional[str] = None
     availability: Optional[str] = None
+    job_id: Optional[str] = None
+    consent_to_share: bool = False
 
 
 class Worker(WorkerCreate):
     id: str = Field(default_factory=_uid)
+    job_title: Optional[str] = None
     resume_filename: Optional[str] = None
     source: str = "Website Application"
     status: str = "New"
@@ -48,10 +51,10 @@ class CompanyRequestCreate(BaseModel):
     contact_person: str
     designation: Optional[str] = None
     mobile: str
-    email: str
+    email: Optional[str] = None
     company_location: str
-    industry: str
-    workforce_type: str
+    industry: Optional[str] = None
+    workforce_type: Optional[str] = None
     job_role: str
     worker_count: str
     shift_details: Optional[str] = None
@@ -82,6 +85,18 @@ class Job(JobCreate):
     id: str = Field(default_factory=_uid)
     active: bool = True
     created_at: datetime = Field(default_factory=_now)
+
+
+class JobApplicationCount(BaseModel):
+    job_id: str
+    title: str
+    applications: int
+
+
+class EnquiryAging(BaseModel):
+    pending_total: int
+    older_than_2_days: int
+    oldest_days: int
 
 
 class StatusUpdate(BaseModel):
@@ -155,7 +170,6 @@ class TestEmailResult(BaseModel):
 
 
 class SecurityInfo(BaseModel):
-    pin: str
     is_default: bool
 
 
