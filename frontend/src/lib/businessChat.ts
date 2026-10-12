@@ -102,9 +102,16 @@ export function getBusinessAnswer(rawQuestion: string, jobs: Job[] | null, clien
     };
   }
 
-  if (mentions(q, "gst", "esic", "esi", "epf", "pf", "msme", "licensed", "license", "compliance", "provident fund")) {
+  if (mentions(q, "labour licence", "labour license", "labor licence", "labor license", "contractor licence", "contractor license", "contract labour licence", "contract labour license")) {
     return {
-      text: `Brothers Workforce Solutions is a licensed labour contractor, GST registered (GST ${BRAND.gst}), MSME registered, and supports ESIC employee coverage and EPF services for deployed workforce. Contact the team for any document or arrangement specific to your requirement.`,
+      text: `The document we can confirm is a Karnataka Shops and Commercial Establishments registration, number ${BRAND.establishmentRegistrationNumber}, valid through ${BRAND.establishmentRegistrationValidThrough}. For a contract labour licence or a specific compliance document, please contact our team.`,
+      actions: [{ label: "Compliance details", href: "#compliance" }, contact],
+    };
+  }
+
+  if (mentions(q, "gst", "esic", "esi", "epf", "pf", "msme", "licensed", "license", "licence", "registration", "registered", "compliance", "provident fund")) {
+    return {
+      text: `Brothers Workforce Solutions holds Karnataka Shops and Commercial Establishments registration ${BRAND.establishmentRegistrationNumber}, valid through ${BRAND.establishmentRegistrationValidThrough}. The business lists GST ${BRAND.gst}, MSME registration, ESIC employee coverage and EPF services. Contact our team for documents relevant to your requirement.`,
       actions: [{ label: "Compliance details", href: "#compliance" }, contact],
     };
   }
@@ -140,7 +147,7 @@ export function getBusinessAnswer(rawQuestion: string, jobs: Job[] | null, clien
 
   if (mentions(q, "where", "location", "located", "address", "mysore", "mysuru", "karnataka", "bangalore", "bengaluru", "area", "city")) {
     return {
-      text: `We are based in ${BRAND.location} and provide workforce solutions across Karnataka. The website does not list a street address; please contact the team for directions or availability in a particular location.`,
+      text: `Our registered establishment address is ${BRAND.officeAddress}. We provide workforce solutions across Karnataka. Contact the team for directions or availability in a particular location.`,
       actions: [contact, whatsapp],
     };
   }

@@ -9,9 +9,10 @@ export const BRAND = {
   email: "brothersworkforcesolutions@gmail.com",
   whatsapp: "https://wa.me/919606333542",
   gst: "29EQOPR8753K1ZM",
-  // Public credentials appear only after the owner supplies verified details.
-  labourLicenceNumber: import.meta.env.VITE_LABOUR_LICENCE_NUMBER || "",
-  officeAddress: import.meta.env.VITE_OFFICE_ADDRESS || "",
+  // Karnataka Shops and Commercial Establishments registration certificate, Form C.
+  establishmentRegistrationNumber: "MY4/BEL/CE/0006/2026",
+  establishmentRegistrationValidThrough: "31 December 2030",
+  officeAddress: "1, Boregowda Complex, Belavadi Main Rd, near Canara Bank, Krishnappa Block, Mysore, Karnataka 570018",
 };
 
 export const IMAGES = {

@@ -40,7 +40,7 @@ import { trackVisit } from "@/lib/track";
 import type { Client, Job } from "@/types";
 
 const TRUST = [
-  { icon: FileBadge, title: "Licensed Labour Contractor", desc: "Authorized contract labour operations" },
+  { icon: FileBadge, title: "Registered Establishment", desc: "Karnataka commercial establishment registration" },
   { icon: ReceiptText, title: "GST Registered", desc: "Official tax invoicing & compliance" },
   { icon: ShieldCheck, title: "ESIC Covered Employees", desc: "Employee welfare compliance" },
   { icon: PiggyBank, title: "EPF Services", desc: "Provident fund enrolment & remittance" },
@@ -93,7 +93,7 @@ const INDUSTRY_CARDS = [
 ];
 
 const COMPLIANCE = [
-  { title: "Licensed Labour Contractor", desc: BRAND.labourLicenceNumber ? `Licence No: ${BRAND.labourLicenceNumber}` : "Authorized contract labour operations.", icon: FileBadge },
+  { title: "Karnataka Registered Establishment", desc: `Shops and Commercial Establishments Reg. No: ${BRAND.establishmentRegistrationNumber}. Valid through ${BRAND.establishmentRegistrationValidThrough}.`, icon: FileBadge },
   { title: "GST Registered", desc: `GST No: ${BRAND.gst}`, icon: ReceiptText },
   { title: "ESIC Employee Coverage", desc: "Employee welfare supported through ESIC compliance.", icon: ShieldCheck },
   { title: "EPF Services", desc: "Employee provident fund enrolment and monthly remittance handled for deployed workforce.", icon: PiggyBank },
