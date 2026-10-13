@@ -104,14 +104,14 @@ export function getBusinessAnswer(rawQuestion: string, jobs: Job[] | null, clien
 
   if (mentions(q, "labour licence", "labour license", "labor licence", "labor license", "contractor licence", "contractor license", "contract labour licence", "contract labour license")) {
     return {
-      text: `The document we can confirm is a Karnataka Shops and Commercial Establishments registration, number ${BRAND.establishmentRegistrationNumber}, valid through ${BRAND.establishmentRegistrationValidThrough}. For a contract labour licence or a specific compliance document, please contact our team.`,
+      text: `Brothers Workforce Solutions is a licensed labour contractor. Please contact our team for the contract labour licence number or a copy. Separately, our Karnataka Shops and Commercial Establishments registration is ${BRAND.establishmentRegistrationNumber}, valid through ${BRAND.establishmentRegistrationValidThrough}.`,
       actions: [{ label: "Compliance details", href: "#compliance" }, contact],
     };
   }
 
   if (mentions(q, "gst", "esic", "esi", "epf", "pf", "msme", "licensed", "license", "licence", "registration", "registered", "compliance", "provident fund")) {
     return {
-      text: `Brothers Workforce Solutions holds Karnataka Shops and Commercial Establishments registration ${BRAND.establishmentRegistrationNumber}, valid through ${BRAND.establishmentRegistrationValidThrough}. The business lists GST ${BRAND.gst}, MSME registration, ESIC employee coverage and EPF services. Contact our team for documents relevant to your requirement.`,
+      text: `Brothers Workforce Solutions is a licensed labour contractor and holds Karnataka Shops and Commercial Establishments registration ${BRAND.establishmentRegistrationNumber}, valid through ${BRAND.establishmentRegistrationValidThrough}. The business lists GST ${BRAND.gst}, MSME registration, ESIC employee coverage and EPF services. Contact our team for the relevant documents.`,
       actions: [{ label: "Compliance details", href: "#compliance" }, contact],
     };
   }

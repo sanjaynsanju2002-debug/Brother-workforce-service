@@ -58,6 +58,7 @@ export default function Footer() {
             </li>
           </ul>
           <p className="mt-4 text-xs text-slate-500">GST No: {BRAND.gst}</p>
+          <p className="mt-1 text-xs text-slate-500">Licensed Labour Contractor · Licence details on request</p>
           <p className="mt-1 text-xs text-slate-500">Establishment Reg. No: {BRAND.establishmentRegistrationNumber}</p>
         </div>
       </div>

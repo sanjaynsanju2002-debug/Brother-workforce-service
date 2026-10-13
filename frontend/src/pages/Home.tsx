@@ -40,7 +40,7 @@ import { trackVisit } from "@/lib/track";
 import type { Client, Job } from "@/types";
 
 const TRUST = [
-  { icon: FileBadge, title: "Registered Establishment", desc: "Karnataka commercial establishment registration" },
+  { icon: FileBadge, title: "Licensed Labour Contractor", desc: "Contract labour staffing services" },
   { icon: ReceiptText, title: "GST Registered", desc: "Official tax invoicing & compliance" },
   { icon: ShieldCheck, title: "ESIC Covered Employees", desc: "Employee welfare compliance" },
   { icon: PiggyBank, title: "EPF Services", desc: "Provident fund enrolment & remittance" },
@@ -93,6 +93,7 @@ const INDUSTRY_CARDS = [
 ];
 
 const COMPLIANCE = [
+  { title: "Licensed Labour Contractor", desc: "Contact our team for contract labour licence details.", icon: FileBadge },
   { title: "Karnataka Registered Establishment", desc: `Shops and Commercial Establishments Reg. No: ${BRAND.establishmentRegistrationNumber}. Valid through ${BRAND.establishmentRegistrationValidThrough}.`, icon: FileBadge },
   { title: "GST Registered", desc: `GST No: ${BRAND.gst}`, icon: ReceiptText },
   { title: "ESIC Employee Coverage", desc: "Employee welfare supported through ESIC compliance.", icon: ShieldCheck },
@@ -373,7 +374,7 @@ export default function Home() {
             confidence.
           </p>
         </div>
-        <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {COMPLIANCE.map((c) => (
             <div
               key={c.title}
