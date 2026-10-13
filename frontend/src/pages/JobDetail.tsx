@@ -23,8 +23,33 @@ export default function JobDetail() {
 
   useEffect(() => {
     const previous = document.title;
-    document.title = job.data ? `${job.data.title} in ${job.data.location} | ${BRAND.name}` : `Job Opening | ${BRAND.name}`;
-    return () => { document.title = previous; };
+    const title = job.data ? `${job.data.title} in ${job.data.location} | ${BRAND.name}` : `Job Opening | ${BRAND.name}`;
+    const description = job.data
+      ? ((job.data.description || `${job.data.title} opening in ${job.data.location}. See role details and apply directly with ${BRAND.name}.`).replace(/\s+/g, " ").trim().slice(0, 160))
+      : "";
+    const url = job.data ? `${window.location.origin}/jobs/${encodeURIComponent(job.data.id)}` : "";
+    const changed: Array<{ element: Element; attribute: string; previous: string | null }> = [];
+    const update = (selector: string, attribute: string, value: string) => {
+      const element = document.querySelector(selector);
+      if (!element || !value) return;
+      changed.push({ element, attribute, previous: element.getAttribute(attribute) });
+      element.setAttribute(attribute, value);
+    };
+    document.title = title;
+    update('link[rel="canonical"]', "href", url);
+    update('meta[property="og:url"]', "content", url);
+    update('meta[name="description"]', "content", description);
+    update('meta[property="og:description"]', "content", description);
+    update('meta[name="twitter:description"]', "content", description);
+    update('meta[property="og:title"]', "content", title);
+    update('meta[name="twitter:title"]', "content", title);
+    return () => {
+      document.title = previous;
+      changed.forEach(({ element, attribute, previous: value }) => {
+        if (value === null) element.removeAttribute(attribute);
+        else element.setAttribute(attribute, value);
+      });
+    };
   }, [job.data]);
 
   return (
