@@ -1,8 +1,7 @@
-"""Seed the generic sector cards for the "Businesses We Support" section.
+"""Seed hidden example cards for admins learning the client manager.
 
-Idempotent: matches on name, so re-running updates instead of duplicating.
-Headcount is deliberately left blank — fill in real deployment numbers from the admin
-Clients tab rather than publishing invented figures.
+Idempotent: matches on name and does not overwrite an edited profile.
+Illustrative names must not appear on the public site as real clients.
 
 Run: cd /app/backend && python seed_clients.py
 """
@@ -26,13 +25,9 @@ async def main() -> None:
     for order, sector in enumerate(SECTORS):
         existing = await db.clients.find_one({"name": sector["name"]})
         if existing:
-            await db.clients.update_one(
-                {"name": sector["name"]},
-                {"$set": {**sector, "sort_order": order, "visible": True}},
-            )
-            print(f"updated: {sector['name']}")
+            print(f"kept existing: {sector['name']}")
         else:
-            client = Client(**sector, sort_order=order, visible=True)
+            client = Client(**sector, sort_order=order, visible=False)
             await db.clients.insert_one(client.model_dump())
             print(f"inserted: {sector['name']}")
     print("total clients:", await db.clients.count_documents({}))

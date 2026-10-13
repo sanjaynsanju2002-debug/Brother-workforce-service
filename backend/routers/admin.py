@@ -475,7 +475,7 @@ async def create_job(payload: JobCreate) -> Job:
 @router.put("/jobs/{job_id}", response_model=Job)
 async def edit_job(job_id: str, payload: JobCreate) -> Job:
     doc = await db.jobs.find_one_and_update(
-        {"id": job_id}, {"$set": payload.model_dump()}, return_document=True,
+        {"id": job_id}, {"$set": {**payload.model_dump(), "updated_at": datetime.now(timezone.utc)}}, return_document=True,
     )
     if not doc:
         raise HTTPException(status_code=404, detail="Not found")
@@ -486,7 +486,7 @@ async def edit_job(job_id: str, payload: JobCreate) -> Job:
 @router.patch("/jobs/{job_id}", response_model=Job)
 async def toggle_job(job_id: str, payload: ActiveUpdate) -> Job:
     doc = await db.jobs.find_one_and_update(
-        {"id": job_id}, {"$set": {"active": payload.active}}, return_document=True
+        {"id": job_id}, {"$set": {"active": payload.active, "updated_at": datetime.now(timezone.utc)}}, return_document=True
     )
     if not doc:
         raise HTTPException(status_code=404, detail="Not found")

@@ -9,7 +9,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 from typing import List
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 ROOT_DIR = Path(__file__).parent
@@ -26,6 +26,35 @@ async def lifespan(app: FastAPI):
     # Correct the existing public post without changing its role or pay range.
     await db.jobs.update_many({"title": "Telicaller"}, {"$set": {"title": "Telecaller"}})
     await db.jobs.update_many({"salary": "20,000-25000"}, {"$set": {"salary": "₹20,000–₹25,000"}})
+    # Add only details the owner already supplied for the Telecaller role. Do not
+    # overwrite a fuller description entered by an administrator later.
+    await db.jobs.update_many(
+        {"title": "Telecaller", "location": "Mysore", "salary": "₹20,000–₹25,000", "shift": "General shift", "$or": [{"description": None}, {"description": ""}]},
+        {"$set": {
+            "description": "Qualification: Any degree.\nRequired skill: Good speaking English.\nSalary: ₹20,000–₹25,000.\nLocation: Mysore.\nShift: General shift.",
+            "description_kn": "ವಿದ್ಯಾರ್ಹತೆ: ಯಾವುದೇ ಪದವಿ.\nಅಗತ್ಯ ಕೌಶಲ್ಯ: ಇಂಗ್ಲಿಷ್‌ನಲ್ಲಿ ಚೆನ್ನಾಗಿ ಮಾತನಾಡುವ ಸಾಮರ್ಥ್ಯ.\nಸಂಬಳ: ₹20,000–₹25,000.\nಸ್ಥಳ: ಮೈಸೂರು.\nಪಾಳಿ: ಸಾಮಾನ್ಯ ಪಾಳಿ.",
+            "updated_at": datetime.now(timezone.utc),
+        }},
+    )
+    # Older installs seeded illustrative industry cards as public "clients".
+    # Hide only untouched samples; retain any card that an admin has enriched.
+    sample_clients = [
+        ("Auto Component Manufacturer", "Nanjangud Industrial Area"),
+        ("Precision Engineering Works", "Hebbal Industrial Estate"),
+        ("FMCG Packaging Unit", "Belagola Industrial Area"),
+        ("Logistics & Warehousing Hub", "Kadakola Industrial Corridor"),
+        ("Your Company Could Be Here", "Mysore & across Karnataka"),
+    ]
+    await db.clients.update_many(
+        {
+            "$or": [{"name": name, "location": location} for name, location in sample_clients],
+            "logo_filename": None,
+            "headcount": {"$in": [None, ""]},
+            "service_summary": {"$in": [None, ""]},
+            "outcome": {"$in": [None, ""]},
+        },
+        {"$set": {"visible": False}},
+    )
     yield
     client.close()
 

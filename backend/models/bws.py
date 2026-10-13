@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 def _now() -> datetime:
@@ -79,12 +79,27 @@ class JobCreate(BaseModel):
     shift: Optional[str] = None
     openings: int = Field(default=1, ge=1)
     description: Optional[str] = None
+    description_kn: Optional[str] = None
+    closing_date: Optional[str] = None
+    employer_name: Optional[str] = None
+
+    @field_validator("closing_date")
+    @classmethod
+    def validate_closing_date(cls, value: Optional[str]) -> Optional[str]:
+        if not value:
+            return None
+        try:
+            datetime.strptime(value, "%Y-%m-%d")
+        except ValueError as exc:
+            raise ValueError("Use YYYY-MM-DD for the closing date") from exc
+        return value
 
 
 class Job(JobCreate):
     id: str = Field(default_factory=_uid)
     active: bool = True
     created_at: datetime = Field(default_factory=_now)
+    updated_at: Optional[datetime] = None
 
 
 class JobApplicationCount(BaseModel):

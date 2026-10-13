@@ -19,12 +19,24 @@ class Collection:
         self.records = list(records or [])
 
     async def find_one(self, query, projection=None):
+        def matches(record, conditions):
+            for key, value in conditions.items():
+                if key == "$or":
+                    if not any(matches(record, item) for item in value):
+                        return False
+                elif isinstance(value, dict):
+                    if "$exists" in value and (key in record) != value["$exists"]:
+                        return False
+                    if "$gte" in value and (record.get(key) is None or record[key] < value["$gte"]):
+                        return False
+                    if "$gt" in value and (record.get(key) is None or record[key] <= value["$gt"]):
+                        return False
+                elif record.get(key) != value:
+                    return False
+            return True
+
         for record in self.records:
-            if all(
-                record.get(key) == value or
-                (isinstance(value, dict) and "$gt" in value and record.get(key) > value["$gt"])
-                for key, value in query.items()
-            ):
+            if matches(record, query):
                 return record.copy()
         return None
 
@@ -68,6 +80,9 @@ class FakeDB:
         self.jobs = Collection([{
             "id": "job-1", "title": "Machine Operator", "location": "Mysuru",
             "skill_category": "Skilled", "active": True,
+        }, {
+            "id": "expired", "title": "Expired role", "location": "Mysuru",
+            "skill_category": "Skilled", "active": True, "closing_date": "2020-01-01",
         }])
         self.workers = Collection()
 
@@ -123,4 +138,6 @@ async def test_job_application_requires_consent_and_records_selected_role(monkey
         assert submitted.json()["job_title"] == "Machine Operator"
         assert fake.workers.records[0]["job_id"] == "job-1"
         assert (await client.post("/api/workers", json={**payload, "job_id": "closed", "consent_to_share": True})).status_code == 404
+        assert (await client.get("/api/jobs/expired")).status_code == 404
+        assert (await client.post("/api/workers", json={**payload, "job_id": "expired", "consent_to_share": True})).status_code == 404
         assert len(fake.workers.records) == 1
