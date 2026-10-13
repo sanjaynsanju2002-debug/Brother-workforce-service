@@ -1,6 +1,10 @@
 """Only verified, complete job pages receive recruitment structured data."""
 
+import os
 from datetime import datetime, timezone
+
+os.environ.setdefault("MONGO_URL", "mongodb://localhost:27017")
+os.environ.setdefault("DB_NAME", "bws_test")
 
 from lib.frontend import _job_schema
 from lib.jobs import open_jobs_query
