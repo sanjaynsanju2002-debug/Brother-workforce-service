@@ -98,7 +98,7 @@ export default function Navbar() {
           <Button
             variant="outline"
             className="hidden border-[#0F2444] text-[#0F2444] transition-transform duration-150 hover:bg-[#0F2444] hover:text-white active:scale-98 sm:inline-flex"
-            onClick={() => go("#worker-registration")}
+            onClick={() => go("#jobs")}
             data-testid="nav-btn-find-jobs"
           >
             Find Jobs

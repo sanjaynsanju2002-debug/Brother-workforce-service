@@ -1,8 +1,7 @@
 """Client companies shown in the "Businesses We Support" section.
 
-Admin-managed: name, industry, location, headcount note, optional logo, visibility flag.
-When no visible clients exist the frontend falls back to placeholder cards, so the public
-site never looks broken.
+Admin-managed: name, industry, location, headcount note, approved service
+details and outcomes, optional logo, visibility flag.
 """
 
 import uuid
@@ -25,6 +24,8 @@ class ClientCreate(BaseModel):
     industry: Optional[str] = None
     location: Optional[str] = None
     headcount: Optional[str] = None
+    service_summary: Optional[str] = None
+    outcome: Optional[str] = None
     visible: bool = True
 
 
@@ -40,5 +41,7 @@ class ClientUpdate(BaseModel):
     industry: Optional[str] = None
     location: Optional[str] = None
     headcount: Optional[str] = None
+    service_summary: Optional[str] = None
+    outcome: Optional[str] = None
     visible: Optional[bool] = None
     sort_order: Optional[int] = None

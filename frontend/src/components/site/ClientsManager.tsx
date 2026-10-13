@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Table,
   TableBody,
@@ -26,7 +27,7 @@ function apiMessage(err: unknown, fallback: string): string {
   return fallback;
 }
 
-const EMPTY = { name: "", industry: "", location: "", headcount: "" };
+const EMPTY = { name: "", industry: "", location: "", headcount: "", service_summary: "", outcome: "" };
 
 export default function ClientsManager({ pin }: { pin: string }) {
   const qc = useQueryClient();
@@ -35,6 +36,7 @@ export default function ClientsManager({ pin }: { pin: string }) {
 
   const clients = useQuery({ queryKey: key, queryFn: () => apiGet<Client[]>(`/admin/clients${q}`) });
   const [form, setForm] = useState(EMPTY);
+  const [editingClientId, setEditingClientId] = useState<string | null>(null);
 
   const refresh = () => {
     qc.invalidateQueries({ queryKey: key });
@@ -50,6 +52,17 @@ export default function ClientsManager({ pin }: { pin: string }) {
       toast.success("Client added");
     },
     onError: (e) => toast.error(apiMessage(e, "Could not add client")),
+  });
+
+  const edit = useMutation({
+    mutationFn: (v: { id: string; body: typeof EMPTY }) => apiPatch<Client>(`/admin/clients/${v.id}${q}`, v.body),
+    onSuccess: () => {
+      setEditingClientId(null);
+      setForm(EMPTY);
+      refresh();
+      toast.success("Client profile updated");
+    },
+    onError: (e) => toast.error(apiMessage(e, "Could not update client")),
   });
 
   const toggle = useMutation({
@@ -90,11 +103,10 @@ export default function ClientsManager({ pin }: { pin: string }) {
       <Card className="border-slate-200 bg-white">
         <CardContent className="p-4 sm:p-6">
           <h3 className="flex items-center gap-2 text-lg font-semibold text-[#0F2444]">
-            <Building2 className="h-5 w-5 text-[#EA580C]" /> Add a Client
+            <Building2 className="h-5 w-5 text-[#EA580C]" /> {editingClientId ? "Edit Client" : "Add a Client"}
           </h3>
           <p className="mt-1 text-sm text-slate-500">
-            Only publish a company name or logo once you have their written permission. Sector-style
-            entries such as "Auto Component Manufacturer" are always safe to show.
+            Publish names, logos, service details and outcomes only with client permission and verified figures.
           </p>
           <form
             className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4"
@@ -105,7 +117,8 @@ export default function ClientsManager({ pin }: { pin: string }) {
                 toast.error("Name is required");
                 return;
               }
-              create.mutate(form);
+              if (editingClientId) edit.mutate({ id: editingClientId, body: form });
+              else create.mutate(form);
             }}
           >
             <div>
@@ -144,20 +157,29 @@ export default function ClientsManager({ pin }: { pin: string }) {
                 data-testid="client-input-headcount"
               />
             </div>
+            <div className="sm:col-span-2">
+              <Label htmlFor="client-service-summary" className="mb-2 block text-sm">Service provided (optional)</Label>
+              <Textarea id="client-service-summary" rows={2} placeholder="Verified staffing service for this client" value={form.service_summary} onChange={(e) => setForm({ ...form, service_summary: e.target.value })} data-testid="client-input-service-summary" />
+            </div>
+            <div className="sm:col-span-2">
+              <Label htmlFor="client-outcome" className="mb-2 block text-sm">Approved result or testimonial (optional)</Label>
+              <Textarea id="client-outcome" rows={2} placeholder="Only add a confirmed result or client-approved quote" value={form.outcome} onChange={(e) => setForm({ ...form, outcome: e.target.value })} data-testid="client-input-outcome" />
+            </div>
             <div className="sm:col-span-2 lg:col-span-4">
               <Button
                 type="submit"
-                disabled={create.isPending}
+                disabled={create.isPending || edit.isPending}
                 className="w-full bg-[#EA580C] text-white hover:bg-[#C2410C] sm:w-auto"
                 data-testid="client-add-submit"
               >
-                {create.isPending ? (
+                {create.isPending || edit.isPending ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : (
                   <Plus className="mr-2 h-4 w-4" />
                 )}
-                Add Client
+                {editingClientId ? "Save Client" : "Add Client"}
               </Button>
+              {editingClientId && <Button type="button" variant="outline" className="ml-2" onClick={() => { setEditingClientId(null); setForm(EMPTY); }}>Cancel</Button>}
             </div>
           </form>
         </CardContent>
@@ -181,7 +203,7 @@ export default function ClientsManager({ pin }: { pin: string }) {
               {rows.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={7} className="py-10 text-center text-slate-500">
-                    No clients yet. The public site shows placeholder cards until you add one.
+                    No client profiles yet. Add one only when the client has approved the public details.
                   </TableCell>
                 </TableRow>
               )}
@@ -209,6 +231,10 @@ export default function ClientsManager({ pin }: { pin: string }) {
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
+                      <Button size="xs" variant="outline" onClick={() => {
+                        setEditingClientId(c.id);
+                        setForm({ name: c.name, industry: c.industry ?? "", location: c.location ?? "", headcount: c.headcount ?? "", service_summary: c.service_summary ?? "", outcome: c.outcome ?? "" });
+                      }} data-testid={`client-edit-${c.id}`}>Edit</Button>
                       <label
                         className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:border-[#EA580C] hover:text-[#EA580C]"
                         data-testid={`client-logo-label-${c.id}`}

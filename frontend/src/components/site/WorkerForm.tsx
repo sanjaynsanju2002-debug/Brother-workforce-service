@@ -16,10 +16,14 @@ import {
 import { apiPost } from "@/lib/api";
 import { ApiError } from "@/lib/api";
 import { AVAILABILITY, BRAND, SKILL_CATEGORIES } from "@/lib/brand";
+import { candidateCopy, type CandidateLanguage } from "@/lib/candidateLanguage";
 import type { Job, Worker, WorkerCreate } from "@/types";
 import { Link } from "react-router-dom";
 
 const MAX_RESUME_SIZE = 2 * 1024 * 1024;
+const GENDER_KN: Record<string, string> = { Male: "ಪುರುಷ", Female: "ಮಹಿಳೆ", Other: "ಇತರೆ" };
+const SKILL_KN: Record<string, string> = { Skilled: "ನುರಿತ", "Semi-skilled": "ಅರೆ ನುರಿತ", "General Worker": "ಸಾಮಾನ್ಯ ಕೆಲಸಗಾರ", "General Workers": "ಸಾಮಾನ್ಯ ಕೆಲಸಗಾರರು" };
+const AVAILABILITY_KN: Record<string, string> = { Immediate: "ತಕ್ಷಣ", "Within 7 days": "7 ದಿನಗಳೊಳಗೆ", "Within 15 days": "15 ದಿನಗಳೊಳಗೆ", "Within 30 days": "30 ದಿನಗಳೊಳಗೆ" };
 
 const EMPTY: WorkerCreate = {
   full_name: "",
@@ -38,7 +42,8 @@ const EMPTY: WorkerCreate = {
   availability: "",
 };
 
-export default function WorkerForm({ job }: { job?: Job }) {
+export default function WorkerForm({ job, language = "en" }: { job?: Job; language?: CandidateLanguage }) {
+  const copy = candidateCopy[language];
   const [form, setForm] = useState<WorkerCreate>(EMPTY);
   const [resume, setResume] = useState<File | null>(null);
   const [done, setDone] = useState(false);
@@ -68,14 +73,14 @@ export default function WorkerForm({ job }: { job?: Job }) {
       setResume(null);
       setConsent(false);
       if (resumeUploaded) {
-        toast.success("Application submitted successfully");
+        toast.success(copy.submitted);
       } else {
-        toast.warning("Application saved, but the resume could not be uploaded. Please contact us to send the resume.");
+        toast.warning(copy.savedWithoutResume);
       }
     },
     onError: (error) => {
       const detail = error instanceof ApiError ? (error.body as { detail?: unknown } | null)?.detail : null;
-      toast.error(typeof detail === "string" ? detail : "Could not submit your application. Please try again.");
+      toast.error(typeof detail === "string" ? detail : copy.submitError);
     },
   });
 
@@ -87,8 +92,7 @@ export default function WorkerForm({ job }: { job?: Job }) {
       >
         <CheckCircle2 className="mx-auto mb-3 h-10 w-10 text-green-600" />
         <p className="text-lg font-semibold text-[#0F2444]">
-          {job ? `Thank you for applying for ${job.title}. Our recruitment team will review your profile.` :
-            "Thank you for registering. Our recruitment team will contact you when suitable opportunities are available."}
+          {job ? copy.successJob : copy.successGeneral}
         </p>
         <Button
           variant="outline"
@@ -96,7 +100,7 @@ export default function WorkerForm({ job }: { job?: Job }) {
           onClick={() => setDone(false)}
           data-testid="worker-registration-another"
         >
-          Register another worker
+          {copy.another}
         </Button>
       </div>
     );
@@ -109,11 +113,11 @@ export default function WorkerForm({ job }: { job?: Job }) {
       onSubmit={(e) => {
         e.preventDefault();
         if (!form.full_name || !form.mobile || !form.current_location || !form.skill_category) {
-          toast.error("Please fill all required fields");
+          toast.error(copy.requiredError);
           return;
         }
         if (!consent) {
-          toast.error("Please agree to the recruitment use of your profile");
+          toast.error(copy.consentError);
           return;
         }
         mutation.mutate(form);
@@ -121,136 +125,70 @@ export default function WorkerForm({ job }: { job?: Job }) {
     >
       {job && (
         <div className="sm:col-span-2 rounded-lg border border-[#EA580C]/30 bg-orange-50 p-4 text-sm" data-testid="worker-selected-job">
-          Applying for <strong>{job.title}</strong> · {job.location}
+          {copy.appliedFor}: <strong>{job.title}</strong> · {job.location}
         </div>
       )}
-      <Field label="Full Name *">
+      <p className="sm:col-span-2 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm font-medium text-green-900">{copy.noFee}</p>
+      <Field id="worker-full-name" label={copy.fullName}>
         <Input
+          id="worker-full-name"
           required
+          autoComplete="name"
           value={form.full_name}
           onChange={(e) => set("full_name", e.target.value)}
           data-testid="worker-input-full-name"
         />
       </Field>
-      <Field label="Mobile Number *">
+      <Field id="worker-mobile" label={copy.mobile}>
         <Input
+          id="worker-mobile"
           required
+          type="tel"
+          inputMode="tel"
+          autoComplete="tel"
           value={form.mobile}
           onChange={(e) => set("mobile", e.target.value)}
           data-testid="worker-input-mobile"
         />
       </Field>
-      <Field label="WhatsApp Number">
+      <Field id="worker-location" label={copy.currentLocation}>
         <Input
-          value={form.whatsapp ?? ""}
-          onChange={(e) => set("whatsapp", e.target.value)}
-          data-testid="worker-input-whatsapp"
-        />
-      </Field>
-      <Field label="Age">
-        <Input value={form.age ?? ""} onChange={(e) => set("age", e.target.value)} data-testid="worker-input-age" />
-      </Field>
-      <Field label="Gender">
-        <Select value={form.gender ?? ""} onValueChange={(v: string) => set("gender", v)}>
-          <SelectTrigger data-testid="worker-select-gender">
-            <SelectValue placeholder="Select" />
-          </SelectTrigger>
-          <SelectContent>
-            {["Male", "Female", "Other"].map((g) => (
-              <SelectItem key={g} value={g}>
-                {g}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </Field>
-      <Field label="Current Location *">
-        <Input
+          id="worker-location"
           required
+          autoComplete="address-level2"
           value={form.current_location}
           onChange={(e) => set("current_location", e.target.value)}
           data-testid="worker-input-location"
         />
       </Field>
-      <Field label="Education">
-        <Input
-          value={form.education ?? ""}
-          onChange={(e) => set("education", e.target.value)}
-          data-testid="worker-input-education"
-        />
-      </Field>
-      <Field label="Experience">
-        <Input
-          placeholder="e.g. 3 years"
-          value={form.experience ?? ""}
-          onChange={(e) => set("experience", e.target.value)}
-          data-testid="worker-input-experience"
-        />
-      </Field>
-      <Field label="Skill Category *">
+      <Field id="worker-category" label={copy.skillCategory}>
         <Select value={form.skill_category} onValueChange={(v: string) => set("skill_category", v)}>
-          <SelectTrigger data-testid="worker-select-skill-category">
-            <SelectValue placeholder="Select category" />
+          <SelectTrigger id="worker-category" data-testid="worker-select-skill-category">
+            <SelectValue placeholder={copy.selectCategory} />
           </SelectTrigger>
           <SelectContent>
             {SKILL_CATEGORIES.map((c) => (
               <SelectItem key={c} value={c}>
-                {c}
+                {language === "kn" ? SKILL_KN[c] || c : c}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
       </Field>
-      <Field label="Availability">
-        <Select value={form.availability ?? ""} onValueChange={(v: string) => set("availability", v)}>
-          <SelectTrigger data-testid="worker-select-availability">
-            <SelectValue placeholder="Select availability" />
-          </SelectTrigger>
-          <SelectContent>
-            {AVAILABILITY.map((a) => (
-              <SelectItem key={a} value={a}>
-                {a}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </Field>
-      <Field label="Preferred Job Location">
+      <Field id="worker-skills" label={copy.skills} full>
         <Input
-          value={form.preferred_location ?? ""}
-          onChange={(e) => set("preferred_location", e.target.value)}
-          data-testid="worker-input-preferred-location"
-        />
-      </Field>
-      <Field label="Expected Salary">
-        <Input
-          value={form.expected_salary ?? ""}
-          onChange={(e) => set("expected_salary", e.target.value)}
-          data-testid="worker-input-expected-salary"
-        />
-      </Field>
-      <Field label="Skills" full>
-        <Input
+          id="worker-skills"
           placeholder="e.g. Welding, CNC operation, forklift"
           value={form.skills ?? ""}
           onChange={(e) => set("skills", e.target.value)}
           data-testid="worker-input-skills"
         />
       </Field>
-      <Field label="Previous Work Experience" full>
-        <Textarea
-          rows={3}
-          value={form.previous_experience ?? ""}
-          onChange={(e) => set("previous_experience", e.target.value)}
-          data-testid="worker-input-previous-experience"
-        />
-      </Field>
-
       <div className="sm:col-span-2">
-        <Label className="mb-2 block text-sm font-medium text-slate-700">Resume Upload <span className="font-normal text-slate-500">(maximum 2 MB)</span></Label>
+        <p className="mb-2 text-sm font-medium text-slate-700">{copy.resume} <span className="font-normal text-slate-500">(2 MB)</span></p>
         <label className="bws-upload-zone flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-slate-300 bg-white px-4 py-4 text-sm text-slate-600 hover:border-[#EA580C]">
           <Upload className="h-4 w-4 text-[#EA580C]" />
-          <span data-testid="worker-resume-name">{resume ? `${resume.name} (${(resume.size / 1024 / 1024).toFixed(1)} MB)` : "Upload PDF / DOC / image — max 2 MB (optional)"}</span>
+          <span data-testid="worker-resume-name">{resume ? `${resume.name} (${(resume.size / 1024 / 1024).toFixed(1)} MB)` : copy.resumeHelp}</span>
           <input
             type="file"
             className="hidden"
@@ -258,7 +196,7 @@ export default function WorkerForm({ job }: { job?: Job }) {
             onChange={(e) => {
               const file = e.target.files?.[0] ?? null;
               if (file && file.size > MAX_RESUME_SIZE) {
-                toast.error("Resume must be 2 MB or smaller");
+                toast.error(copy.resumeTooLarge);
                 e.target.value = "";
                 setResume(null);
                 return;
@@ -270,10 +208,50 @@ export default function WorkerForm({ job }: { job?: Job }) {
         </label>
       </div>
 
+      <details className="sm:col-span-2 rounded-xl border border-slate-200 bg-white p-4" data-testid="worker-optional-details">
+        <summary className="cursor-pointer font-semibold text-[#0F2444]">{copy.optionalDetails}</summary>
+        <p className="mt-2 text-sm text-slate-500">{copy.optionalHelp}</p>
+        <div className="mt-5 grid gap-5 sm:grid-cols-2">
+          <Field id="worker-whatsapp" label={copy.whatsapp}>
+            <Input id="worker-whatsapp" type="tel" inputMode="tel" value={form.whatsapp ?? ""} onChange={(e) => set("whatsapp", e.target.value)} data-testid="worker-input-whatsapp" />
+          </Field>
+          <Field id="worker-age" label={copy.age}>
+            <Input id="worker-age" inputMode="numeric" value={form.age ?? ""} onChange={(e) => set("age", e.target.value)} data-testid="worker-input-age" />
+          </Field>
+          <Field id="worker-gender" label={copy.gender}>
+            <Select value={form.gender ?? ""} onValueChange={(v: string) => set("gender", v)}>
+              <SelectTrigger id="worker-gender" data-testid="worker-select-gender"><SelectValue placeholder={copy.select} /></SelectTrigger>
+              <SelectContent>{["Male", "Female", "Other"].map((g) => <SelectItem key={g} value={g}>{language === "kn" ? GENDER_KN[g] : g}</SelectItem>)}</SelectContent>
+            </Select>
+          </Field>
+          <Field id="worker-education" label={copy.education}>
+            <Input id="worker-education" value={form.education ?? ""} onChange={(e) => set("education", e.target.value)} data-testid="worker-input-education" />
+          </Field>
+          <Field id="worker-experience" label={copy.experience}>
+            <Input id="worker-experience" placeholder={language === "kn" ? "ಉದಾ. 3 ವರ್ಷ" : "e.g. 3 years"} value={form.experience ?? ""} onChange={(e) => set("experience", e.target.value)} data-testid="worker-input-experience" />
+          </Field>
+          <Field id="worker-availability" label={copy.availability}>
+            <Select value={form.availability ?? ""} onValueChange={(v: string) => set("availability", v)}>
+              <SelectTrigger id="worker-availability" data-testid="worker-select-availability"><SelectValue placeholder={copy.selectAvailability} /></SelectTrigger>
+              <SelectContent>{AVAILABILITY.map((a) => <SelectItem key={a} value={a}>{language === "kn" ? AVAILABILITY_KN[a] || a : a}</SelectItem>)}</SelectContent>
+            </Select>
+          </Field>
+          <Field id="worker-preferred-location" label={copy.preferredLocation}>
+            <Input id="worker-preferred-location" value={form.preferred_location ?? ""} onChange={(e) => set("preferred_location", e.target.value)} data-testid="worker-input-preferred-location" />
+          </Field>
+          <Field id="worker-expected-salary" label={copy.expectedSalary}>
+            <Input id="worker-expected-salary" inputMode="numeric" value={form.expected_salary ?? ""} onChange={(e) => set("expected_salary", e.target.value)} data-testid="worker-input-expected-salary" />
+          </Field>
+          <Field id="worker-previous-experience" label={copy.previousExperience} full>
+            <Textarea id="worker-previous-experience" rows={3} value={form.previous_experience ?? ""} onChange={(e) => set("previous_experience", e.target.value)} data-testid="worker-input-previous-experience" />
+          </Field>
+        </div>
+      </details>
+
       <div className="sm:col-span-2">
         <label className="mb-4 flex items-start gap-3 text-sm text-slate-700">
           <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} required className="mt-1" />
-          <span>I agree that Brothers Workforce Solutions may use my profile and resume to contact me about jobs and share a relevant profile with an employer for recruitment. Read the <Link to="/privacy" className="text-[#0F2444] underline">Privacy Notice</Link>.</span>
+          <span>{copy.consentBefore}<Link to="/privacy" className="text-[#0F2444] underline">{copy.privacy}</Link>{copy.consentAfter}</span>
         </label>
         <Button
           type="submit"
@@ -282,10 +260,10 @@ export default function WorkerForm({ job }: { job?: Job }) {
           data-testid="worker-registration-submit"
         >
           {mutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          Apply Now
+          {copy.applyNow}
         </Button>
         <p className="mt-4 max-w-2xl text-xs leading-relaxed text-slate-600">
-          For questions about your details or to request their removal, email{" "}
+          {copy.removalBefore}{" "}
           <a className="font-medium text-[#0F2444] underline underline-offset-2 hover:text-[#EA580C]" href={`mailto:${BRAND.email}`}>
             {BRAND.email}
           </a>.
@@ -295,10 +273,10 @@ export default function WorkerForm({ job }: { job?: Job }) {
   );
 }
 
-function Field({ label, children, full }: { label: string; children: React.ReactNode; full?: boolean }) {
+function Field({ id, label, children, full }: { id: string; label: string; children: React.ReactNode; full?: boolean }) {
   return (
     <div className={`bws-form-field ${full ? "sm:col-span-2" : ""}`}>
-      <Label className="mb-2 block text-sm font-medium text-slate-700">{label}</Label>
+      <Label htmlFor={id} className="mb-2 block text-sm font-medium text-slate-700">{label}</Label>
       {children}
     </div>
   );

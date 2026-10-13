@@ -61,12 +61,16 @@ export interface JobCreate {
   shift?: string | null;
   openings: number;
   description?: string | null;
+  description_kn?: string | null;
+  closing_date?: string | null;
+  employer_name?: string | null;
 }
 
 export interface Job extends JobCreate {
   id: string;
   active: boolean;
   created_at: string;
+  updated_at?: string | null;
 }
 
 export interface AdminStats {
@@ -122,6 +126,8 @@ export interface ClientCreate {
   industry?: string | null;
   location?: string | null;
   headcount?: string | null;
+  service_summary?: string | null;
+  outcome?: string | null;
   visible: boolean;
 }
 

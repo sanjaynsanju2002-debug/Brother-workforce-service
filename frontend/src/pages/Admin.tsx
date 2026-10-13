@@ -296,6 +296,9 @@ function Dashboard({
     shift: "",
     openings: 1,
     description: "",
+    description_kn: "",
+    closing_date: "",
+    employer_name: "",
   });
   const [editingJobId, setEditingJobId] = useState<string | null>(null);
   const editJob = useMutation({
@@ -303,7 +306,7 @@ function Dashboard({
     onSuccess: () => {
       invalidate();
       setEditingJobId(null);
-      setJob({ title: "", location: "", skill_category: "Skilled", experience: "", salary: "", shift: "", openings: 1, description: "" });
+      setJob({ title: "", location: "", skill_category: "Skilled", experience: "", salary: "", shift: "", openings: 1, description: "", description_kn: "", closing_date: "", employer_name: "" });
       toast.success("Job updated");
     },
     onError: () => toast.error("Could not update job"),
@@ -721,6 +724,10 @@ function Dashboard({
                       toast.error("Enter at least 1 opening");
                       return;
                     }
+                    if ((job.description ?? "").trim().length < 40) {
+                      toast.error("Add a full job description with duties, qualifications, skills and working hours");
+                      return;
+                    }
                     if (editingJobId) {
                       editJob.mutate({ id: editingJobId, payload: job });
                       return;
@@ -736,6 +743,9 @@ function Dashboard({
                           shift: "",
                           openings: 1,
                           description: "",
+                          description_kn: "",
+                          closing_date: "",
+                          employer_name: "",
                         }),
                     });
                   }}
@@ -785,6 +795,23 @@ function Dashboard({
                     onChange={(e) => setJob({ ...job, shift: e.target.value })}
                     data-testid="admin-job-shift"
                   />
+                  <Input
+                    placeholder="Hiring company (leave blank if confidential)"
+                    value={job.employer_name ?? ""}
+                    onChange={(e) => setJob({ ...job, employer_name: e.target.value })}
+                    data-testid="admin-job-employer"
+                  />
+                  <div>
+                    <Label htmlFor="admin-job-closing-date" className="mb-2 block text-sm">Application closing date (optional)</Label>
+                    <Input
+                      id="admin-job-closing-date"
+                      type="date"
+                      value={job.closing_date ?? ""}
+                      onChange={(e) => setJob({ ...job, closing_date: e.target.value })}
+                      data-testid="admin-job-closing-date"
+                    />
+                    <p className="mt-1 text-xs text-slate-500">After this date, the job automatically stops accepting applications.</p>
+                  </div>
                   <div>
                     <Label className="mb-2 block text-sm">Number of openings *</Label>
                     <Input
@@ -807,13 +834,29 @@ function Dashboard({
                       data-testid="admin-job-openings"
                     />
                   </div>
-                  <Textarea
-                    rows={3}
-                    placeholder="Description"
-                    value={job.description ?? ""}
-                    onChange={(e) => setJob({ ...job, description: e.target.value })}
-                    data-testid="admin-job-description"
-                  />
+                  <div>
+                    <Label htmlFor="admin-job-description" className="mb-2 block text-sm">Full job description *</Label>
+                    <Textarea
+                      id="admin-job-description"
+                      rows={7}
+                      placeholder={"Responsibilities:\nQualifications and skills:\nWorking hours and shift:\nEducation and experience:\nWork location:"}
+                      value={job.description ?? ""}
+                      onChange={(e) => setJob({ ...job, description: e.target.value })}
+                      data-testid="admin-job-description"
+                    />
+                    <p className="mt-1 text-xs text-slate-500">Use verified job details. Existing jobs missing a description can be completed here; do not guess employer requirements.</p>
+                  </div>
+                  <div>
+                    <Label htmlFor="admin-job-description-kn" className="mb-2 block text-sm">Kannada job description (optional)</Label>
+                    <Textarea
+                      id="admin-job-description-kn"
+                      rows={5}
+                      placeholder="ಕನ್ನಡದಲ್ಲಿ ಉದ್ಯೋಗದ ವಿವರಗಳು"
+                      value={job.description_kn ?? ""}
+                      onChange={(e) => setJob({ ...job, description_kn: e.target.value })}
+                      data-testid="admin-job-description-kn"
+                    />
+                  </div>
                   <Button
                     type="submit"
                     disabled={createJob.isPending || editJob.isPending}
@@ -825,7 +868,7 @@ function Dashboard({
                   {editingJobId && (
                     <Button type="button" variant="outline" className="w-full" onClick={() => {
                       setEditingJobId(null);
-                      setJob({ title: "", location: "", skill_category: "Skilled", experience: "", salary: "", shift: "", openings: 1, description: "" });
+                      setJob({ title: "", location: "", skill_category: "Skilled", experience: "", salary: "", shift: "", openings: 1, description: "", description_kn: "", closing_date: "", employer_name: "" });
                     }}>Cancel edit</Button>
                   )}
                 </form>
@@ -854,7 +897,7 @@ function Dashboard({
                     )}
                     {(jobs.data ?? []).map((j) => (
                       <TableRow key={j.id} data-testid={`admin-job-row-${j.id}`}>
-                        <TableCell className="font-medium text-[#0F2444]">{j.title}</TableCell>
+                        <TableCell className="font-medium text-[#0F2444]">{j.title}{!(j.description ?? "").trim() && <span className="block text-xs font-normal text-amber-700">Add job description</span>}</TableCell>
                         <TableCell>{j.location}</TableCell>
                         <TableCell>{j.openings}</TableCell>
                         <TableCell>
@@ -866,7 +909,7 @@ function Dashboard({
                           <div className="flex flex-wrap gap-2">
                             <Button size="xs" variant="outline" onClick={() => {
                               setEditingJobId(j.id);
-                              setJob({ title: j.title, location: j.location, skill_category: j.skill_category, experience: j.experience ?? "", salary: j.salary ?? "", shift: j.shift ?? "", openings: j.openings, description: j.description ?? "" });
+                              setJob({ title: j.title, location: j.location, skill_category: j.skill_category, experience: j.experience ?? "", salary: j.salary ?? "", shift: j.shift ?? "", openings: j.openings, description: j.description ?? "", description_kn: j.description_kn ?? "", closing_date: j.closing_date ?? "", employer_name: j.employer_name ?? "" });
                             }} data-testid={`admin-job-edit-${j.id}`}>Edit</Button>
                             <Link to={`/jobs/${j.id}`} target="_blank" className="inline-flex items-center rounded-md border border-slate-200 px-2.5 text-xs font-medium">View</Link>
                             <Button

@@ -15,6 +15,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 
 from lib.auth import require_admin
 from lib.db import db
+from lib.jobs import open_jobs_query
 from lib.notify import build_html, send_notification
 from models.bws import (
     CompanyRequest,
@@ -50,7 +51,7 @@ async def create_worker(payload: WorkerCreate, background: BackgroundTasks) -> W
         raise HTTPException(status_code=400, detail="Please agree to recruitment use of your profile")
     job_title = None
     if payload.job_id:
-        job = await db.jobs.find_one({"id": payload.job_id, "active": True}, {"_id": 0, "title": 1})
+        job = await db.jobs.find_one({"id": payload.job_id, **open_jobs_query()}, {"_id": 0, "title": 1})
         if not job:
             raise HTTPException(status_code=404, detail="This job is no longer open. You can still register your profile.")
         job_title = job["title"]
@@ -235,13 +236,13 @@ async def create_company_request(
 
 @router.get("/jobs", response_model=list[Job])
 async def list_jobs() -> list[Job]:
-    docs = await db.jobs.find({"active": True}).sort("created_at", -1).to_list(200)
+    docs = await db.jobs.find(open_jobs_query()).sort("created_at", -1).to_list(200)
     return [Job(**d) for d in docs]
 
 
 @router.get("/jobs/{job_id}", response_model=Job)
 async def get_job(job_id: str) -> Job:
-    doc = await db.jobs.find_one({"id": job_id, "active": True}, {"_id": 0})
+    doc = await db.jobs.find_one({"id": job_id, **open_jobs_query()}, {"_id": 0})
     if not doc:
         raise HTTPException(status_code=404, detail="This job is no longer open")
     return Job(**doc)

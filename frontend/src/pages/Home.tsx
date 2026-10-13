@@ -11,7 +11,6 @@ import {
   Cpu,
   Factory,
   FileBadge,
-  Handshake,
   MapPin,
   Mail,
   MessageSquare,
@@ -29,6 +28,7 @@ import {
 import Navbar from "@/components/site/Navbar";
 import Footer from "@/components/site/Footer";
 import BusinessChat from "@/components/site/BusinessChat";
+import CandidateLanguageToggle from "@/components/site/CandidateLanguageToggle";
 import WorkerForm from "@/components/site/WorkerForm";
 import CompanyForm from "@/components/site/CompanyForm";
 import { Badge } from "@/components/ui/badge";
@@ -36,6 +36,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { apiGet } from "@/lib/api";
 import { BRAND, IMAGES } from "@/lib/brand";
+import { candidateCopy, useCandidateLanguage } from "@/lib/candidateLanguage";
 import { trackVisit } from "@/lib/track";
 import type { Client, Job } from "@/types";
 
@@ -101,19 +102,13 @@ const COMPLIANCE = [
   { title: "MSME Registered", desc: "Registered business under the MSME framework.", icon: Award },
 ];
 
-const CLIENTS = [
-  "Partner Company",
-  "Partner Company",
-  "Partner Company",
-  "Partner Company",
-  "Your Company Could Be Here",
-];
-
 function scrollTo(id: string) {
   document.querySelector(id)?.scrollIntoView({ behavior: "smooth" });
 }
 
 export default function Home() {
+  const [candidateLang, setCandidateLang] = useCandidateLanguage();
+  const copy = candidateCopy[candidateLang];
   useEffect(() => {
     document.title = "Brothers Workforce Solutions | Manpower Services in Mysuru, Karnataka";
     trackVisit("/");
@@ -187,7 +182,7 @@ export default function Home() {
                 Request Manpower
               </Button>
               <Button
-                onClick={() => scrollTo("#worker-registration")}
+                onClick={() => scrollTo("#jobs")}
                 variant="outline"
                 className="bws-btn-glass border-white/40 bg-white/10 px-7 py-6 text-base font-semibold text-white backdrop-blur hover:bg-white hover:text-[#0F2444]"
                 data-testid="hero-btn-apply-jobs"
@@ -392,7 +387,10 @@ export default function Home() {
 
       {/* JOBS */}
       <Section id="jobs" bg="bg-[#F1F5F9]">
-        <Heading overline="Recruitment" title="Current Job Openings" subtitle="Direct recruitment opportunities for industrial and factory placements." />
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <Heading overline={copy.recruitment} title={copy.jobs} subtitle={copy.jobsIntro} />
+          <CandidateLanguageToggle language={candidateLang} onChange={setCandidateLang} />
+        </div>
         <div className="mt-8 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm backdrop-blur" data-reveal>
           <div className="flex items-center gap-3">
             <div className="rounded-xl bg-[#0F2444] p-2.5 text-white shadow-lg">
@@ -400,27 +398,27 @@ export default function Home() {
             </div>
             <div>
               <p className="text-sm font-semibold text-[#0F2444]">
-                {jobs.length > 0 ? `${jobs.length} active opening${jobs.length === 1 ? "" : "s"}` : "Talent registration open"}
+                {jobs.length > 0 ? candidateLang === "kn" ? `${jobs.length} ${copy.activeOpenings}` : `${jobs.length} active opening${jobs.length === 1 ? "" : "s"}` : copy.registerFuture}
               </p>
-              <p className="text-xs text-slate-500">Apply once and stay visible to our recruitment team.</p>
+              <p className="text-xs text-slate-500">{candidateLang === "kn" ? "ಒಮ್ಮೆ ನೋಂದಾಯಿಸಿ. ನಮ್ಮ ನೇಮಕಾತಿ ತಂಡ ನಿಮ್ಮ ವಿವರಗಳನ್ನು ಪರಿಶೀಲಿಸುತ್ತದೆ." : "Apply once and stay visible to our recruitment team."}</p>
             </div>
           </div>
           <Button
             className="bws-btn-3d bg-[#EA580C] text-white hover:bg-[#C2410C]"
             onClick={() => scrollTo("#worker-registration")}
           >
-            Quick Apply
+            {copy.quickApply}
           </Button>
         </div>
         <div className="mt-6" data-testid="job-listings">
           {jobsQuery.isPending ? (
             <div className="rounded-lg border border-dashed border-slate-300 bg-white p-12 text-center text-slate-600" role="status">
-              Loading current openings…
+              {copy.loading}
             </div>
           ) : jobsQuery.isError ? (
             <div className="rounded-lg border border-dashed border-slate-300 bg-white p-12 text-center">
-              <p className="text-lg font-semibold text-[#0F2444]">Current openings could not be loaded.</p>
-              <Button variant="outline" className="mt-5" onClick={() => jobsQuery.refetch()}>Try Again</Button>
+              <p className="text-lg font-semibold text-[#0F2444]">{copy.loadError}</p>
+              <Button variant="outline" className="mt-5" onClick={() => jobsQuery.refetch()}>{copy.retry}</Button>
             </div>
           ) : jobs.length === 0 ? (
             <div
@@ -429,18 +427,17 @@ export default function Home() {
             >
               <Briefcase className="mx-auto mb-4 h-10 w-10 text-slate-400" />
               <p className="text-lg font-semibold text-[#0F2444]">
-                No current openings. New opportunities will be updated soon.
+                {copy.noJobs}
               </p>
               <p className="mx-auto mt-2 max-w-xl text-sm text-slate-500">
-                Register your profile below and our recruitment team will contact you as soon as a matching role
-                opens.
+                {copy.noJobsHelp}
               </p>
               <Button
                 className="mt-6 bg-[#EA580C] text-white hover:bg-[#C2410C]"
                 onClick={() => scrollTo("#worker-registration")}
                 data-testid="jobs-empty-cta"
               >
-                Register Your Profile
+                {copy.registerFuture}
               </Button>
             </div>
           ) : (
@@ -460,18 +457,19 @@ export default function Home() {
                       <MapPin className="h-3.5 w-3.5" /> {j.location}
                     </p>
                     <dl className="mt-4 space-y-1.5 text-sm text-slate-600">
-                      {j.experience && <Row k="Experience" v={j.experience} />}
-                      <Row k="Salary" v={j.salary ? (/^\d+$/.test(j.salary.trim()) ? `₹${Number(j.salary).toLocaleString("en-IN")}` : j.salary) : "Discuss during screening"} />
-                      {j.shift && <Row k="Shift" v={j.shift} />}
-                      <Row k="Openings" v={String(j.openings)} />
-                      <Row k="Posted" v={new Date(j.created_at).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })} />
+                      {j.experience && <Row k={copy.experience} v={j.experience} />}
+                      <Row k={copy.salary} v={j.salary ? (/^\d+$/.test(j.salary.trim()) ? `₹${Number(j.salary).toLocaleString("en-IN")}` : j.salary) : copy.discuss} />
+                      {j.shift && <Row k={copy.shift} v={j.shift} />}
+                      <Row k={copy.openings} v={String(j.openings)} />
+                      <Row k={copy.posted} v={new Date(j.created_at).toLocaleDateString(candidateLang === "kn" ? "kn-IN" : "en-IN", { day: "numeric", month: "short", year: "numeric" })} />
+                      {j.closing_date && <Row k={copy.closingDate} v={new Date(`${j.closing_date}T12:00:00`).toLocaleDateString(candidateLang === "kn" ? "kn-IN" : "en-IN", { day: "numeric", month: "short", year: "numeric" })} />}
                     </dl>
-                    {j.description && <p className="mt-3 text-sm text-slate-500">{j.description}</p>}
+                    {(candidateLang === "kn" ? j.description_kn || j.description : j.description) && <p className="mt-3 line-clamp-3 whitespace-pre-line text-sm text-slate-500">{candidateLang === "kn" ? j.description_kn || j.description : j.description}</p>}
                     <Link
                       to={`/jobs/${j.id}`}
                       className="mt-5 inline-flex w-full items-center justify-center rounded-md bg-[#EA580C] px-4 py-2 font-semibold text-white hover:bg-[#C2410C]"
                       data-testid={`job-apply-${j.id}`}
-                    >View &amp; Apply</Link>
+                    >{copy.viewApply}</Link>
                   </CardContent>
                 </Card>
               ))}
@@ -483,12 +481,12 @@ export default function Home() {
       {/* HOW IT WORKS */}
       <Section id="how-it-works" bg="bg-[#0B1B33]">
         <div className="text-center" data-reveal>
-          <p className="bws-overline text-[#FB923C]">How It Works</p>
+          <p className="bws-overline text-[#FB923C]">{candidateLang === "kn" ? "ಇದು ಹೇಗೆ ಕಾರ್ಯನಿರ್ವಹಿಸುತ್ತದೆ" : "How It Works"}</p>
           <h2 className="mt-3 text-3xl font-bold tracking-tight text-white lg:text-5xl">
-            Simple for Workers. Structured for Companies.
+            {candidateLang === "kn" ? "ಅಭ್ಯರ್ಥಿಗಳಿಗೆ ಸರಳ ಪ್ರಕ್ರಿಯೆ. ಕಂಪನಿಗಳಿಗೆ ವ್ಯವಸ್ಥಿತ ಸೇವೆ." : "Simple for Workers. Structured for Companies."}
           </h2>
           <p className="mx-auto mt-4 max-w-2xl text-slate-300">
-            One clear process for job seekers and one reliable process for employers looking for manpower.
+            {candidateLang === "kn" ? "ಉದ್ಯೋಗಾರ್ಥಿಗಳಿಗೆ ಸ್ಪಷ್ಟ ಪ್ರಕ್ರಿಯೆ ಮತ್ತು ಉದ್ಯೋಗದಾತರಿಗೆ ವಿಶ್ವಾಸಾರ್ಹ ಮಾನವ ಸಂಪನ್ಮೂಲ ಸೇವೆ." : "One clear process for job seekers and one reliable process for employers looking for manpower."}
           </p>
         </div>
 
@@ -497,16 +495,20 @@ export default function Home() {
             <div className="bws-flow-heading">
               <Users className="h-6 w-6" />
               <div>
-                <p className="text-xs font-bold uppercase tracking-[0.18em] text-orange-300">For Job Seekers</p>
-                <h3 className="mt-1 text-2xl font-semibold text-white">From profile to opportunity</h3>
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-orange-300">{candidateLang === "kn" ? "ಉದ್ಯೋಗಾರ್ಥಿಗಳಿಗಾಗಿ" : "For Job Seekers"}</p>
+                <h3 className="mt-1 text-2xl font-semibold text-white">{candidateLang === "kn" ? "ನೋಂದಣಿಯಿಂದ ಉದ್ಯೋಗಾವಕಾಶದವರೆಗೆ" : "From profile to opportunity"}</h3>
               </div>
             </div>
             <div className="mt-7 space-y-4">
-              {[
+              {(candidateLang === "kn" ? [
+                ["01", "ನಿಮ್ಮ ವಿವರಗಳನ್ನು ನೀಡಿ", "ವಿದ್ಯಾರ್ಹತೆ, ಕೌಶಲ್ಯ, ಅನುಭವ ಮತ್ತು ಆದ್ಯತೆಯ ಸ್ಥಳವನ್ನು ನಮೂದಿಸಿ."],
+                ["02", "ಸ್ವವಿವರ ಪತ್ರ ಸೇರಿಸಿ (ಐಚ್ಛಿಕ)", "ನಮ್ಮ ತಂಡ ಪರಿಶೀಲಿಸಲು ನಿಮ್ಮ ಸ್ವವಿವರ ಪತ್ರವನ್ನು ಸೇರಿಸಬಹುದು."],
+                ["03", "ಸೂಕ್ತ ಅವಕಾಶ ಪಡೆಯಿರಿ", "ನಿಮ್ಮ ವಿವರಗಳಿಗೆ ಹೊಂದುವ ಉದ್ಯೋಗಾವಕಾಶಗಳನ್ನು ನಮ್ಮ ತಂಡ ಪರಿಶೀಲಿಸುತ್ತದೆ."],
+              ] : [
                 ["01", "Create your profile", "Share your education, skills, experience and preferred location."],
-                ["02", "Upload your resume", "Add your resume once so our recruitment team can review your profile."],
+                ["02", "Add your resume (optional)", "You can add a resume to help our recruitment team review your profile."],
                 ["03", "Get matched", "We connect suitable candidates with current and upcoming workforce requirements."],
-              ].map(([step, title, desc]) => (
+              ]).map(([step, title, desc]) => (
                 <div key={step} className="bws-flow-step">
                   <span>{step}</span>
                   <div>
@@ -520,7 +522,7 @@ export default function Home() {
               onClick={() => scrollTo("#worker-registration")}
               className="bws-btn-3d mt-7 bg-[#EA580C] text-white hover:bg-[#C2410C]"
             >
-              Register for Jobs
+              {copy.registerFuture}
             </Button>
           </div>
 
@@ -561,20 +563,24 @@ export default function Home() {
       <Section id="worker-registration" bg="bg-white">
         <div className="grid gap-10 lg:grid-cols-[1fr_1.5fr]">
           <div>
-            <p className="bws-overline">For Workers</p>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="bws-overline">{candidateLang === "kn" ? "ಅಭ್ಯರ್ಥಿಗಳಿಗಾಗಿ" : "For Workers"}</p>
+              <CandidateLanguageToggle language={candidateLang} onChange={setCandidateLang} />
+            </div>
             <h2 className="mt-3 text-3xl font-bold tracking-tight text-[#0F2444] lg:text-4xl">
-              Looking For Job Opportunities?
+              {copy.workerTitle}
             </h2>
-            <p className="mt-4 text-slate-600">
-              Register once and our recruitment team will match you to factory, warehouse and technical roles as
-              they open across Karnataka.
-            </p>
+            <p className="mt-4 text-slate-600">{copy.workerIntro}</p>
             <div className="mt-6 grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
-              {[
+              {(candidateLang === "kn" ? [
+                ["01", "ವಿವರಗಳನ್ನು ನೀಡಿ"],
+                ["02", "ಸ್ವವಿವರ ಪತ್ರ ಸೇರಿಸಿ (ಐಚ್ಛಿಕ)"],
+                ["03", "ಸೂಕ್ತ ಅವಕಾಶ ಪಡೆಯಿರಿ"],
+              ] : [
                 ["01", "Create Profile"],
-                ["02", "Upload Resume"],
+                ["02", "Add Resume (Optional)"],
                 ["03", "Get Matched"],
-              ].map(([step, title]) => (
+              ]).map(([step, title]) => (
                 <div key={step} className="bws-process-step">
                   <span>{step}</span>
                   <strong>{title}</strong>
@@ -590,7 +596,7 @@ export default function Home() {
             />
           </div>
           <div className="bws-panel-3d rounded-2xl border border-slate-200 bg-[#F8FAFC] p-6 sm:p-8">
-            <WorkerForm />
+            <WorkerForm language={candidateLang} />
           </div>
         </div>
       </Section>
@@ -638,25 +644,17 @@ export default function Home() {
       {/* CLIENTS */}
       <Section id="clients" bg="bg-white">
         <Heading overline="Our Clients" title="Businesses We Support" subtitle="Serving production units and supply chains across Mysore industrial belts." />
-        <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-5" data-testid="clients-grid">
-          {clients.length > 0
-            ? clients.map((c) => {
-                const isCta = /could be here/i.test(c.name);
-                return (
+        <div className="mx-auto mt-12 grid max-w-5xl gap-6 sm:grid-cols-2" data-testid="clients-grid">
+          {clientsQuery.isPending ? (
+            <p className="sm:col-span-2 text-center text-sm text-slate-500" role="status">Loading client profiles…</p>
+          ) : clients.length > 0
+            ? clients.map((c) => (
                   <div
                     key={c.id}
-                    className={`flex flex-col items-center justify-center gap-3 rounded-md border p-6 text-center transition-all duration-200 hover:-translate-y-1 hover:shadow-md ${
-                      isCta
-                        ? "border-dashed border-[#EA580C]/50 bg-orange-50/40"
-                        : "border-slate-200 bg-[#F8FAFC] hover:border-[#EA580C]/40"
-                    }`}
+                    className="flex flex-col items-center justify-center gap-3 rounded-xl border border-slate-200 bg-[#F8FAFC] p-8 text-center transition-all duration-200 hover:-translate-y-1 hover:border-[#EA580C]/40 hover:shadow-md"
                     data-testid={`client-card-${c.id}`}
                   >
-                    {isCta ? (
-                      <Handshake className="h-7 w-7 text-[#EA580C]" />
-                    ) : (
-                      <ClientLogo client={c} />
-                    )}
+                    <ClientLogo client={c} />
                     <p className="text-sm font-semibold text-[#0F2444]">{c.name}</p>
                     {c.industry && <p className="text-xs text-slate-500">{c.industry}</p>}
                     {c.location && (
@@ -664,23 +662,12 @@ export default function Home() {
                         <MapPin className="h-3 w-3" /> {c.location}
                       </p>
                     )}
+                    {c.service_summary && <p className="mt-2 text-sm text-slate-700">{c.service_summary}</p>}
+                    {c.outcome && <p className="rounded-lg bg-white px-3 py-2 text-sm font-medium text-[#0F2444]">{c.outcome}</p>}
+                    {c.headcount && <p className="text-xs text-slate-500">{c.headcount}</p>}
                   </div>
-                );
-              })
-            : CLIENTS.map((c, idx) => (
-                <div
-                  key={idx}
-                  className="flex flex-col items-center justify-center gap-3 rounded-md border border-dashed border-slate-300 bg-[#F8FAFC] p-8 text-center transition-colors duration-200 hover:border-[#EA580C]/50"
-                  data-testid={`client-placeholder-${idx}`}
-                >
-                  {idx === CLIENTS.length - 1 ? (
-                    <Handshake className="h-7 w-7 text-[#EA580C]" />
-                  ) : (
-                    <Building2 className="h-7 w-7 text-slate-400" />
-                  )}
-                  <p className="text-sm font-medium text-slate-600">{c}</p>
-                </div>
-              ))}
+              ))
+            : <div className="sm:col-span-2 rounded-xl border border-dashed border-slate-200 bg-[#F8FAFC] p-8 text-center text-slate-600">Contact our team to discuss workforce support for your business.</div>}
         </div>
       </Section>
 
@@ -797,7 +784,7 @@ function ClientLogo({ client }: { client: Client }) {
     <img
       src={source}
       alt={client.name}
-      className="h-12 w-full max-w-[120px] object-contain"
+      className="h-20 w-full max-w-[180px] object-contain"
       onError={() => setStep(step === 0 && client.logo_filename ? 1 : 2)}
     />
   );
