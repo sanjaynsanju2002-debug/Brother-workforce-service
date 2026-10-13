@@ -664,7 +664,7 @@ export default function Home() {
                     )}
                     {c.service_summary && <p className="mt-2 text-sm text-slate-700">{c.service_summary}</p>}
                     {c.outcome && <p className="rounded-lg bg-white px-3 py-2 text-sm font-medium text-[#0F2444]">{c.outcome}</p>}
-                    {c.headcount && <p className="text-xs text-slate-500">{c.headcount}</p>}
+                    {c.headcount && <p className="text-xs text-slate-500"><span className="font-semibold">Workforce deployed:</span> {c.headcount}</p>}
                   </div>
               ))
             : <div className="sm:col-span-2 rounded-xl border border-dashed border-slate-200 bg-[#F8FAFC] p-8 text-center text-slate-600">Contact our team to discuss workforce support for your business.</div>}
