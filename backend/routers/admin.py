@@ -459,6 +459,15 @@ async def update_request(req_id: str, payload: StatusUpdate) -> CompanyRequest:
     return CompanyRequest(**doc)
 
 
+@router.delete("/company-requests/{req_id}", response_model=Ok)
+async def delete_request(req_id: str) -> Ok:
+    """Permanently delete a company enquiry."""
+    result = await db.company_requests.delete_one({"id": req_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Company enquiry not found")
+    return Ok(ok=True)
+
+
 @router.get("/jobs", response_model=list[Job])
 async def admin_jobs() -> list[Job]:
     docs = await db.jobs.find().sort("created_at", -1).to_list(500)

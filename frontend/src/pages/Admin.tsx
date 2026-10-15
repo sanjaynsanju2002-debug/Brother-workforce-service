@@ -264,6 +264,18 @@ function Dashboard({
     },
   });
 
+  const removeRequest = useMutation({
+    mutationFn: (id: string) => apiDelete<Ok>(`/admin/company-requests/${id}${q}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-requests", pin] });
+      qc.invalidateQueries({ queryKey: ["admin-stats", pin] });
+      qc.invalidateQueries({ queryKey: ["admin-traffic", pin] });
+      qc.invalidateQueries({ queryKey: ["admin-enquiry-aging", pin] });
+      toast.success("Company enquiry permanently deleted");
+    },
+    onError: () => toast.error("Could not delete company enquiry"),
+  });
+
   const createJob = useMutation({
     mutationFn: (payload: JobCreate) => apiPost<Job>(`/admin/jobs${q}`, payload),
     onSuccess: () => {
@@ -650,7 +662,7 @@ function Dashboard({
                       <TableHead>Count</TableHead>
                       <TableHead>Industry</TableHead>
                       <TableHead>Status</TableHead>
-                      <TableHead>Contact</TableHead>
+                      <TableHead>Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -689,15 +701,37 @@ function Dashboard({
                           </Select>
                         </TableCell>
                         <TableCell>
-                          <a
-                            href={waLink(r.mobile, companyMessage(r.company_name, r.job_role, r.worker_count))}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="inline-flex items-center gap-1.5 rounded-md bg-[#16A34A] px-2.5 py-1.5 text-xs font-semibold text-white transition-transform duration-150 hover:bg-[#15803D] active:scale-98"
-                            data-testid={`admin-request-whatsapp-${r.id}`}
-                          >
-                            <MessageSquare className="h-3.5 w-3.5" /> WhatsApp
-                          </a>
+                          <div className="flex items-center gap-2">
+                            <a
+                              href={waLink(r.mobile, companyMessage(r.company_name, r.job_role, r.worker_count))}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="inline-flex items-center gap-1.5 rounded-md bg-[#16A34A] px-2.5 py-1.5 text-xs font-semibold text-white transition-transform duration-150 hover:bg-[#15803D] active:scale-98"
+                              data-testid={`admin-request-whatsapp-${r.id}`}
+                            >
+                              <MessageSquare className="h-3.5 w-3.5" /> WhatsApp
+                            </a>
+                            <Button
+                              type="button"
+                              size="icon-xs"
+                              variant="destructive"
+                              disabled={removeRequest.isPending}
+                              onClick={() => {
+                                if (
+                                  window.confirm(
+                                    `Permanently delete the enquiry from ${r.company_name}? This cannot be undone.`
+                                  )
+                                ) {
+                                  removeRequest.mutate(r.id);
+                                }
+                              }}
+                              aria-label={`Delete ${r.company_name} enquiry`}
+                              title="Delete enquiry permanently"
+                              data-testid={`admin-request-delete-${r.id}`}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}

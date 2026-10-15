@@ -2,6 +2,7 @@
 
 import hashlib
 import os
+from types import SimpleNamespace
 
 import httpx
 import pytest
@@ -10,7 +11,7 @@ os.environ.setdefault("MONGO_URL", "mongodb://localhost:27017")
 os.environ.setdefault("DB_NAME", "bws_test")
 
 from lib import auth  # noqa: E402
-from routers import public  # noqa: E402
+from routers import admin, public  # noqa: E402
 from server import app  # noqa: E402
 
 
@@ -60,7 +61,9 @@ class Collection:
             record[key] = record.get(key, 0) + value
 
     async def delete_one(self, query):
+        before = len(self.records)
         self.records = [record for record in self.records if not all(record.get(k) == v for k, v in query.items())]
+        return SimpleNamespace(deleted_count=before - len(self.records))
 
     async def delete_many(self, query):
         def matches(record):
@@ -85,6 +88,7 @@ class FakeDB:
             "skill_category": "Skilled", "active": True, "closing_date": "2020-01-01",
         }])
         self.workers = Collection()
+        self.company_requests = Collection([{"id": "request-1"}])
 
 
 @pytest.mark.asyncio
@@ -141,3 +145,23 @@ async def test_job_application_requires_consent_and_records_selected_role(monkey
         assert (await client.get("/api/jobs/expired")).status_code == 404
         assert (await client.post("/api/workers", json={**payload, "job_id": "expired", "consent_to_share": True})).status_code == 404
         assert len(fake.workers.records) == 1
+
+
+@pytest.mark.asyncio
+async def test_admin_can_permanently_delete_company_enquiry(monkeypatch):
+    fake = FakeDB()
+    monkeypatch.setattr(auth, "db", fake)
+    monkeypatch.setattr(admin, "db", fake)
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="https://brothersworkforcesolutions.in") as client:
+        assert (await client.post("/api/admin/login", json={"pin": "123456"})).status_code == 200
+
+        deleted = await client.delete("/api/admin/company-requests/request-1")
+        assert deleted.status_code == 200
+        assert deleted.json() == {"ok": True}
+        assert fake.company_requests.records == []
+
+        missing = await client.delete("/api/admin/company-requests/request-1")
+        assert missing.status_code == 404
+        assert missing.json()["detail"] == "Company enquiry not found"
