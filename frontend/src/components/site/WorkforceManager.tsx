@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ApiError, apiDelete, apiGet, apiPatch, apiPost } from "@/lib/api";
 import type { Client, Worker } from "@/types";
+import { rupees } from "@/lib/finance";
 
 type Assignment = {
   id: string;
@@ -23,10 +24,12 @@ type Assignment = {
   notes: string | null;
   status: "Active" | "Completed";
   created_at: string;
+  salary: string | null;
+  salary_basis: "Monthly" | "Daily";
 };
 
-type Form = { client_id: string; worker_id: string; employee_id: string; full_name: string; mobile: string; role: string; start_date: string; notes: string };
-const EMPTY: Form = { client_id: "", worker_id: "", employee_id: "", full_name: "", mobile: "", role: "", start_date: "", notes: "" };
+type Form = { client_id: string; worker_id: string; employee_id: string; full_name: string; mobile: string; role: string; start_date: string; notes: string; salary: string; salary_basis: "Monthly" | "Daily" };
+const EMPTY: Form = { client_id: "", worker_id: "", employee_id: "", full_name: "", mobile: "", role: "", start_date: "", notes: "", salary: "", salary_basis: "Monthly" };
 
 function errorMessage(error: unknown): string {
   if (error instanceof ApiError) {
@@ -45,14 +48,21 @@ export default function WorkforceManager({ pin }: { pin: string }) {
   const [newCompany, setNewCompany] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [employeeId, setEmployeeId] = useState("");
+  const [salary, setSalary] = useState("");
+  const [salaryBasis, setSalaryBasis] = useState<"Monthly" | "Daily">("Monthly");
   const clients = useQuery({ queryKey: ["admin-clients", pin], queryFn: () => apiGet<Client[]>(`/admin/clients${q}`) });
   const workers = useQuery({ queryKey: ["assignment-workers", pin], queryFn: () => apiGet<Worker[]>(`/admin/workers${q}`) });
   const assignments = useQuery({ queryKey: key, queryFn: () => apiGet<Assignment[]>(`/admin/assignments${q}`) });
-  const refresh = () => qc.invalidateQueries({ queryKey: key });
+  const refresh = () => {
+    void qc.invalidateQueries({ queryKey: key });
+    void qc.invalidateQueries({ queryKey: ["payroll-draft"] });
+    void qc.invalidateQueries({ queryKey: ["payroll-companies"] });
+  };
   const createCompany = useMutation({
     mutationFn: (name: string) => apiPost<Client>(`/admin/clients${q}`, { name: name.trim(), visible: false }),
     onSuccess: (client) => {
       qc.invalidateQueries({ queryKey: ["admin-clients", pin] });
+      qc.invalidateQueries({ queryKey: ["payroll-companies"] });
       setForm((current) => ({ ...current, client_id: client.id }));
       setNewCompany("");
       toast.success("Private company added");
@@ -62,7 +72,7 @@ export default function WorkforceManager({ pin }: { pin: string }) {
 
   const add = useMutation({
     mutationFn: (value: Form) => apiPost<Assignment>(`/admin/assignments${q}`, {
-      ...value, worker_id: value.worker_id || null, full_name: value.full_name.trim(),
+      ...value, worker_id: value.worker_id || null, full_name: value.full_name.trim(), salary: value.salary || null,
     }),
     onSuccess: () => { setForm(EMPTY); refresh(); toast.success("Worker added to company"); },
     onError: (e) => toast.error(errorMessage(e)),
@@ -79,9 +89,9 @@ export default function WorkforceManager({ pin }: { pin: string }) {
     onError: (e) => toast.error(errorMessage(e)),
   });
   const saveEmployeeId = useMutation({
-    mutationFn: (value: { id: string; employee_id: string }) =>
-      apiPatch<Assignment>(`/admin/assignments/${value.id}${q}`, { employee_id: value.employee_id }),
-    onSuccess: () => { setEditingId(null); refresh(); toast.success("Employee ID saved"); },
+    mutationFn: (value: { id: string; employee_id: string; salary: string; salary_basis: "Monthly" | "Daily" }) =>
+      apiPatch<Assignment>(`/admin/assignments/${value.id}${q}`, { employee_id: value.employee_id, salary: value.salary || null, salary_basis: value.salary_basis }),
+    onSuccess: () => { setEditingId(null); refresh(); toast.success("Employee details saved"); },
     onError: (e) => toast.error(errorMessage(e)),
   });
 
@@ -138,6 +148,8 @@ export default function WorkforceManager({ pin }: { pin: string }) {
           <div><Label className="mb-2 block">Mobile</Label><Input value={form.mobile} disabled={!!form.worker_id} onChange={(e) => setForm({ ...form, mobile: e.target.value })} data-testid="assignment-mobile" /></div>
           <div><Label className="mb-2 block">Role / work</Label><Input value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })} placeholder="Machine operator" data-testid="assignment-role" /></div>
           <div><Label className="mb-2 block">Start date</Label><Input type="date" value={form.start_date} onChange={(e) => setForm({ ...form, start_date: e.target.value })} data-testid="assignment-start-date" /></div>
+          <div><Label htmlFor="assignment-salary" className="mb-2 block">Salary / rate (₹)</Label><Input id="assignment-salary" type="number" inputMode="decimal" min="0" max="1000000000" step="0.01" value={form.salary} onChange={(e) => setForm({ ...form, salary: e.target.value })} placeholder="Optional" data-testid="assignment-salary" /></div>
+          <div><Label htmlFor="assignment-salary-basis" className="mb-2 block">Salary basis</Label><select id="assignment-salary-basis" className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm" value={form.salary_basis} onChange={(e) => setForm({ ...form, salary_basis: e.target.value as "Monthly" | "Daily" })} data-testid="assignment-salary-basis"><option value="Monthly">Per month</option><option value="Daily">Per day</option></select><p className="mt-1 text-xs text-slate-500">Daily salaries prefill the rate in Payroll.</p></div>
           <div className="sm:col-span-2 lg:col-span-3"><Label className="mb-2 block">Notes</Label><Input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Shift or site details (optional)" /></div>
           <div className="sm:col-span-2 lg:col-span-3"><Button type="submit" disabled={add.isPending || !clients.data?.length} className="bg-[#C2410C] text-white hover:bg-[#9A3412]">
             {add.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />} Add to workforce
@@ -162,16 +174,19 @@ export default function WorkforceManager({ pin }: { pin: string }) {
               <p className="font-semibold text-[#0F2444]">{a.full_name} <Badge variant={a.status === "Active" ? "default" : "secondary"} className="ml-2">{a.status}</Badge></p>
               <p className="mt-1 text-sm text-slate-600">{a.company_name}{a.role ? ` · ${a.role}` : ""}</p>
               <p className="mt-1 text-sm text-slate-600" data-testid={`assignment-employee-id-${a.id}`}>Employee ID: <span className="font-medium">{a.employee_id || "Not set"}</span></p>
+              <p className="mt-1 text-sm text-slate-600" data-testid={`assignment-salary-${a.id}`}>Salary: <span className="font-medium">{a.salary === null ? "Not set" : `${rupees(a.salary)} ${a.salary_basis === "Daily" ? "per day" : "per month"}`}</span></p>
               <p className="mt-1 text-xs text-slate-500">{a.mobile || "No mobile"}{a.start_date ? ` · Started ${a.start_date}` : ""}{a.notes ? ` · ${a.notes}` : ""}</p>
-              {editingId === a.id && <form className="mt-3 flex max-w-md flex-wrap items-center gap-2" onSubmit={(event) => { event.preventDefault(); saveEmployeeId.mutate({ id: a.id, employee_id: employeeId }); }}>
+              {editingId === a.id && <form className="mt-3 flex max-w-2xl flex-wrap items-end gap-2" onSubmit={(event) => { event.preventDefault(); saveEmployeeId.mutate({ id: a.id, employee_id: employeeId, salary, salary_basis: salaryBasis }); }}>
                 <Label htmlFor={`employee-id-${a.id}`} className="sr-only">Employee ID for {a.full_name}</Label>
                 <Input id={`employee-id-${a.id}`} className="min-w-0 flex-1 basis-40" maxLength={80} value={employeeId} disabled={saveEmployeeId.isPending} onChange={(event) => setEmployeeId(event.target.value)} autoFocus data-testid={`assignment-edit-id-input-${a.id}`} />
-                <Button type="submit" size="sm" disabled={saveEmployeeId.isPending}>Save ID</Button>
+                <div className="min-w-0 flex-1 basis-32"><Label htmlFor={`employee-salary-${a.id}`} className="mb-1 block text-xs">Salary / rate (₹)</Label><Input id={`employee-salary-${a.id}`} type="number" inputMode="decimal" min="0" max="1000000000" step="0.01" value={salary} disabled={saveEmployeeId.isPending} onChange={(event) => setSalary(event.target.value)} data-testid={`assignment-edit-salary-${a.id}`} /></div>
+                <div><Label htmlFor={`employee-salary-basis-${a.id}`} className="mb-1 block text-xs">Salary basis</Label><select id={`employee-salary-basis-${a.id}`} className="h-8 rounded-md border border-slate-300 bg-white px-2 text-sm" value={salaryBasis} disabled={saveEmployeeId.isPending} onChange={(event) => setSalaryBasis(event.target.value as "Monthly" | "Daily")}><option value="Monthly">Per month</option><option value="Daily">Per day</option></select></div>
+                <Button type="submit" size="sm" disabled={saveEmployeeId.isPending}>Save details</Button>
                 <Button type="button" variant="outline" size="sm" disabled={saveEmployeeId.isPending} onClick={() => setEditingId(null)}>Cancel</Button>
               </form>}
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <Button type="button" size="sm" variant="outline" disabled={saveEmployeeId.isPending || remove.isPending || changeStatus.isPending} onClick={() => { setEditingId(a.id); setEmployeeId(a.employee_id || ""); }} data-testid={`assignment-edit-id-${a.id}`}>{a.employee_id ? "Edit ID" : "Add ID"}</Button>
+              <Button type="button" size="sm" variant="outline" disabled={saveEmployeeId.isPending || remove.isPending || changeStatus.isPending} onClick={() => { setEditingId(a.id); setEmployeeId(a.employee_id || ""); setSalary(a.salary ?? ""); setSalaryBasis(a.salary_basis || "Monthly"); }} data-testid={`assignment-edit-id-${a.id}`}>Edit ID / salary</Button>
               <Button size="sm" variant="outline" disabled={changeStatus.isPending || saveEmployeeId.isPending || remove.isPending} onClick={() => changeStatus.mutate({ id: a.id, status: a.status === "Active" ? "Completed" : "Active" })}>
                 Mark {a.status === "Active" ? "completed" : "active"}
               </Button>

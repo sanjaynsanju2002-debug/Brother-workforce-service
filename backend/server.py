@@ -115,6 +115,7 @@ from routers.talent import router as talent_router  # noqa: E402
 from routers.invoices import router as invoices_router  # noqa: E402
 from routers.expenses import router as expenses_router  # noqa: E402
 from routers.finance import router as finance_router  # noqa: E402
+from routers.payroll import router as payroll_router  # noqa: E402
 
 admin_router.include_router(email_router)
 api_router.include_router(public_router)
@@ -124,6 +125,7 @@ api_router.include_router(talent_router)
 api_router.include_router(invoices_router)
 api_router.include_router(expenses_router)
 api_router.include_router(finance_router)
+api_router.include_router(payroll_router)
 api_router.include_router(clients_router)
 api_router.include_router(assignments_router)
 api_router.include_router(cron_router)

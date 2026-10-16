@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from lib.auth import require_admin
 from lib.db import db
+from lib.invoices import Money
 
 router = APIRouter(prefix="/admin", dependencies=[Depends(require_admin)])
 
@@ -30,10 +31,14 @@ class AssignmentCreate(EmployeeIdInput):
     role: str | None = None
     start_date: str | None = None
     notes: str | None = None
+    salary: Money | None = None
+    salary_basis: Literal["Monthly", "Daily"] = "Monthly"
 
 
 class AssignmentUpdate(EmployeeIdInput):
     status: Literal["Active", "Completed"] | None = None
+    salary: Money | None = None
+    salary_basis: Literal["Monthly", "Daily"] | None = None
 
 
 class Assignment(AssignmentCreate):
@@ -79,15 +84,18 @@ async def create_assignment(payload: AssignmentCreate) -> Assignment:
         company_name=client["name"],
         created_at=datetime.now(timezone.utc),
     )
-    await db.assignments.insert_one(assignment.model_dump())
+    record = assignment.model_dump()
+    if assignment.salary is not None:
+        record["salary"] = str(assignment.salary)
+    await db.assignments.insert_one(record)
     return assignment
 
 
 @router.patch("/assignments/{assignment_id}", response_model=Assignment)
 async def update_assignment(assignment_id: str, payload: AssignmentUpdate) -> Assignment:
-    changes = payload.model_dump(exclude_unset=True)
-    if not changes or ("status" in changes and changes["status"] is None):
-        raise HTTPException(status_code=422, detail="Enter an employee ID or a valid assignment status")
+    changes = payload.model_dump(mode="json", exclude_unset=True)
+    if not changes or any(key in changes and changes[key] is None for key in ("status", "salary_basis")):
+        raise HTTPException(status_code=422, detail="Enter employee details, salary or a valid assignment status")
     doc = await db.assignments.find_one_and_update(
         {"id": assignment_id}, {"$set": changes}, return_document=True,
     )

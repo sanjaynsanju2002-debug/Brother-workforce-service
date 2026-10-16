@@ -21,6 +21,7 @@ import TalentBank from "@/components/site/TalentBank";
 import Invoices from "@/components/site/Invoices";
 import Expenses from "@/components/site/Expenses";
 import ProfitLoss from "@/components/site/ProfitLoss";
+import Payroll from "@/components/site/Payroll";
 import { waLink, workerMessage, companyMessage } from "@/lib/wa";
 import {
   Table,
@@ -365,6 +366,7 @@ function Dashboard({
                 <TabsTrigger value="workers" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-workers">Worker Applications</TabsTrigger>
                 <TabsTrigger value="talents" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-talents">Talent Bank</TabsTrigger>
                 <TabsTrigger value="workforce" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-workforce">Company Workforce</TabsTrigger>
+                <TabsTrigger value="payroll" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-payroll">Payroll</TabsTrigger>
                 <TabsTrigger value="requests" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-requests">Company Enquiries</TabsTrigger>
                 <TabsTrigger value="clients" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-clients">Clients</TabsTrigger>
                 <TabsTrigger value="invoices" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-invoices">Invoices</TabsTrigger>
@@ -1000,6 +1002,7 @@ function Dashboard({
           </TabsContent>
           <TabsContent value="expenses" className="mt-0"><Expenses /></TabsContent>
           <TabsContent value="profit-loss" className="mt-0"><ProfitLoss /></TabsContent>
+          <TabsContent value="payroll" className="mt-0"><Payroll /></TabsContent>
           <TabsContent value="workforce" className="mt-6">
             <WorkforceManager pin={pin} />
           </TabsContent>

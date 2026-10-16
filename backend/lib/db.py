@@ -55,6 +55,10 @@ INDEXES: dict[str, list[IndexModel]] = {
     "expenses": [
         IndexModel([("month", ASCENDING), ("expense_date", DESCENDING), ("created_at", DESCENDING), ("id", ASCENDING)], name="month_date_created"),
     ],
+    "payroll": [
+        IndexModel([("company_id", ASCENDING), ("month", DESCENDING)], name="company_month"),
+        IndexModel([("updated_at", DESCENDING)], name="updated_desc"),
+    ],
     "admin_sessions": [
         IndexModel([("token_hash", ASCENDING)], name="token_hash", unique=True),
         IndexModel([("expires_at", ASCENDING)], name="expires_ttl", expireAfterSeconds=0),
