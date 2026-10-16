@@ -35,7 +35,7 @@ type TalentImportResult = {
   errors: string[];
 };
 
-const MAX_RESUME_SIZE = 5 * 1024 * 1024;
+import { MAX_RESUME_SIZE } from "@/lib/uploads";
 const TALENT_STATUS = ["Available", "Contacted", "Shortlisted", "Deployed", "Archived"];
 
 const EMPTY_TALENT: WorkerCreate = {
@@ -166,7 +166,7 @@ export default function TalentBank({ pin }: { pin: string }) {
   const replaceResume = async (workerId: string, file: File | null) => {
     if (!file) return;
     if (file.size > MAX_RESUME_SIZE) {
-      toast.error("Resume must be 5 MB or smaller");
+      toast.error("Resume must be 2 MB or smaller");
       return;
     }
     try {
@@ -185,7 +185,7 @@ export default function TalentBank({ pin }: { pin: string }) {
       return;
     }
     if (resume && resume.size > MAX_RESUME_SIZE) {
-      toast.error("Resume must be 5 MB or smaller");
+      toast.error("Resume must be 2 MB or smaller");
       return;
     }
     createTalent.mutate();
@@ -316,7 +316,7 @@ export default function TalentBank({ pin }: { pin: string }) {
             </div>
             <div className="md:col-span-2">
               <Label className="mb-2 block text-sm">
-                Resume <span className="font-normal text-slate-500">(PDF/DOC/image, maximum 5 MB)</span>
+                Resume <span className="font-normal text-slate-500">(PDF/DOC/image, maximum 2 MB)</span>
               </Label>
               <Input
                 type="file"
@@ -324,7 +324,7 @@ export default function TalentBank({ pin }: { pin: string }) {
                 onChange={(e) => {
                   const file = e.target.files?.[0] ?? null;
                   if (file && file.size > MAX_RESUME_SIZE) {
-                    toast.error("Resume must be 5 MB or smaller");
+                    toast.error("Resume must be 2 MB or smaller");
                     e.target.value = "";
                     setResume(null);
                     return;
@@ -342,7 +342,7 @@ export default function TalentBank({ pin }: { pin: string }) {
               <Button
                 type="submit"
                 disabled={createTalent.isPending}
-                className="w-full bg-[#EA580C] text-white hover:bg-[#C2410C] sm:w-auto"
+                className="w-full bg-[#C2410C] text-white hover:bg-[#9A3412] sm:w-auto"
               >
                 {createTalent.isPending ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -402,7 +402,7 @@ export default function TalentBank({ pin }: { pin: string }) {
                 }
                 bulkImport.mutate(file);
               }}
-              className="w-full bg-[#EA580C] text-white hover:bg-[#C2410C] sm:w-auto"
+              className="w-full bg-[#C2410C] text-white hover:bg-[#9A3412] sm:w-auto"
             >
               {bulkImport.isPending ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -514,7 +514,7 @@ export default function TalentBank({ pin }: { pin: string }) {
                           href={`/api/workers/${talent.id}/resume${q}`}
                           target="_blank"
                           rel="noreferrer"
-                          className="text-sm font-medium text-[#EA580C] underline"
+                          className="text-sm font-medium text-[#C2410C] underline"
                         >
                           Download
                         </a>

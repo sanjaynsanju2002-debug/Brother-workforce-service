@@ -103,7 +103,7 @@ export default function ClientsManager({ pin }: { pin: string }) {
       <Card className="border-slate-200 bg-white">
         <CardContent className="p-4 sm:p-6">
           <h3 className="flex items-center gap-2 text-lg font-semibold text-[#0F2444]">
-            <Building2 className="h-5 w-5 text-[#EA580C]" /> {editingClientId ? "Edit Client" : "Add a Client"}
+            <Building2 className="h-5 w-5 text-[#C2410C]" /> {editingClientId ? "Edit Client" : "Add a Client"}
           </h3>
           <p className="mt-1 text-sm text-slate-500">
             Publish names, logos, service details and outcomes only with client permission and verified figures.
@@ -169,7 +169,7 @@ export default function ClientsManager({ pin }: { pin: string }) {
               <Button
                 type="submit"
                 disabled={create.isPending || edit.isPending}
-                className="w-full bg-[#EA580C] text-white hover:bg-[#C2410C] sm:w-auto"
+                className="w-full bg-[#C2410C] text-white hover:bg-[#9A3412] sm:w-auto"
                 data-testid="client-add-submit"
               >
                 {create.isPending || edit.isPending ? (
@@ -236,7 +236,7 @@ export default function ClientsManager({ pin }: { pin: string }) {
                         setForm({ name: c.name, industry: c.industry ?? "", location: c.location ?? "", headcount: c.headcount ?? "", service_summary: c.service_summary ?? "", outcome: c.outcome ?? "" });
                       }} data-testid={`client-edit-${c.id}`}>Edit</Button>
                       <label
-                        className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:border-[#EA580C] hover:text-[#EA580C]"
+                        className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:border-[#EA580C] hover:text-[#C2410C]"
                         data-testid={`client-logo-label-${c.id}`}
                       >
                         <ImagePlus className="h-3.5 w-3.5" /> Logo

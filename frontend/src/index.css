@@ -139,7 +139,7 @@
   letter-spacing: 0.18em;
   font-weight: 700;
   font-size: 0.75rem;
-  color: #EA580C;
+  color: #C2410C;
 }
 
 
@@ -657,7 +657,7 @@
 }
 
 .bws-premium-form .bws-form-field:focus-within > label {
-  color: #EA580C;
+  color: #C2410C;
   transform: translateX(2px);
 }
 

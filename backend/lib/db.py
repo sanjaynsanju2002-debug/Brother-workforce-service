@@ -23,6 +23,8 @@ INDEXES: dict[str, list[IndexModel]] = {
         IndexModel([("id", ASCENDING)], name="id", unique=True),
         IndexModel([("created_at", DESCENDING)], name="created_desc"),
         IndexModel([("job_id", ASCENDING), ("created_at", DESCENDING)], name="job_created"),
+        IndexModel([("application_fingerprint", ASCENDING)], name="application_fingerprint", unique=True, sparse=True),
+        IndexModel([("submission_hash", ASCENDING)], name="submission_hash", unique=True, sparse=True),
     ],
     "resume_files": [
         IndexModel([("worker_id", ASCENDING)], name="worker_id", unique=True),
@@ -45,9 +47,13 @@ INDEXES: dict[str, list[IndexModel]] = {
         IndexModel([("invoice_number", ASCENDING)], name="invoice_number", unique=True),
         IndexModel([("created_at", DESCENDING)], name="created_desc"),
         IndexModel([("company_id", ASCENDING), ("created_at", DESCENDING)], name="company_created"),
+        IndexModel([("service_month", ASCENDING)], name="service_month"),
     ],
     "invoice_companies": [
         IndexModel([("id", ASCENDING)], name="id", unique=True),
+    ],
+    "expenses": [
+        IndexModel([("month", ASCENDING), ("expense_date", DESCENDING), ("created_at", DESCENDING), ("id", ASCENDING)], name="month_date_created"),
     ],
     "admin_sessions": [
         IndexModel([("token_hash", ASCENDING)], name="token_hash", unique=True),

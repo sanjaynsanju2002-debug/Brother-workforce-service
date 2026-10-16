@@ -8,15 +8,16 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError, apiDelete, apiGet, apiPatch, apiPost, apiPut } from "@/lib/api";
 import { BRAND } from "@/lib/brand";
+import { monthLabel, previousMonth } from "@/lib/finance";
 
 type Profile = { name: string; address: string; phone: string; email: string; website: string; gstin: string; payment_details: string };
 type CompanyInput = { name: string; address: string; gstin: string };
 type Company = CompanyInput & { id: string; created_at: string };
 type PaymentStatus = "Pending" | "Paid";
 type Line = { key: string; quantity: string; rate: string };
-type Form = { company_id: string | null; client_name: string; client_address: string; client_gstin: string; invoice_date: string; due_date: string; billing_period: string; supplier: Profile; lines: Line[]; service_percentage: string; cgst_percentage: string | null; sgst_percentage: string | null; gst_amount: string; notes: string };
+type Form = { company_id: string | null; client_name: string; client_address: string; client_gstin: string; invoice_date: string; due_date: string; service_month: string; billing_period: string; supplier: Profile; lines: Line[]; service_percentage: string; cgst_percentage: string | null; sgst_percentage: string | null; gst_amount: string; notes: string };
 type Totals = { line_amounts: Record<string, string>; base_amount: string; service_charge: string; subtotal: string; cgst_amount: string; sgst_amount: string; gst_amount: string; total: string };
-type Invoice = Omit<Form, "due_date"> & { due_date: string | null; id: string; invoice_number: string; revision: number; totals: Totals; payment_status: PaymentStatus; created_at: string; updated_at: string };
+type Invoice = Omit<Form, "due_date" | "service_month"> & { due_date: string | null; service_month: string | null; id: string; invoice_number: string; revision: number; totals: Totals; payment_status: PaymentStatus; created_at: string; updated_at: string };
 type InvoicePage = { items: Invoice[]; total: number; page: number; page_size: number };
 
 const ROWS = [
@@ -32,16 +33,18 @@ const selectStyle = "h-10 w-full rounded-md border border-slate-200 bg-white px-
 const normalizedName = (name: string) => name.trim().replace(/\s+/g, " ").toLocaleLowerCase();
 
 function emptyForm(supplier: Profile, company?: Company): Form {
-  return { company_id: company?.id || null, client_name: company?.name || "", client_address: company?.address || "", client_gstin: company?.gstin || "", invoice_date: today(), due_date: "", billing_period: "", supplier: { ...supplier }, lines: ROWS.map(([key]) => ({ key, quantity: "0", rate: "0" })), service_percentage: "0", cgst_percentage: "0", sgst_percentage: "0", gst_amount: "0", notes: "" };
+  const invoiceDate = today();
+  const serviceMonth = previousMonth(invoiceDate);
+  return { company_id: company?.id || null, client_name: company?.name || "", client_address: company?.address || "", client_gstin: company?.gstin || "", invoice_date: invoiceDate, due_date: "", service_month: serviceMonth, billing_period: monthLabel(serviceMonth), supplier: { ...supplier }, lines: ROWS.map(([key]) => ({ key, quantity: "0", rate: "0" })), service_percentage: "0", cgst_percentage: "0", sgst_percentage: "0", gst_amount: "0", notes: "" };
 }
 
 function formData(form: Form) {
-  return { ...form, due_date: form.due_date || null, service_percentage: form.service_percentage || "0", cgst_percentage: form.cgst_percentage === null ? null : form.cgst_percentage || "0", sgst_percentage: form.sgst_percentage === null ? null : form.sgst_percentage || "0", gst_amount: form.gst_amount || "0", lines: form.lines.map((line) => ({ ...line, quantity: line.quantity || "0", rate: line.rate || "0" })) };
+  return { ...form, due_date: form.due_date || null, service_month: form.service_month || null, service_percentage: form.service_percentage || "0", cgst_percentage: form.cgst_percentage === null ? null : form.cgst_percentage || "0", sgst_percentage: form.sgst_percentage === null ? null : form.sgst_percentage || "0", gst_amount: form.gst_amount || "0", lines: form.lines.map((line) => ({ ...line, quantity: line.quantity || "0", rate: line.rate || "0" })) };
 }
 
 function fromInvoice(invoice: Invoice): Form {
-  const { company_id, client_name, client_address, client_gstin, invoice_date, due_date, billing_period, supplier, lines, service_percentage, cgst_percentage, sgst_percentage, gst_amount, notes } = invoice;
-  return { company_id: company_id || null, client_name, client_address, client_gstin, invoice_date, due_date: due_date || "", billing_period, supplier: { ...supplier }, lines: lines.map((line) => ({ ...line })), service_percentage, cgst_percentage: cgst_percentage ?? null, sgst_percentage: sgst_percentage ?? null, gst_amount, notes };
+  const { company_id, client_name, client_address, client_gstin, invoice_date, due_date, service_month, billing_period, supplier, lines, service_percentage, cgst_percentage, sgst_percentage, gst_amount, notes } = invoice;
+  return { company_id: company_id || null, client_name, client_address, client_gstin, invoice_date, due_date: due_date || "", service_month: service_month || "", billing_period, supplier: { ...supplier }, lines: lines.map((line) => ({ ...line })), service_percentage, cgst_percentage: cgst_percentage ?? null, sgst_percentage: sgst_percentage ?? null, gst_amount, notes };
 }
 
 function errorMessage(error: unknown) {
@@ -117,6 +120,7 @@ export default function Invoices() {
 
   const save = useMutation({
     mutationFn: async (format?: "pdf" | "xlsx") => {
+      if (format && saved && !dirty) { await download(saved, format); return { invoice: saved, format }; }
       const body = formData(form);
       const invoice = saved
         ? await apiPut<Invoice>(`/admin/invoices/${saved.id}`, { ...body, revision: saved.revision })
@@ -125,6 +129,7 @@ export default function Invoices() {
       setForm(fromInvoice(invoice));
       setDirty(false);
       qc.invalidateQueries({ queryKey: ["invoices"] });
+      qc.invalidateQueries({ queryKey: ["admin-profit-loss"] });
       if (format) await download(invoice, format);
       return { invoice, format };
     },
@@ -154,6 +159,7 @@ export default function Invoices() {
     onSuccess: (invoice) => {
       setSaved((current) => current?.id === invoice.id ? invoice : current);
       qc.invalidateQueries({ queryKey: ["invoices"] });
+      qc.invalidateQueries({ queryKey: ["admin-profit-loss"] });
       toast.success(`${invoice.invoice_number} marked ${invoice.payment_status.toLowerCase()}`);
     },
     onError: (error) => { qc.invalidateQueries({ queryKey: ["invoices"] }); toast.error(errorMessage(error)); },
@@ -170,6 +176,7 @@ export default function Invoices() {
       }
       if (page > 1 && history.data?.items.length === 1 && history.data.items[0].id === invoice.id) setPage(page - 1);
       qc.invalidateQueries({ queryKey: ["invoices"] });
+      qc.invalidateQueries({ queryKey: ["admin-profit-loss"] });
       toast.success(`${invoice.invoice_number} deleted`);
     },
     onError: (error) => { qc.invalidateQueries({ queryKey: ["invoices"] }); toast.error(errorMessage(error)); },
@@ -192,7 +199,7 @@ export default function Invoices() {
     setPage(1);
   }
   const saveAs = (format?: "pdf" | "xlsx") => {
-    if (!formRef.current?.reportValidity()) return;
+    if (!(format && saved && !dirty) && !formRef.current?.reportValidity()) return;
     setProblem("");
     save.mutate(format);
   };
@@ -220,7 +227,7 @@ export default function Invoices() {
       </div>
       <div className="rounded-xl border border-slate-200 bg-white p-4 sm:p-6">
         <div className="flex flex-wrap items-end gap-3">
-          <div className="min-w-0 flex-1 basis-64"><Label htmlFor="invoice-company" className="mb-2 flex items-center gap-2 font-semibold text-[#0F2444]"><Building2 className="h-4 w-4 text-[#EA580C]" /> Company</Label><select id="invoice-company" className={selectStyle} value={companyId} disabled={busy} data-testid="invoice-company" onChange={(event) => { if (discardChanges()) startForCompany(companies.data?.find((company) => company.id === event.target.value)); }}><option value="">Select a company</option>{companies.data.map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}</select></div>
+          <div className="min-w-0 flex-1 basis-64"><Label htmlFor="invoice-company" className="mb-2 flex items-center gap-2 font-semibold text-[#0F2444]"><Building2 className="h-4 w-4 text-[#C2410C]" /> Company</Label><select id="invoice-company" className={selectStyle} value={companyId} disabled={busy} data-testid="invoice-company" onChange={(event) => { if (discardChanges()) startForCompany(companies.data?.find((company) => company.id === event.target.value)); }}><option value="">Select a company</option>{companies.data.map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}</select></div>
           <Button type="button" variant="outline" disabled={busy} onClick={() => { setShowCompanyForm(!showCompanyForm); setCompanyProblem(""); }} data-testid="invoice-add-company"><Plus className="mr-2 h-4 w-4" /> Add company</Button>
         </div>
         <p className="mt-2 text-xs text-slate-500">Add each customer once. Selecting a company fills its billing details and shows its saved invoices below.</p>
@@ -230,7 +237,7 @@ export default function Invoices() {
             <div><Label htmlFor="invoice-company-gstin" className="mb-2 block">Company GSTIN</Label><Input id="invoice-company-gstin" maxLength={30} value={companyForm.gstin} onChange={(event) => setCompanyForm({ ...companyForm, gstin: event.target.value })} /></div>
             <div className="sm:col-span-2"><Label htmlFor="invoice-company-address" className="mb-2 block">Billing address</Label><Textarea id="invoice-company-address" maxLength={500} value={companyForm.address} onChange={(event) => setCompanyForm({ ...companyForm, address: event.target.value })} /></div>
             {companyProblem && <p role="alert" className="text-sm text-red-700 sm:col-span-2">{companyProblem}</p>}
-            <div className="flex flex-wrap gap-3 sm:col-span-2"><Button type="submit" className="bg-[#EA580C] text-white hover:bg-[#C2410C]">{addCompany.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Save company</Button><Button type="button" variant="outline" onClick={() => setShowCompanyForm(false)}>Cancel</Button></div>
+            <div className="flex flex-wrap gap-3 sm:col-span-2"><Button type="submit" className="bg-[#C2410C] text-white hover:bg-[#9A3412]">{addCompany.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Save company</Button><Button type="button" variant="outline" onClick={() => setShowCompanyForm(false)}>Cancel</Button></div>
           </fieldset>
         </form>}
       </div>
@@ -238,12 +245,16 @@ export default function Invoices() {
       {(!!selectedCompany || !!saved) && <form ref={formRef} onSubmit={(event) => { event.preventDefault(); saveAs(); }} className="space-y-6">
         <fieldset disabled={busy} className="min-w-0 space-y-6">
           <div className="rounded-xl border border-slate-200 bg-white p-4 sm:p-6">
-            <h2 className="mb-2 flex items-center justify-center gap-2 text-center font-semibold text-[#0F2444]" data-testid="invoice-heading"><FileText className="h-4 w-4 shrink-0 text-[#EA580C]" /><span className="min-w-0 break-words">{saved?.invoice_number || "New invoice"}</span></h2>
+            <h2 className="mb-2 flex items-center justify-center gap-2 text-center font-semibold text-[#0F2444]" data-testid="invoice-heading"><FileText className="h-4 w-4 shrink-0 text-[#C2410C]" /><span className="min-w-0 break-words">{saved?.invoice_number || "New invoice"}</span></h2>
             <p className="mb-4 text-center text-xs text-slate-500">{saved ? `Payment status: ${saved.payment_status}` : "New invoices are saved as Pending."}{dirty && <span className="ml-2 text-amber-700">Unsaved changes</span>}</p>
             <div className="grid gap-4 sm:grid-cols-2">
               <div><Label htmlFor="invoice-client" className="mb-2 block">Client / company name *</Label><Input id="invoice-client" value={form.client_name} readOnly={!!form.company_id} required maxLength={150} onChange={(e) => edit({ client_name: e.target.value })} data-testid="invoice-client" /></div>
-              <div><Label htmlFor="invoice-period" className="mb-2 block">Billing period</Label><Input id="invoice-period" value={form.billing_period} maxLength={100} placeholder="e.g. October 2026" onChange={(e) => edit({ billing_period: e.target.value })} /></div>
-              <div><Label htmlFor="invoice-date" className="mb-2 block">Invoice date *</Label><Input id="invoice-date" type="date" required disabled={!!saved} value={form.invoice_date} onChange={(e) => edit({ invoice_date: e.target.value })} /><p className="mt-1 text-xs text-slate-500">{saved ? "The date stays fixed after an invoice is numbered." : "An invoice number is assigned when you first save."}</p></div>
+              <div><Label htmlFor="invoice-service-month" className="mb-2 block">Service month *</Label><Input id="invoice-service-month" type="month" required value={form.service_month} onChange={(e) => edit({ service_month: e.target.value, billing_period: e.target.value ? monthLabel(e.target.value) : "" })} data-testid="invoice-service-month" /><p className="mt-1 text-xs text-slate-500">Choose the month the work was done. October services billed in November count as October revenue.</p></div>
+              <div><Label htmlFor="invoice-date" className="mb-2 block">Invoice date *</Label><Input id="invoice-date" type="date" required disabled={!!saved} value={form.invoice_date} onChange={(e) => {
+                const invoiceDate = e.target.value;
+                if (invoiceDate && form.service_month === previousMonth(form.invoice_date)) { const serviceMonth = previousMonth(invoiceDate); edit({ invoice_date: invoiceDate, service_month: serviceMonth, billing_period: monthLabel(serviceMonth) }); }
+                else edit({ invoice_date: invoiceDate });
+              }} /><p className="mt-1 text-xs text-slate-500">{saved ? "The date stays fixed after an invoice is numbered." : "New invoices start with the previous service month. You can change it above."}</p></div>
               <div><Label htmlFor="invoice-due" className="mb-2 block">Payment due date</Label><Input id="invoice-due" type="date" min={form.invoice_date} value={form.due_date} onChange={(e) => edit({ due_date: e.target.value })} /></div>
               <div><Label htmlFor="invoice-address" className="mb-2 block">Client address</Label><Textarea id="invoice-address" value={form.client_address} maxLength={500} onChange={(e) => edit({ client_address: e.target.value })} /></div>
               <div><Label htmlFor="invoice-gstin" className="mb-2 block">Client GSTIN</Label><Input id="invoice-gstin" value={form.client_gstin} maxLength={30} onChange={(e) => edit({ client_gstin: e.target.value })} /></div>
@@ -296,12 +307,12 @@ export default function Invoices() {
           <div><Label htmlFor="invoice-notes" className="mb-2 block">Notes / payment terms</Label><Textarea id="invoice-notes" value={form.notes} maxLength={1000} onChange={(e) => edit({ notes: e.target.value })} /></div>
           {problem && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{problem}</p>}
           <div className="flex flex-wrap gap-3">
-            <Button type="submit" className="bg-[#EA580C] text-white hover:bg-[#C2410C]" data-testid="invoice-save">{save.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />} Save invoice</Button>
+            <Button type="submit" className="bg-[#C2410C] text-white hover:bg-[#9A3412]" data-testid="invoice-save">{save.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />} Save invoice</Button>
             <Button type="button" variant="outline" onClick={() => saveAs("pdf")} data-testid="invoice-download-pdf"><Download className="mr-2 h-4 w-4" /> Download PDF</Button>
             <Button type="button" variant="outline" onClick={() => saveAs("xlsx")} data-testid="invoice-download-xlsx"><Download className="mr-2 h-4 w-4" /> Download Excel</Button>
             {saved && <Button type="button" variant="outline" className="border-red-200 text-red-700 hover:bg-red-50" onClick={() => confirmDelete(saved)} data-testid="invoice-delete-current"><Trash2 className="mr-2 h-4 w-4" /> Delete invoice</Button>}
           </div>
-          <p className="text-xs text-slate-500">Download buttons save the current invoice first. Excel keeps editable formulas and your original template.</p>
+          <p className="text-xs text-slate-500">Downloads use the saved invoice and save any changes first. Excel keeps editable formulas and your original template.</p>
         </fieldset>
       </form>}
       <div className="rounded-xl border border-slate-200 bg-white p-4 sm:p-6">
@@ -310,7 +321,7 @@ export default function Invoices() {
         {history.isError && <p role="alert" className="text-sm text-red-700">Could not load saved invoices. <button type="button" className="underline" onClick={() => history.refetch()}>Try again</button></p>}
         {history.data?.items.length === 0 && <p className="text-sm text-slate-500">No invoices found.</p>}
         <div className="space-y-3" data-testid="invoice-history">{history.data?.items.map((invoice) => <div key={invoice.id} className="grid items-center gap-4 rounded-lg border border-slate-200 p-4 text-center sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(7rem,auto)_8rem_10rem]" data-testid={`invoice-row-${invoice.id}`}>
-          <div className="min-w-0"><p className="break-words text-center font-medium text-[#0F2444]" data-testid={`invoice-number-${invoice.id}`}>{invoice.invoice_number}</p><p className="mt-1 break-words text-xs text-slate-500">{invoice.client_name}</p><p className="mt-1 text-xs text-slate-500">{invoice.invoice_date}{invoice.billing_period && ` · ${invoice.billing_period}`}</p></div>
+          <div className="min-w-0"><p className="break-words text-center font-medium text-[#0F2444]" data-testid={`invoice-number-${invoice.id}`}>{invoice.invoice_number}</p><p className="mt-1 break-words text-xs text-slate-500">{invoice.client_name}</p><p className="mt-1 text-xs text-slate-500">{invoice.invoice_date}{invoice.service_month ? ` · Services: ${monthLabel(invoice.service_month)}` : invoice.billing_period && ` · ${invoice.billing_period}`}</p>{!invoice.service_month && <p className="mt-1 text-xs font-medium text-amber-700">Open this invoice to set its service month.</p>}</div>
           <div><p className="mb-1 text-xs text-slate-500">Total</p><p className="text-center text-sm font-semibold tabular-nums">{money(invoice.totals.total)}</p></div>
           <div><Label htmlFor={`invoice-status-${invoice.id}`} className="mb-1 block text-xs text-slate-500">Payment status</Label><select id={`invoice-status-${invoice.id}`} className={`${selectStyle} text-center font-medium ${invoice.payment_status === "Paid" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-amber-200 bg-amber-50 text-amber-800"}`} value={invoice.payment_status} disabled={busy} data-testid={`invoice-status-${invoice.id}`} onChange={(event) => changeStatus.mutate({ invoice, status: event.target.value as PaymentStatus })}><option value="Pending">Pending</option><option value="Paid">Paid</option></select></div>
           <div className="flex flex-wrap justify-center gap-2">

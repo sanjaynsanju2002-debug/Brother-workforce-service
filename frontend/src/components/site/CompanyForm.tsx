@@ -1,4 +1,5 @@
-import { useState } from "react";
+import React from "react";
+import { useId, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { CheckCircle2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -13,7 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { apiPost } from "@/lib/api";
+import { ApiError, apiPost } from "@/lib/api";
 import { INDUSTRIES, WORKFORCE_TYPES } from "@/lib/brand";
 import type { CompanyRequest, CompanyRequestCreate } from "@/types";
 import { Link } from "react-router-dom";
@@ -48,7 +49,7 @@ export default function CompanyForm() {
       setForm(EMPTY);
       toast.success("Manpower request submitted");
     },
-    onError: () => toast.error("Could not submit your request. Please try again."),
+    onError: (error) => { const detail = error instanceof ApiError ? (error.body as { detail?: unknown })?.detail : null; toast.error(typeof detail === "string" ? detail : "Could not submit your request. Please try again."); },
   });
 
   if (done) {
@@ -112,6 +113,7 @@ export default function CompanyForm() {
       </Field>
       <Field label="Mobile Number *">
         <Input
+          type="tel" inputMode="tel" autoComplete="tel" pattern={String.raw`(?:[+]?91[ \-]?)?[6-9](?:[ \-]?[0-9]){9}`} title="10-digit Indian mobile number, optionally with +91"
           required
           value={form.mobile}
           onChange={(e) => set("mobile", e.target.value)}
@@ -137,6 +139,7 @@ export default function CompanyForm() {
       </Field>
       <Field label="Number of Workers Required *">
         <Input
+          type="number" inputMode="numeric" min="1" max="100000" step="1"
           required
           value={form.worker_count}
           onChange={(e) => set("worker_count", e.target.value)}
@@ -203,7 +206,7 @@ export default function CompanyForm() {
         <Button
           type="submit"
           disabled={mutation.isPending}
-          className="bws-btn-3d w-full bg-[#EA580C] py-6 text-base font-semibold text-white hover:bg-[#C2410C] sm:w-auto sm:px-10"
+          className="bws-btn-3d w-full bg-[#C2410C] py-6 text-base font-semibold text-white hover:bg-[#9A3412] sm:w-auto sm:px-10"
           data-testid="manpower-request-submit"
         >
           {mutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -218,10 +221,11 @@ export default function CompanyForm() {
 }
 
 function Field({ label, children, full }: { label: string; children: React.ReactNode; full?: boolean }) {
+  const id = useId();
   return (
     <div className={`bws-form-field ${full ? "sm:col-span-2" : ""}`}>
-      <Label className="mb-2 block text-sm font-medium text-slate-700">{label}</Label>
-      {children}
+      <Label htmlFor={id} className="mb-2 block text-sm font-medium text-slate-700">{label}</Label>
+      <div id={id + "-field"}>{React.isValidElement(children) ? React.cloneElement(children as React.ReactElement<{ id?: string }>, { id }) : children}</div>
     </div>
   );
 }

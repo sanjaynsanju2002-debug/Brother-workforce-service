@@ -121,7 +121,7 @@ export default function EmailSettings({ pin }: { pin: string }) {
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <h3 className="flex items-center gap-2 text-lg font-semibold text-[#0F2444]">
-                <Mail className="h-5 w-5 text-[#EA580C]" /> Email Delivery
+                <Mail className="h-5 w-5 text-[#C2410C]" /> Email Delivery
               </h3>
               <p className="mt-1 text-sm text-slate-500">
                 Alerts are sent from your server. The API key stays on the backend and is never shown here.
@@ -237,7 +237,7 @@ export default function EmailSettings({ pin }: { pin: string }) {
             <Button
               onClick={() => sendTest.mutate(testTo)}
               disabled={sendTest.isPending || !s?.key_configured}
-              className="bg-[#EA580C] text-white hover:bg-[#C2410C]"
+              className="bg-[#C2410C] text-white hover:bg-[#9A3412]"
               data-testid="email-test-send"
             >
               {sendTest.isPending ? (
@@ -255,7 +255,7 @@ export default function EmailSettings({ pin }: { pin: string }) {
       <Card className="border-slate-200 bg-white">
         <CardContent className="p-4 sm:p-6">
           <h3 className="flex items-center gap-2 text-lg font-semibold text-[#0F2444]">
-            <Globe className="h-5 w-5 text-[#EA580C]" /> Sending Domains
+            <Globe className="h-5 w-5 text-[#C2410C]" /> Sending Domains
           </h3>
           <p className="mt-1 text-sm text-slate-500">
             Add the domain you own, publish the DNS records at your registrar (GoDaddy, Namecheap,
@@ -445,7 +445,7 @@ export default function EmailSettings({ pin }: { pin: string }) {
               <Button
                 type="submit"
                 disabled={saveSettings.isPending}
-                className="bg-[#EA580C] text-white hover:bg-[#C2410C]"
+                className="bg-[#C2410C] text-white hover:bg-[#9A3412]"
                 data-testid="email-settings-save"
               >
                 {saveSettings.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

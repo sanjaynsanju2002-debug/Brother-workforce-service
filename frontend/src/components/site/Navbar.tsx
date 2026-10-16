@@ -68,7 +68,7 @@ export default function Navbar() {
           <img src={BRAND.logo} alt="Brothers Workforce Solutions logo" className="h-11 w-11 object-contain transition-transform duration-300 hover:scale-105" />
           <span className="hidden leading-tight sm:block">
             <span className="block font-[family-name:var(--font-heading)] text-sm font-bold tracking-tight text-[#0F2444]">
-              BROTHERS <span className="text-[#EA580C]">WORKFORCE</span>
+              BROTHERS <span className="text-[#C2410C]">WORKFORCE</span>
             </span>
             <span className="block text-[10px] uppercase tracking-[0.18em] text-slate-500">Solutions</span>
           </span>
@@ -80,7 +80,7 @@ export default function Navbar() {
               key={l.href}
               onClick={() => go(l.href)}
               data-testid={`nav-link-${l.href.slice(1)}`}
-              className="bws-nav-link rounded px-2.5 py-2 text-sm font-medium text-slate-700 hover:text-[#EA580C]"
+              className="bws-nav-link rounded px-2.5 py-2 text-sm font-medium text-slate-700 hover:text-[#C2410C]"
             >
               {l.label}
             </button>
@@ -89,7 +89,7 @@ export default function Navbar() {
 
         <div className="ml-auto flex items-center gap-2 xl:ml-2">
           <Button
-            className="hidden bg-[#EA580C] text-white transition-transform duration-150 hover:bg-[#C2410C] active:scale-98 sm:inline-flex"
+            className="hidden bg-[#C2410C] text-white transition-transform duration-150 hover:bg-[#9A3412] active:scale-98 sm:inline-flex"
             onClick={() => go("#manpower-request")}
             data-testid="nav-btn-hire-workforce"
           >
@@ -114,7 +114,7 @@ export default function Navbar() {
           <button
             className="rounded p-2 text-[#0F2444] xl:hidden"
             onClick={() => setOpen((v) => !v)}
-            aria-label="Toggle menu"
+            aria-label="Toggle menu" aria-expanded={open} aria-controls="mobile-navigation"
             data-testid="nav-mobile-toggle"
           >
             {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
@@ -122,7 +122,7 @@ export default function Navbar() {
         </div>
       </div>
 
-      <div className={cn("border-t border-slate-200 bg-white xl:hidden", open ? "block" : "hidden")}>
+      <div id="mobile-navigation" className={cn("border-t border-slate-200 bg-white xl:hidden", open ? "block" : "hidden")}>
         <nav className="mx-auto grid max-w-7xl gap-1 px-4 py-3">
           {LINKS.map((l) => (
             <button

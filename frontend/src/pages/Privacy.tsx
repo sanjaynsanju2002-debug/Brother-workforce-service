@@ -15,11 +15,11 @@ export default function Privacy() {
       <header className="border-b bg-white">
         <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-5 py-4">
           <Link to="/" className="flex items-center gap-3 font-semibold"><img src={BRAND.logo} alt="" className="h-10 w-10 object-contain" />{BRAND.name}</Link>
-          <Link to="/" className="text-sm font-semibold text-[#EA580C]">Back to website</Link>
+          <Link to="/" className="text-sm font-semibold text-[#C2410C]">Back to website</Link>
         </div>
       </header>
       <main className="mx-auto max-w-3xl px-5 py-12">
-        <p className="text-xs font-bold uppercase tracking-widest text-[#EA580C]">Your information</p>
+        <p className="text-xs font-bold uppercase tracking-widest text-[#C2410C]">Your information</p>
         <h1 className="mt-2 text-4xl font-bold">Privacy Notice</h1>
         <p className="mt-3 text-sm text-slate-500">Updated 12 October 2026</p>
         <div className="mt-8 space-y-8 rounded-xl border border-slate-200 bg-white p-6 leading-relaxed text-slate-700 sm:p-10">
@@ -37,11 +37,11 @@ export default function Privacy() {
           </section>
           <section>
             <h2 className="text-xl font-semibold text-[#0F2444]">Storage and removal</h2>
-            <p className="mt-2">Applications, enquiries, and optional resumes are kept in the service's records for our team to manage recruitment and enquiries. There is currently no automatic expiry for these records. You can ask us to correct or remove your details by emailing <a className="font-medium text-[#EA580C] underline" href={`mailto:${BRAND.email}`}>{BRAND.email}</a>. Our admin team can remove an application and its stored resume.</p>
+            <p className="mt-2">Applications, enquiries, and optional resumes are kept in the service's records for our team to manage recruitment and enquiries. There is currently no automatic expiry for these records. You can ask us to correct or remove your details by emailing <a className="font-medium text-[#C2410C] underline" href={`mailto:${BRAND.email}`}>{BRAND.email}</a>. Our admin team can remove an application and its stored resume.</p>
           </section>
           <section>
             <h2 className="text-xl font-semibold text-[#0F2444]">Contact</h2>
-            <p className="mt-2">Brothers Workforce Solutions, {BRAND.location}. Email <a className="font-medium text-[#EA580C] underline" href={`mailto:${BRAND.email}`}>{BRAND.email}</a> or call <a className="font-medium text-[#EA580C] underline" href={`tel:${BRAND.phoneRaw}`}>{BRAND.phone}</a>.</p>
+            <p className="mt-2">Brothers Workforce Solutions, {BRAND.location}. Email <a className="font-medium text-[#C2410C] underline" href={`mailto:${BRAND.email}`}>{BRAND.email}</a> or call <a className="font-medium text-[#C2410C] underline" href={`tel:${BRAND.phoneRaw}`}>{BRAND.phone}</a>.</p>
           </section>
         </div>
       </main>

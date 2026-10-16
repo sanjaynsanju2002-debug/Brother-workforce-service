@@ -43,7 +43,7 @@ export default function Security({ pin, onPinChanged }: { pin: string; onPinChan
       <Card className="border-slate-200 bg-white">
         <CardContent className="p-4 sm:p-6">
           <h3 className="flex items-center gap-2 text-lg font-semibold text-[#0F2444]">
-            <KeyRound className="h-5 w-5 text-[#EA580C]" /> Your Security PIN
+            <KeyRound className="h-5 w-5 text-[#C2410C]" /> Your Security PIN
           </h3>
           <p className="mt-1 text-sm text-slate-500">
             This is the PIN that unlocks the dashboard. Keep it private — anyone with it can see every
@@ -72,7 +72,7 @@ export default function Security({ pin, onPinChanged }: { pin: string; onPinChan
       <Card className="border-slate-200 bg-white">
         <CardContent className="p-4 sm:p-6">
           <h3 className="flex items-center gap-2 text-lg font-semibold text-[#0F2444]">
-            <ShieldCheck className="h-5 w-5 text-[#EA580C]" /> Change PIN
+            <ShieldCheck className="h-5 w-5 text-[#C2410C]" /> Change PIN
           </h3>
           <p className="mt-1 text-sm text-slate-500">8 to 12 digits. Takes effect immediately.</p>
           <form
@@ -116,7 +116,7 @@ export default function Security({ pin, onPinChanged }: { pin: string; onPinChan
             <Button
               type="submit"
               disabled={change.isPending}
-              className="bg-[#EA580C] text-white hover:bg-[#C2410C]"
+              className="bg-[#C2410C] text-white hover:bg-[#9A3412]"
               data-testid="security-change-submit"
             >
               {change.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}

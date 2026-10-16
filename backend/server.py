@@ -62,6 +62,18 @@ async def lifespan(app: FastAPI):
 # Create the main app without a prefix
 app = FastAPI(lifespan=lifespan)
 
+
+@app.middleware("http")
+async def response_headers(request, call_next):
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    if request.url.path == "/admin" or request.url.path.startswith(("/admin/", "/api/admin/")):
+        response.headers["X-Robots-Tag"] = "noindex, nofollow"
+        response.headers.setdefault("Cache-Control", "private, no-store")
+    return response
+
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
 
@@ -101,6 +113,8 @@ from routers.assignments import router as assignments_router  # noqa: E402
 from routers.cron import router as cron_router  # noqa: E402
 from routers.talent import router as talent_router  # noqa: E402
 from routers.invoices import router as invoices_router  # noqa: E402
+from routers.expenses import router as expenses_router  # noqa: E402
+from routers.finance import router as finance_router  # noqa: E402
 
 admin_router.include_router(email_router)
 api_router.include_router(public_router)
@@ -108,6 +122,8 @@ api_router.include_router(auth_admin_router)
 api_router.include_router(admin_router)
 api_router.include_router(talent_router)
 api_router.include_router(invoices_router)
+api_router.include_router(expenses_router)
+api_router.include_router(finance_router)
 api_router.include_router(clients_router)
 api_router.include_router(assignments_router)
 api_router.include_router(cron_router)

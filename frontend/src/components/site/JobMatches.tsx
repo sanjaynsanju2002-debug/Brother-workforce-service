@@ -21,7 +21,7 @@ export default function JobMatches({ pin, job }: { pin: string; job: Job }) {
   return (
     <div className="mt-3 rounded-md border border-slate-200 bg-[#F8FAFC] p-3 sm:p-4" data-testid={`job-matches-${job.id}`}>
       <p className="flex items-center gap-2 text-sm font-semibold text-[#0F2444]">
-        <BellRing className="h-4 w-4 text-[#EA580C]" />
+        <BellRing className="h-4 w-4 text-[#C2410C]" />
         {matches.isLoading
           ? "Finding matching candidates…"
           : `${rows.length} matching candidate${rows.length === 1 ? "" : "s"} for ${job.title}`}

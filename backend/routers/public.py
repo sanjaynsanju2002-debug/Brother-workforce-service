@@ -1,19 +1,25 @@
 """Public API: worker registrations, company manpower requests, job listings."""
 
 import io
+import hashlib
+import hmac
 import logging
 import os
 import re
-from datetime import datetime, timezone
+import secrets
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import boto3
 from bson.binary import Binary
 
-from fastapi import APIRouter, Depends, BackgroundTasks, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, BackgroundTasks, File, HTTPException, UploadFile, Request
+from uuid import UUID
+from pymongo.errors import DuplicateKeyError
 from fastapi.responses import FileResponse, StreamingResponse
 
 from lib.auth import require_admin
+from lib.applications import worker_input, company_input
 from lib.db import db
 from lib.jobs import open_jobs_query
 from lib.notify import build_html, send_notification
@@ -45,8 +51,22 @@ def _r2():
     return boto3.client("s3", endpoint_url=R2_ENDPOINT, region_name=os.getenv("AWS_DEFAULT_REGION", "auto"))
 
 
-@router.post("/workers", response_model=Worker)
-async def create_worker(payload: WorkerCreate, background: BackgroundTasks) -> Worker:
+class WorkerSubmission(WorkerCreate):
+    request_id: UUID | None = None
+
+
+class WorkerReceipt(Worker):
+    upload_token: str
+    application_reference: str
+
+
+def receipt(doc: dict, token: str) -> WorkerReceipt:
+    return WorkerReceipt(**Worker(**doc).model_dump(), upload_token=token,
+                         application_reference='BWS-' + doc['id'].replace('-', '')[:12].upper())
+
+
+@router.post("/workers", response_model=WorkerReceipt)
+async def create_worker(payload: WorkerSubmission, background: BackgroundTasks) -> WorkerReceipt:
     if not payload.consent_to_share:
         raise HTTPException(status_code=400, detail="Please agree to recruitment use of your profile")
     job_title = None
@@ -55,8 +75,32 @@ async def create_worker(payload: WorkerCreate, background: BackgroundTasks) -> W
         if not job:
             raise HTTPException(status_code=404, detail="This job is no longer open. You can still register your profile.")
         job_title = job["title"]
-    worker = Worker(**payload.model_dump(), job_title=job_title)
-    await db.workers.insert_one(worker.model_dump())
+    data = worker_input(payload.model_dump(exclude={'request_id'}))
+    token = str(payload.request_id) if payload.request_id else secrets.token_urlsafe(32)
+    submission_hash = hashlib.sha256(token.encode()).hexdigest()
+    existing = await db.workers.find_one({'submission_hash': submission_hash})
+    if existing:
+        if any(existing.get(k) != v for k, v in data.items()):
+            raise HTTPException(409, 'This submission was already saved with different details. Contact our team to update it.')
+        return receipt(existing, token)
+    fingerprint = hashlib.sha256(f"{data['mobile']}|{data['full_name'].casefold()}|{data.get('job_id') or ''}".encode()).hexdigest()
+    duplicate = await db.workers.find_one({'$or': [
+        {'application_fingerprint': fingerprint},
+        {'mobile': data['mobile'], 'full_name': data['full_name'], 'job_id': data.get('job_id')},
+    ]})
+    if duplicate:
+        raise HTTPException(409, 'An application with these details is already saved for this opening. Contact our team to update it.')
+    worker = Worker(**data, job_title=job_title)
+    record = {**worker.model_dump(), 'submission_hash': submission_hash,
+              'application_fingerprint': fingerprint, 'upload_token_hash': submission_hash,
+              'upload_expires_at': datetime.now(timezone.utc) + timedelta(hours=1)}
+    try:
+        await db.workers.insert_one(record)
+    except DuplicateKeyError:
+        existing = await db.workers.find_one({'submission_hash': submission_hash})
+        if existing and all(existing.get(k) == v for k, v in data.items()):
+            return receipt(existing, token)
+        raise HTTPException(409, 'An application with these details is already saved. Contact our team to update it.')
     background.add_task(
         send_notification,
         "New Worker Registration",
@@ -82,20 +126,35 @@ async def create_worker(payload: WorkerCreate, background: BackgroundTasks) -> W
             ],
         ),
     )
-    return worker
+    return receipt(record, token)
 
 
 @router.post("/workers/{worker_id}/resume", response_model=Worker)
-async def upload_resume(worker_id: str, file: UploadFile = File(...)) -> Worker:
+async def upload_resume(worker_id: str, request: Request, file: UploadFile = File(...)) -> Worker:
     doc = await db.workers.find_one({"id": worker_id})
     if not doc:
         raise HTTPException(status_code=404, detail="Worker application not found")
+
+    supplied = request.headers.get('x-upload-token', '')
+    expires = doc.get('upload_expires_at')
+    if expires and expires.tzinfo is None:
+        expires = expires.replace(tzinfo=timezone.utc)
+    valid_upload = supplied and expires and expires > datetime.now(timezone.utc) and hmac.compare_digest(
+        hashlib.sha256(supplied.encode()).hexdigest(), doc.get('upload_token_hash', '')
+    )
+    if not valid_upload:
+        if request.cookies.get('bws_admin_session'):
+            await require_admin(request)
+        else:
+            raise HTTPException(403, 'Upload authorization expired. Contact our recruitment team to add or replace your resume.')
 
     ext = Path(file.filename or "").suffix.lower()
     if ext not in ALLOWED_EXT:
         raise HTTPException(status_code=400, detail=f"Unsupported file type: {ext or 'unknown'}")
 
     contents = await file.read(MAX_RESUME_SIZE + 1)
+    if not contents:
+        raise HTTPException(422, 'Choose a non-empty resume file')
     if len(contents) > MAX_RESUME_SIZE:
         raise HTTPException(status_code=413, detail="Resume must be 2 MB or smaller")
 
@@ -206,7 +265,7 @@ async def download_resume(worker_id: str):
 async def create_company_request(
     payload: CompanyRequestCreate, background: BackgroundTasks
 ) -> CompanyRequest:
-    req = CompanyRequest(**payload.model_dump())
+    req = CompanyRequest(**company_input(payload.model_dump()))
     await db.company_requests.insert_one(req.model_dump())
     background.add_task(
         send_notification,

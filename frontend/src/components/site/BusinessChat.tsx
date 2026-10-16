@@ -72,7 +72,7 @@ export default function BusinessChat({ jobs, clients }: { jobs: Job[] | null; cl
           className="flex h-[min(620px,calc(100dvh-5rem))] w-[min(390px,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_24px_70px_rgba(15,36,68,0.30)]"
         >
           <div className="flex items-center gap-3 bg-[#0F2444] px-4 py-4 text-white">
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#EA580C]">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#C2410C]">
               <MessageCircle className="h-5 w-5" aria-hidden="true" />
             </span>
             <div className="min-w-0 flex-1">
@@ -134,7 +134,7 @@ export default function BusinessChat({ jobs, clients }: { jobs: Job[] | null; cl
                 placeholder="Ask about jobs, staffing, services..."
                 className="min-w-0 flex-1 rounded-xl border border-slate-300 px-3 py-2.5 text-sm text-[#0F2444] outline-none focus:border-[#EA580C] focus:ring-2 focus:ring-orange-100"
               />
-              <button type="submit" disabled={!draft.trim()} aria-label="Send message" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#EA580C] text-white hover:bg-[#C2410C] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#EA580C] disabled:cursor-not-allowed disabled:opacity-50">
+              <button type="submit" disabled={!draft.trim()} aria-label="Send message" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#C2410C] text-white hover:bg-[#9A3412] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#EA580C] disabled:cursor-not-allowed disabled:opacity-50">
                 <ArrowUp className="h-5 w-5" aria-hidden="true" />
               </button>
             </div>
@@ -149,7 +149,7 @@ export default function BusinessChat({ jobs, clients }: { jobs: Job[] | null; cl
           aria-expanded={false}
           aria-controls="business-chat-panel"
           onClick={() => setOpen(true)}
-          className="flex items-center gap-2 rounded-full bg-[#EA580C] px-4 py-3 text-sm font-semibold text-white shadow-[0_12px_32px_rgba(15,36,68,0.28)] transition-transform hover:-translate-y-0.5 hover:bg-[#C2410C] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#EA580C]"
+          className="flex items-center gap-2 rounded-full bg-[#C2410C] px-4 py-3 text-sm font-semibold text-white shadow-[0_12px_32px_rgba(15,36,68,0.28)] transition-transform hover:-translate-y-0.5 hover:bg-[#9A3412] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#EA580C]"
         >
           <MessageCircle className="h-5 w-5" aria-hidden="true" />
           Ask us

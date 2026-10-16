@@ -41,6 +41,8 @@ def validate_save(payload: InvoiceInput) -> None:
         raise HTTPException(422, "Enter the client / company name")
     if not any(line.quantity > 0 and line.rate > 0 for line in payload.lines):
         raise HTTPException(422, "Enter a quantity and rate in at least one charge row")
+    if not payload.service_month:
+        raise HTTPException(422, "Select the service month this invoice belongs to")
 
 
 async def find_company(company_id: UUID) -> InvoiceCompany:

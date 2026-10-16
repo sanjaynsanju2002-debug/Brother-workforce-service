@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { CheckCircle2, Loader2, Upload } from "lucide-react";
 import { toast } from "sonner";
@@ -19,8 +19,9 @@ import { AVAILABILITY, BRAND, SKILL_CATEGORIES } from "@/lib/brand";
 import { candidateCopy, type CandidateLanguage } from "@/lib/candidateLanguage";
 import type { Job, Worker, WorkerCreate } from "@/types";
 import { Link } from "react-router-dom";
+import { MAX_RESUME_SIZE, RESUME_TYPES } from "@/lib/uploads";
 
-const MAX_RESUME_SIZE = 2 * 1024 * 1024;
+type Receipt = Worker & { upload_token: string; application_reference: string };
 const GENDER_KN: Record<string, string> = { Male: "ಪುರುಷ", Female: "ಮಹಿಳೆ", Other: "ಇತರೆ" };
 const SKILL_KN: Record<string, string> = { Skilled: "ನುರಿತ", "Semi-skilled": "ಅರೆ ನುರಿತ", "General Worker": "ಸಾಮಾನ್ಯ ಕೆಲಸಗಾರ", "General Workers": "ಸಾಮಾನ್ಯ ಕೆಲಸಗಾರರು" };
 const AVAILABILITY_KN: Record<string, string> = { Immediate: "ತಕ್ಷಣ", "Within 7 days": "7 ದಿನಗಳೊಳಗೆ", "Within 15 days": "15 ದಿನಗಳೊಳಗೆ", "Within 30 days": "30 ದಿನಗಳೊಳಗೆ" };
@@ -44,33 +45,58 @@ const EMPTY: WorkerCreate = {
 
 export default function WorkerForm({ job, language = "en" }: { job?: Job; language?: CandidateLanguage }) {
   const copy = candidateCopy[language];
-  const [form, setForm] = useState<WorkerCreate>(EMPTY);
+  const [form, setForm] = useState<WorkerCreate>({ ...EMPTY, skill_category: job?.skill_category ?? "" });
   const [resume, setResume] = useState<File | null>(null);
   const [done, setDone] = useState(false);
   const [consent, setConsent] = useState(false);
+  const [savedReceipt, setSavedReceipt] = useState<Receipt | null>(null);
+  const [resumeFailed, setResumeFailed] = useState(false);
+  const requestId = useRef(crypto.randomUUID());
+
+  const dirty = !done && !!(form.full_name || form.mobile || form.current_location || form.skills || resume);
+  useEffect(() => {
+    if (!dirty && !resumeFailed) return;
+    const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty, resumeFailed]);
+
+  const upload = async (worker: Receipt) => {
+    if (!resume) return;
+    const fd = new FormData();
+    fd.append("file", resume);
+    const res = await fetch(`/api/workers/${worker.id}/resume`, {
+      method: "POST", body: fd, headers: { "X-Upload-Token": worker.upload_token },
+    });
+    if (!res.ok) throw new Error(copy.savedWithoutResume);
+  };
+  const retryResume = useMutation({
+    mutationFn: async () => { if (savedReceipt) await upload(savedReceipt); },
+    onSuccess: () => { setResumeFailed(false); setResume(null); toast.success(copy.submitted); },
+    onError: () => toast.error(copy.savedWithoutResume),
+  });
 
   const set = (k: keyof WorkerCreate, v: string) => setForm((f) => ({ ...f, [k]: v }));
 
   const mutation = useMutation({
     mutationFn: async (payload: WorkerCreate) => {
-      const worker = await apiPost<Worker>("/workers", {
-        ...payload, job_id: job?.id ?? null, consent_to_share: true,
+      const worker = await apiPost<Receipt>("/workers", {
+        ...payload, job_id: job?.id ?? null, consent_to_share: true, request_id: requestId.current,
       });
       let resumeUploaded = true;
 
       if (resume) {
-        const fd = new FormData();
-        fd.append("file", resume);
-        const res = await fetch(`/api/workers/${worker.id}/resume`, { method: "POST", body: fd });
-        resumeUploaded = res.ok;
+        try { await upload(worker); } catch { resumeUploaded = false; }
       }
 
       return { worker, resumeUploaded };
     },
-    onSuccess: ({ resumeUploaded }) => {
+    onSuccess: ({ worker, resumeUploaded }) => {
+      setSavedReceipt(worker);
+      setResumeFailed(!resumeUploaded);
       setDone(true);
       setForm(EMPTY);
-      setResume(null);
+      if (resumeUploaded) setResume(null);
       setConsent(false);
       if (resumeUploaded) {
         toast.success(copy.submitted);
@@ -94,10 +120,17 @@ export default function WorkerForm({ job, language = "en" }: { job?: Job; langua
         <p className="text-lg font-semibold text-[#0F2444]">
           {job ? copy.successJob : copy.successGeneral}
         </p>
+        {savedReceipt && <p className="mt-3 font-semibold">{language === "kn" ? "ಅರ್ಜಿ ಸಂಖ್ಯೆ" : "Application reference"}: {savedReceipt.application_reference}</p>}
+        {job && <p className="mt-2 text-sm">{job.title} · {job.location}</p>}
+        <p className="mt-3 text-sm">{language === "kn" ? "ನಮ್ಮ ನೇಮಕಾತಿ ತಂಡ ನಿಮ್ಮ ವಿವರಗಳನ್ನು ಪರಿಶೀಲಿಸಿ ಸೂಕ್ತ ಅವಕಾಶಗಳ ಬಗ್ಗೆ ಸಂಪರ್ಕಿಸುತ್ತದೆ." : "Our recruitment team will review your profile and contact you about suitable opportunities."}</p>
+        {resumeFailed && <div role="alert" className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-4 text-amber-900">
+          <p>{copy.savedWithoutResume}</p>
+          <Button type="button" className="mt-3" disabled={retryResume.isPending} onClick={() => retryResume.mutate()}>{language === "kn" ? "ಸ್ವವಿವರ ಪತ್ರವನ್ನು ಮತ್ತೆ ಅಪ್‌ಲೋಡ್ ಮಾಡಿ" : "Retry resume upload"}</Button>
+        </div>}
         <Button
           variant="outline"
           className="mt-5"
-          onClick={() => setDone(false)}
+          onClick={() => { if (resumeFailed && !window.confirm("Your application is saved, but its resume has not uploaded. Start another application?")) return; setDone(false); setResumeFailed(false); setResume(null); setSavedReceipt(null); setForm({ ...EMPTY, skill_category: job?.skill_category ?? "" }); requestId.current = crypto.randomUUID(); }}
           data-testid="worker-registration-another"
         >
           {copy.another}
@@ -146,6 +179,8 @@ export default function WorkerForm({ job, language = "en" }: { job?: Job; langua
           type="tel"
           inputMode="tel"
           autoComplete="tel"
+          pattern={String.raw`(?:[+]?91[ \-]?)?[6-9](?:[ \-]?[0-9]){9}`}
+          title="10-digit Indian mobile number, optionally with +91"
           value={form.mobile}
           onChange={(e) => set("mobile", e.target.value)}
           data-testid="worker-input-mobile"
@@ -178,7 +213,7 @@ export default function WorkerForm({ job, language = "en" }: { job?: Job; langua
       <Field id="worker-skills" label={copy.skills} full>
         <Input
           id="worker-skills"
-          placeholder="e.g. Welding, CNC operation, forklift"
+          placeholder={language === "kn" ? "ಉದಾ. ವೆಲ್ಡಿಂಗ್, ಯಂತ್ರ ನಿರ್ವಹಣೆ" : "e.g. Welding, CNC operation, customer service"}
           value={form.skills ?? ""}
           onChange={(e) => set("skills", e.target.value)}
           data-testid="worker-input-skills"
@@ -186,13 +221,14 @@ export default function WorkerForm({ job, language = "en" }: { job?: Job; langua
       </Field>
       <div className="sm:col-span-2">
         <p className="mb-2 text-sm font-medium text-slate-700">{copy.resume} <span className="font-normal text-slate-500">(2 MB)</span></p>
-        <label className="bws-upload-zone flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-slate-300 bg-white px-4 py-4 text-sm text-slate-600 hover:border-[#EA580C]">
-          <Upload className="h-4 w-4 text-[#EA580C]" />
+        <label className="bws-upload-zone flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-slate-300 bg-white px-4 py-4 text-sm text-slate-600 hover:border-[#EA580C] focus-within:ring-2 focus-within:ring-orange-700">
+          <Upload className="h-4 w-4 text-[#C2410C]" />
           <span data-testid="worker-resume-name">{resume ? `${resume.name} (${(resume.size / 1024 / 1024).toFixed(1)} MB)` : copy.resumeHelp}</span>
           <input
             type="file"
-            className="hidden"
-            accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
+            className="sr-only"
+            aria-label={copy.resume}
+            accept={RESUME_TYPES}
             onChange={(e) => {
               const file = e.target.files?.[0] ?? null;
               if (file && file.size > MAX_RESUME_SIZE) {
@@ -251,12 +287,12 @@ export default function WorkerForm({ job, language = "en" }: { job?: Job; langua
       <div className="sm:col-span-2">
         <label className="mb-4 flex items-start gap-3 text-sm text-slate-700">
           <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} required className="mt-1" />
-          <span>{copy.consentBefore}<Link to="/privacy" className="text-[#0F2444] underline">{copy.privacy}</Link>{copy.consentAfter}</span>
+          <span>{copy.consentBefore}<Link to="/privacy" onClick={(event) => { if (dirty && !window.confirm(language === "kn" ? "ಉಳಿಸದ ವಿವರಗಳನ್ನು ಬಿಟ್ಟು ಮುಂದುವರಿಯಬೇಕೇ?" : "Leave this application? Unsaved details will be lost.")) event.preventDefault(); }} className="text-[#0F2444] underline">{copy.privacy}</Link>{copy.consentAfter}</span>
         </label>
         <Button
           type="submit"
           disabled={mutation.isPending}
-          className="bws-btn-3d w-full bg-[#EA580C] py-6 text-base font-semibold text-white hover:bg-[#C2410C] sm:w-auto sm:px-10"
+          className="bws-btn-3d w-full bg-[#C2410C] py-6 text-base font-semibold text-white hover:bg-[#9A3412] sm:w-auto sm:px-10"
           data-testid="worker-registration-submit"
         >
           {mutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -264,7 +300,7 @@ export default function WorkerForm({ job, language = "en" }: { job?: Job; langua
         </Button>
         <p className="mt-4 max-w-2xl text-xs leading-relaxed text-slate-600">
           {copy.removalBefore}{" "}
-          <a className="font-medium text-[#0F2444] underline underline-offset-2 hover:text-[#EA580C]" href={`mailto:${BRAND.email}`}>
+          <a className="font-medium text-[#0F2444] underline underline-offset-2 hover:text-[#C2410C]" href={`mailto:${BRAND.email}`}>
             {BRAND.email}
           </a>.
         </p>

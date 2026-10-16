@@ -74,7 +74,7 @@ export default function Shortlists({ pin }: { pin: string }) {
       <Card className="border-slate-200 bg-white">
         <CardContent className="p-4 sm:p-6">
           <h3 className="flex items-center gap-2 text-lg font-semibold text-[#0F2444]">
-            <ListChecks className="h-5 w-5 text-[#EA580C]" /> Create a Shortlist
+            <ListChecks className="h-5 w-5 text-[#C2410C]" /> Create a Shortlist
           </h3>
           <p className="mt-1 text-sm text-slate-500">
             Group candidates per client requirement, then export just that list to send to the company.
@@ -103,7 +103,7 @@ export default function Shortlists({ pin }: { pin: string }) {
             <Button
               type="submit"
               disabled={create.isPending}
-              className="w-full bg-[#EA580C] text-white hover:bg-[#C2410C] sm:w-auto"
+              className="w-full bg-[#C2410C] text-white hover:bg-[#9A3412] sm:w-auto"
               data-testid="shortlist-create-submit"
             >
               {create.isPending ? (

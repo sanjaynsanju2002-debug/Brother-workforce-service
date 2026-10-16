@@ -94,11 +94,11 @@ export default function WorkforceManager({ pin }: { pin: string }) {
     <div className="space-y-6" data-testid="workforce-manager">
       <div className="grid gap-4 sm:grid-cols-2">
         <Card className="border-slate-200 bg-white"><CardContent className="flex items-center gap-4 p-5">
-          <Building2 className="h-9 w-9 text-[#EA580C]" />
+          <Building2 className="h-9 w-9 text-[#C2410C]" />
           <div><p className="text-2xl font-bold text-[#0F2444]">{companyCount}</p><p className="text-sm text-slate-500">Companies with active workers</p></div>
         </CardContent></Card>
         <Card className="border-slate-200 bg-white"><CardContent className="flex items-center gap-4 p-5">
-          <Users className="h-9 w-9 text-[#EA580C]" />
+          <Users className="h-9 w-9 text-[#C2410C]" />
           <div><p className="text-2xl font-bold text-[#0F2444]">{active}</p><p className="text-sm text-slate-500">Active assignments</p></div>
         </CardContent></Card>
       </div>
@@ -139,7 +139,7 @@ export default function WorkforceManager({ pin }: { pin: string }) {
           <div><Label className="mb-2 block">Role / work</Label><Input value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })} placeholder="Machine operator" data-testid="assignment-role" /></div>
           <div><Label className="mb-2 block">Start date</Label><Input type="date" value={form.start_date} onChange={(e) => setForm({ ...form, start_date: e.target.value })} data-testid="assignment-start-date" /></div>
           <div className="sm:col-span-2 lg:col-span-3"><Label className="mb-2 block">Notes</Label><Input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Shift or site details (optional)" /></div>
-          <div className="sm:col-span-2 lg:col-span-3"><Button type="submit" disabled={add.isPending || !clients.data?.length} className="bg-[#EA580C] text-white hover:bg-[#C2410C]">
+          <div className="sm:col-span-2 lg:col-span-3"><Button type="submit" disabled={add.isPending || !clients.data?.length} className="bg-[#C2410C] text-white hover:bg-[#9A3412]">
             {add.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />} Add to workforce
           </Button></div>
         </form>

@@ -19,6 +19,8 @@ import Shortlists from "@/components/site/Shortlists";
 import JobMatches from "@/components/site/JobMatches";
 import TalentBank from "@/components/site/TalentBank";
 import Invoices from "@/components/site/Invoices";
+import Expenses from "@/components/site/Expenses";
+import ProfitLoss from "@/components/site/ProfitLoss";
 import { waLink, workerMessage, companyMessage } from "@/lib/wa";
 import {
   Table,
@@ -110,9 +112,9 @@ export default function Admin() {
               }}
             >
               <div>
-                <Label className="mb-2 block text-sm">Security PIN</Label>
+                <Label htmlFor="admin-security-pin" className="mb-2 block text-sm">Security PIN</Label>
                 <Input
-                  type="password"
+                  id="admin-security-pin" type="password" autoComplete="current-password" inputMode="numeric"
                   value={pin}
                   onChange={(e) => setPin(e.target.value)}
                   placeholder="••••••"
@@ -122,7 +124,7 @@ export default function Admin() {
               <Button
                 type="submit"
                 disabled={login.isPending}
-                className="w-full bg-[#EA580C] text-white hover:bg-[#C2410C]"
+                className="w-full bg-[#C2410C] text-white hover:bg-[#9A3412]"
                 data-testid="admin-pin-submit"
               >
                 {login.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Lock className="mr-2 h-4 w-4" />}
@@ -366,6 +368,8 @@ function Dashboard({
                 <TabsTrigger value="requests" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-requests">Company Enquiries</TabsTrigger>
                 <TabsTrigger value="clients" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-clients">Clients</TabsTrigger>
                 <TabsTrigger value="invoices" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-invoices">Invoices</TabsTrigger>
+                <TabsTrigger value="expenses" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-expenses">Expenses</TabsTrigger>
+                <TabsTrigger value="profit-loss" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-profit-loss">Profit &amp; Loss</TabsTrigger>
                 <TabsTrigger value="jobs" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-jobs">Job Postings</TabsTrigger>
                 <TabsTrigger value="email" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-email">Email Settings</TabsTrigger>
                 <TabsTrigger value="security" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-security">Security</TabsTrigger>
@@ -389,7 +393,7 @@ function Dashboard({
 
               <div className="mt-6 rounded-lg border border-slate-200 bg-white p-4 sm:p-6" data-testid="admin-traffic">
                 <h2 className="flex items-center gap-2 text-base font-semibold text-[#0F2444]">
-                  <TrendingUp className="h-4 w-4 text-[#EA580C]" /> Website Activity
+                  <TrendingUp className="h-4 w-4 text-[#C2410C]" /> Website Activity
                 </h2>
                 <p className="mt-1 text-sm text-slate-500">
                   Anonymous visit counts — one per visitor session. No personal data is tracked.
@@ -424,7 +428,7 @@ function Dashboard({
               <div className="mt-6 grid gap-4 md:grid-cols-2" data-testid="admin-action-metrics">
                 <div className="rounded-lg border border-slate-200 bg-white p-5">
                   <h2 className="font-semibold text-[#0F2444]">Pending enquiry follow-up</h2>
-                  <p className="mt-3 text-3xl font-bold text-[#EA580C]">{enquiryAging.data?.older_than_2_days ?? 0}</p>
+                  <p className="mt-3 text-3xl font-bold text-[#C2410C]">{enquiryAging.data?.older_than_2_days ?? 0}</p>
                   <p className="text-sm text-slate-600">Pending for more than 2 days</p>
                   <p className="mt-2 text-xs text-slate-500">{enquiryAging.data?.pending_total ?? 0} pending total · oldest {enquiryAging.data?.oldest_days ?? 0} days</p>
                 </div>
@@ -554,7 +558,7 @@ function Dashboard({
                               href={`/api/workers/${w.id}/resume${q}`}
                               target="_blank"
                               rel="noreferrer"
-                              className="text-[#EA580C] underline"
+                              className="text-[#C2410C] underline"
                             >
                               Download
                             </a>
@@ -896,7 +900,7 @@ function Dashboard({
                   <Button
                     type="submit"
                     disabled={createJob.isPending || editJob.isPending}
-                    className="w-full bg-[#EA580C] text-white hover:bg-[#C2410C]"
+                    className="w-full bg-[#C2410C] text-white hover:bg-[#9A3412]"
                     data-testid="admin-job-submit"
                   >
                     <Plus className="mr-2 h-4 w-4" /> {editingJobId ? "Save Changes" : "Post Job"}
@@ -994,6 +998,8 @@ function Dashboard({
           <TabsContent value="invoices" className="mt-0">
             <Invoices />
           </TabsContent>
+          <TabsContent value="expenses" className="mt-0"><Expenses /></TabsContent>
+          <TabsContent value="profit-loss" className="mt-0"><ProfitLoss /></TabsContent>
           <TabsContent value="workforce" className="mt-6">
             <WorkforceManager pin={pin} />
           </TabsContent>
@@ -1068,14 +1074,14 @@ function Funnel({
   return (
     <div className="rounded-md border border-slate-200 bg-[#F8FAFC] p-4 sm:p-5" data-testid={testid}>
       <div className="flex items-center gap-2">
-        <Icon className="h-4 w-4 text-[#EA580C]" />
+        <Icon className="h-4 w-4 text-[#C2410C]" />
         <p className="text-xs font-bold uppercase tracking-widest text-slate-500">{label}</p>
       </div>
       <p className="mt-3 text-3xl font-bold text-[#0F2444]" data-testid={`${testid}-total`}>
         {total}
       </p>
       <p className="mt-1 text-xs text-slate-500">
-        <span className="font-semibold text-[#EA580C]" data-testid={`${testid}-today`}>
+        <span className="font-semibold text-[#C2410C]" data-testid={`${testid}-today`}>
           {today}
         </span>{" "}
         today

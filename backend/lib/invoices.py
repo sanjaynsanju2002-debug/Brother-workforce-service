@@ -6,6 +6,7 @@ from typing import Annotated, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from lib.months import MONTH_PATTERN, month_label, parse_billing_period
 
 Money = Annotated[Decimal, Field(ge=0, le=1_000_000_000, decimal_places=2, allow_inf_nan=False)]
 Quantity = Annotated[Decimal, Field(ge=0, le=1_000_000, decimal_places=2, allow_inf_nan=False)]
@@ -83,6 +84,7 @@ class InvoiceInput(InvoiceModel):
     client_gstin: str = Field(default="", max_length=30)
     invoice_date: date
     due_date: date | None = None
+    service_month: str | None = Field(default=None, pattern=MONTH_PATTERN)
     billing_period: str = Field(default="", max_length=100)
     supplier: InvoiceProfile = Field(default_factory=InvoiceProfile)
     lines: list[InvoiceLine] = Field(default_factory=default_lines, min_length=8, max_length=8)
@@ -99,6 +101,10 @@ class InvoiceInput(InvoiceModel):
             raise ValueError("Include each invoice charge row exactly once")
         if self.due_date is not None and self.due_date < self.invoice_date:
             raise ValueError("Payment due date cannot be before the invoice date")
+        if self.service_month is None:
+            self.service_month = parse_billing_period(self.billing_period)
+        if self.service_month and not self.billing_period:
+            self.billing_period = month_label(self.service_month)
         # A stable order keeps saved invoices and both exports aligned with the template.
         self.lines.sort(key=lambda line: list(LINE_LABELS).index(line.key))
         if self.uses_gst_percentages:

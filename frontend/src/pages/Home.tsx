@@ -176,7 +176,7 @@ export default function Home() {
             <div className="mt-8 flex flex-wrap gap-3">
               <Button
                 onClick={() => scrollTo("#manpower-request")}
-                className="bws-btn-3d bg-[#EA580C] px-7 py-6 text-base font-semibold text-white hover:bg-[#C2410C]"
+                className="bws-btn-3d bg-[#C2410C] px-7 py-6 text-base font-semibold text-white hover:bg-[#9A3412]"
                 data-testid="hero-btn-request-manpower"
               >
                 Request Manpower
@@ -243,7 +243,7 @@ export default function Home() {
           <div data-reveal>
             <p className="bws-overline">Our Brochure Vision</p>
             <h2 className="mt-3 text-3xl font-bold tracking-tight text-[#0F2444] lg:text-5xl">
-              People. Productivity. Partnership. <span className="text-[#EA580C]">Progress.</span>
+              People. Productivity. Partnership. <span className="text-[#C2410C]">Progress.</span>
             </h2>
             <p className="mt-5 max-w-2xl text-base leading-relaxed text-slate-600 sm:text-lg">
               Reliable workforce support designed around people, process and performance — helping factories,
@@ -328,7 +328,7 @@ export default function Home() {
                 <ul className="mt-4 space-y-1.5 text-sm text-slate-600">
                   {s.items.map((i) => (
                     <li key={i} className="flex gap-2">
-                      <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[#EA580C]" />
+                      <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[#C2410C]" />
                       {i}
                     </li>
                   ))}
@@ -350,7 +350,7 @@ export default function Home() {
               data-reveal
               data-testid={`industry-card-${i.name.toLowerCase().replace(/[^a-z]+/g, "-")}`}
             >
-              <i.icon className="h-6 w-6 shrink-0 text-[#EA580C]" />
+              <i.icon className="h-6 w-6 shrink-0 text-[#C2410C]" />
               <span className="font-medium text-[#0F2444]">{i.name}</span>
             </div>
           ))}
@@ -404,7 +404,7 @@ export default function Home() {
             </div>
           </div>
           <Button
-            className="bws-btn-3d bg-[#EA580C] text-white hover:bg-[#C2410C]"
+            className="bws-btn-3d bg-[#C2410C] text-white hover:bg-[#9A3412]"
             onClick={() => scrollTo("#worker-registration")}
           >
             {copy.quickApply}
@@ -433,7 +433,7 @@ export default function Home() {
                 {copy.noJobsHelp}
               </p>
               <Button
-                className="mt-6 bg-[#EA580C] text-white hover:bg-[#C2410C]"
+                className="mt-6 bg-[#C2410C] text-white hover:bg-[#9A3412]"
                 onClick={() => scrollTo("#worker-registration")}
                 data-testid="jobs-empty-cta"
               >
@@ -467,7 +467,7 @@ export default function Home() {
                     {(candidateLang === "kn" ? j.description_kn || j.description : j.description) && <p className="mt-3 line-clamp-3 whitespace-pre-line text-sm text-slate-500">{candidateLang === "kn" ? j.description_kn || j.description : j.description}</p>}
                     <Link
                       to={`/jobs/${j.id}`}
-                      className="mt-5 inline-flex w-full items-center justify-center rounded-md bg-[#EA580C] px-4 py-2 font-semibold text-white hover:bg-[#C2410C]"
+                      className="mt-5 inline-flex w-full items-center justify-center rounded-md bg-[#C2410C] px-4 py-2 font-semibold text-white hover:bg-[#9A3412]"
                       data-testid={`job-apply-${j.id}`}
                     >{copy.viewApply}</Link>
                   </CardContent>
@@ -520,7 +520,7 @@ export default function Home() {
             </div>
             <Button
               onClick={() => scrollTo("#worker-registration")}
-              className="bws-btn-3d mt-7 bg-[#EA580C] text-white hover:bg-[#C2410C]"
+              className="bws-btn-3d mt-7 bg-[#C2410C] text-white hover:bg-[#9A3412]"
             >
               {copy.registerFuture}
             </Button>
@@ -551,7 +551,7 @@ export default function Home() {
             </div>
             <Button
               onClick={() => scrollTo("#manpower-request")}
-              className="bws-btn-3d mt-7 bg-[#EA580C] text-white hover:bg-[#C2410C]"
+              className="bws-btn-3d mt-7 bg-[#C2410C] text-white hover:bg-[#9A3412]"
             >
               Request Manpower
             </Button>
@@ -628,7 +628,7 @@ export default function Home() {
               {["Compliant contract staffing", "Multi-shift deployment", "Skilled to general workforce tiers"].map(
                 (p) => (
                   <div key={p} className="flex items-center gap-3 rounded-md bg-white p-3 text-sm text-slate-700">
-                    <ShieldCheck className="h-4 w-4 text-[#EA580C]" />
+                    <ShieldCheck className="h-4 w-4 text-[#C2410C]" />
                     {p}
                   </div>
                 ),
@@ -681,18 +681,18 @@ export default function Home() {
             </h2>
             <ul className="mt-8 space-y-4 text-slate-700">
               <li className="flex gap-3">
-                <MapPin className="mt-1 h-5 w-5 shrink-0 text-[#EA580C]" />
+                <MapPin className="mt-1 h-5 w-5 shrink-0 text-[#C2410C]" />
                 <span>
                   <strong className="block text-[#0F2444]">{BRAND.name}</strong>
                   {BRAND.officeAddress || BRAND.location}
                 </span>
               </li>
               <li className="flex gap-3">
-                <PhoneCall className="mt-1 h-5 w-5 shrink-0 text-[#EA580C]" />
+                <PhoneCall className="mt-1 h-5 w-5 shrink-0 text-[#C2410C]" />
                 <span data-testid="contact-phone">{BRAND.phone}</span>
               </li>
               <li className="flex gap-3">
-                <Mail className="mt-1 h-5 w-5 shrink-0 text-[#EA580C]" />
+                <Mail className="mt-1 h-5 w-5 shrink-0 text-[#C2410C]" />
                 <span className="break-all" data-testid="contact-email">
                   {BRAND.email}
                 </span>
@@ -723,7 +723,7 @@ export default function Home() {
             </a>
             <a
               href={`mailto:${BRAND.email}`}
-              className="bws-contact-action flex items-center justify-center gap-2 rounded-xl bg-[#EA580C] px-6 py-4 font-semibold text-white hover:bg-[#C2410C]"
+              className="bws-contact-action flex items-center justify-center gap-2 rounded-xl bg-[#C2410C] px-6 py-4 font-semibold text-white hover:bg-[#9A3412]"
               data-testid="contact-btn-email"
             >
               <Mail className="h-4 w-4" /> Email
