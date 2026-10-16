@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Download, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
+import { Download, Loader2, Pencil, Plus, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -82,11 +82,11 @@ export default function Expenses() {
           <div><Label htmlFor="expense-date" className="mb-2 block">Date *</Label><Input id="expense-date" type="date" required min={`${month}-01`} max={`${month}-${monthEnd}`} value={form.expense_date} disabled={busy} onChange={(e) => setForm({ ...form, expense_date: e.target.value })} data-testid="expense-date" /></div>
           <div><Label htmlFor="expense-amount" className="mb-2 block">Amount (₹) *</Label><Input id="expense-amount" type="number" inputMode="decimal" min="0.01" max="9999999999.99" step="0.01" placeholder="0.00" required value={form.amount} disabled={busy} onChange={(e) => setForm({ ...form, amount: e.target.value })} data-testid="expense-amount" /></div>
           <div><Label htmlFor="expense-description" className="mb-2 block">Description *</Label><Input id="expense-description" placeholder="e.g. Office rent or travel" required maxLength={200} value={form.description} disabled={busy} onChange={(e) => setForm({ ...form, description: e.target.value })} data-testid="expense-description" /></div>
-          <div><Label htmlFor="expense-bill" className="mb-2 block">{editing?.bill_filename ? "Replace bill (optional)" : "Bill (optional)"}</Label><Input ref={fileInput} id="expense-bill" type="file" accept=".pdf,.jpg,.jpeg,.png" disabled={busy} onChange={(e) => {
+          <div className="min-w-0"><Label htmlFor="expense-choose-bill" className="mb-2 block">{editing?.bill_filename ? "Replace bill (optional)" : "Bill (optional)"}</Label><input ref={fileInput} id="expense-bill" type="file" hidden accept=".pdf,.jpg,.jpeg,.png" disabled={busy} onChange={(e) => {
             const file = e.target.files?.[0] ?? null;
             if (file && (file.size === 0 || file.size > MAX_BILL_BYTES || !/\.(pdf|png|jpe?g)$/i.test(file.name))) { toast.error("Choose a PDF, JPG or PNG bill up to 5 MB"); e.target.value = ""; setBill(null); return; }
             setBill(file);
-          }} data-testid="expense-bill" /><p className="mt-2 text-xs text-slate-500">PDF, JPG or PNG · up to 5 MB.{editing?.bill_filename && ` Current bill: ${editing.bill_filename}`}</p></div>
+          }} data-testid="expense-bill" /><div className="flex min-w-0 flex-wrap items-center gap-3"><Button id="expense-choose-bill" type="button" disabled={busy} className="bg-[#C2410C] text-white hover:bg-[#9A3412]" aria-label="Choose file for expense bill" aria-describedby="expense-bill-help" onClick={() => fileInput.current?.click()} data-testid="expense-choose-bill"><Upload className="h-4 w-4" />Choose file</Button><span className="min-w-0 break-all text-sm text-slate-600" aria-live="polite">{bill?.name ?? "No file chosen"}</span></div><p id="expense-bill-help" className="mt-2 text-xs text-slate-500">PDF, JPG or PNG · up to 5 MB.{editing?.bill_filename && ` Current bill: ${editing.bill_filename}`}</p></div>
           <div className="flex flex-wrap gap-3 sm:col-span-2"><Button type="submit" disabled={busy} className="bg-[#C2410C] text-white hover:bg-[#9A3412]" data-testid="expense-save">{save.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}{editing ? "Save changes" : "Save expense"}</Button>{editing && <Button type="button" variant="outline" disabled={busy} onClick={() => reset()}>Cancel edit</Button>}</div>
         </form>
       </div>
