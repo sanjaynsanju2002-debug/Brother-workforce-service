@@ -2,6 +2,7 @@
 
 import copy
 import os
+import re
 from datetime import datetime, timezone
 from decimal import Decimal
 from io import BytesIO
@@ -14,6 +15,7 @@ import httpx
 import pytest
 from pydantic import ValidationError
 from pypdf import PdfReader
+from pymongo.errors import DuplicateKeyError
 
 os.environ.setdefault("MONGO_URL", "mongodb://localhost:27017")
 os.environ.setdefault("DB_NAME", "bws_invoice_test")
@@ -211,17 +213,38 @@ class InvoiceCollection:
     def __init__(self):
         self.records = []
 
+    @classmethod
+    def matches(cls, row, query):
+        for key, value in query.items():
+            if key == "$and":
+                if not all(cls.matches(row, condition) for condition in value):
+                    return False
+            elif key == "$or":
+                if not any(cls.matches(row, condition) for condition in value):
+                    return False
+            elif isinstance(value, dict) and "$regex" in value:
+                if not re.search(value["$regex"], row.get(key, ""), re.I if value.get("$options") == "i" else 0):
+                    return False
+            elif isinstance(value, dict) and "$in" in value:
+                if row.get(key) not in value["$in"]:
+                    return False
+            elif row.get(key) != value:
+                return False
+        return True
+
     async def find_one(self, query, projection=None):
-        return next((copy.deepcopy(row) for row in self.records if all(row.get(k) == v for k, v in query.items())), None)
+        return next((copy.deepcopy(row) for row in self.records if self.matches(row, query)), None)
 
     async def insert_one(self, data):
+        if "_id" in data and any(row.get("_id") == data["_id"] for row in self.records):
+            raise DuplicateKeyError("duplicate _id")
         self.records.append(copy.deepcopy(data))
 
     async def count_documents(self, query):
-        return len(self.records)
+        return sum(self.matches(row, query) for row in self.records)
 
     def find(self, query, projection=None):
-        return Cursor([{key: value for key, value in row.items() if key != "_id"} for row in copy.deepcopy(self.records)])
+        return Cursor([{key: value for key, value in row.items() if key != "_id"} for row in copy.deepcopy(self.records) if self.matches(row, query)])
 
     async def find_one_and_update(self, query, changes, **kwargs):
         row = next((row for row in self.records if row["_id"] == query["_id"]), None)
@@ -244,6 +267,7 @@ async def test_private_create_retry_update_conflict_and_downloads(monkeypatch):
     fake = FakeDB()
     fake.invoices = InvoiceCollection()
     fake.invoice_counters = InvoiceCollection()
+    fake.invoice_companies = InvoiceCollection()
     monkeypatch.setattr(auth, "db", fake)
     monkeypatch.setattr(invoices, "db", fake)
     transport = httpx.ASGITransport(app=app)
@@ -253,6 +277,9 @@ async def test_private_create_retry_update_conflict_and_downloads(monkeypatch):
         assert (await client.post("/api/admin/invoices", json=data)).status_code == 401
         assert (await client.get("/api/admin/invoices/missing/download/pdf")).status_code == 401
         assert (await client.post("/api/admin/login", json={"pin": "123456"})).status_code == 200
+        company = await client.post("/api/admin/invoices/companies", json={"name": data["client_name"], "address": data["client_address"]})
+        assert company.status_code == 200
+        data["company_id"] = company.json()["id"]
         profile = await client.get("/api/admin/invoices/profile")
         assert profile.status_code == 200
         data["supplier"] = profile.json()
@@ -265,6 +292,7 @@ async def test_private_create_retry_update_conflict_and_downloads(monkeypatch):
         invoice = created.json()
         assert invoice["invoice_number"] == "BWS/26-27/0001"
         assert invoice["totals"]["total"] == "298100.00"
+        assert invoice["payment_status"] == "Pending"
         retry = await client.post("/api/admin/invoices", json=data)
         assert retry.status_code == 200
         assert retry.json()["id"] == invoice["id"]
@@ -292,3 +320,82 @@ async def test_private_create_retry_update_conflict_and_downloads(monkeypatch):
             assert "BWS-26-27-0001" in result.headers["content-disposition"]
         invalid = {**data, "request_id": str(uuid4()), "client_name": " "}
         assert (await client.post("/api/admin/invoices", json=invalid)).status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_companies_are_private_unique_and_invoice_lists_are_isolated(monkeypatch):
+    fake = FakeDB()
+    fake.invoices = InvoiceCollection()
+    fake.invoice_counters = InvoiceCollection()
+    fake.invoice_companies = InvoiceCollection()
+    monkeypatch.setattr(auth, "db", fake)
+    monkeypatch.setattr(invoices, "db", fake)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="https://brothersworkforcesolutions.in") as client:
+        assert (await client.get("/api/admin/invoices/companies")).status_code == 401
+        assert (await client.post("/api/admin/invoices/companies", json={"name": "Factory A"})).status_code == 401
+        await client.post("/api/admin/login", json={"pin": "123456"})
+        assert (await client.post("/api/admin/invoices/companies", json={"name": " "})).status_code == 422
+        a = (await client.post("/api/admin/invoices/companies", json={"name": "Factory A", "address": "Mysore", "gstin": "29TEST"})).json()
+        b = (await client.post("/api/admin/invoices/companies", json={"name": "Factory B"})).json()
+        assert a["address"] == "Mysore"
+        assert (await client.post("/api/admin/invoices/companies", json={"name": " factory   a "})).status_code == 409
+        assert len((await client.get("/api/admin/invoices/companies")).json()) == 2
+        assert (await client.post("/api/admin/invoices", json=payload())).status_code == 422
+        assert (await client.post("/api/admin/invoices", json={**payload(), "company_id": str(uuid4())})).status_code == 404
+        created = []
+        for company in (a, b):
+            response = await client.post("/api/admin/invoices", json={**payload(), "company_id": company["id"], "client_name": company["name"]})
+            assert response.status_code == 200, response.text
+            created.append(response.json())
+        for company, own in zip((a, b), created):
+            result = (await client.get("/api/admin/invoices", params={"company_id": company["id"]})).json()
+            assert [item["id"] for item in result["items"]] == [own["id"]]
+            assert result["total"] == 1
+        assert (await client.get("/api/admin/invoices", params={"company_id": a["id"], "q": "Factory B"})).json()["total"] == 0
+        update = {key: value for key, value in created[0].items() if key in invoices.InvoiceUpdate.model_fields}
+        update["company_id"] = b["id"]
+        assert (await client.put(f"/api/admin/invoices/{created[0]['id']}", json=update)).status_code == 422
+        assert (await client.get("/api/admin/invoices", params={"company_id": "invalid"})).status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_status_persists_without_altering_amounts_and_rejects_stale_updates(monkeypatch):
+    fake = FakeDB()
+    fake.invoices = InvoiceCollection()
+    fake.invoice_companies = InvoiceCollection()
+    monkeypatch.setattr(auth, "db", fake)
+    monkeypatch.setattr(invoices, "db", fake)
+    original = saved_invoice().model_dump(mode="json")
+    # Simulate a real historical document written before companies and statuses.
+    for key in ("company_id", "payment_status"):
+        original.pop(key)
+    await fake.invoices.insert_one(original)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="https://brothersworkforcesolutions.in") as client:
+        path = f"/api/admin/invoices/{original['id']}"
+        assert (await client.patch(f"{path}/status", json={"payment_status": "Paid", "revision": 1})).status_code == 401
+        await client.post("/api/admin/login", json={"pin": "123456"})
+        company = (await client.post("/api/admin/invoices/companies", json={"name": "example   manufacturing Pvt Ltd"})).json()
+        result = (await client.get("/api/admin/invoices", params={"company_id": company["id"], "payment_status": "Pending"})).json()
+        assert result["total"] == 1
+        assert result["items"][0]["payment_status"] == "Pending"
+        changed = await client.patch(f"{path}/status", json={"payment_status": "Paid", "revision": 1})
+        assert changed.status_code == 200, changed.text
+        assert changed.json()["payment_status"] == "Paid"
+        assert changed.json()["revision"] == 2
+        assert changed.json()["totals"] == original["totals"]
+        for key in ("client_name", "lines", "service_percentage", "invoice_number", "created_at"):
+            assert changed.json()[key] == original[key]
+        assert (await client.get(path)).json()["payment_status"] == "Paid"
+        assert (await client.get("/api/admin/invoices", params={"company_id": company["id"], "payment_status": "Pending"})).json()["total"] == 0
+        assert (await client.get("/api/admin/invoices", params={"company_id": company["id"], "payment_status": "Paid", "q": "BWS/26-27"})).json()["total"] == 1
+        assert (await client.patch(f"{path}/status", json={"payment_status": "Pending", "revision": 1})).status_code == 409
+        assert (await client.patch(f"{path}/status", json={"payment_status": "Overdue", "revision": 2})).status_code == 422
+        update = {key: value for key, value in changed.json().items() if key in invoices.InvoiceUpdate.model_fields}
+        update.update(company_id=company["id"], service_percentage="8")
+        edited = await client.put(path, json=update)
+        assert edited.status_code == 200, edited.text
+        assert edited.json()["payment_status"] == "Paid"
+        pending = await client.patch(f"{path}/status", json={"payment_status": "Pending", "revision": 3})
+        assert pending.status_code == 200
+        assert pending.json()["totals"] == edited.json()["totals"]
+        assert pending.json()["payment_status"] == "Pending"

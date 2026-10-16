@@ -44,6 +44,10 @@ INDEXES: dict[str, list[IndexModel]] = {
         IndexModel([("id", ASCENDING)], name="id", unique=True),
         IndexModel([("invoice_number", ASCENDING)], name="invoice_number", unique=True),
         IndexModel([("created_at", DESCENDING)], name="created_desc"),
+        IndexModel([("company_id", ASCENDING), ("created_at", DESCENDING)], name="company_created"),
+    ],
+    "invoice_companies": [
+        IndexModel([("id", ASCENDING)], name="id", unique=True),
     ],
     "admin_sessions": [
         IndexModel([("token_hash", ASCENDING)], name="token_hash", unique=True),

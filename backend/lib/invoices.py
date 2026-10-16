@@ -3,6 +3,7 @@
 from datetime import date, datetime
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Annotated, Literal
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -46,6 +47,17 @@ class InvoiceProfile(InvoiceModel):
     payment_details: str = Field(default="", max_length=800)
 
 
+class InvoiceCompanyInput(InvoiceModel):
+    name: str = Field(min_length=1, max_length=150)
+    address: str = Field(default="", max_length=500)
+    gstin: str = Field(default="", max_length=30)
+
+
+class InvoiceCompany(InvoiceCompanyInput):
+    id: str
+    created_at: datetime
+
+
 class InvoiceLine(InvoiceModel):
     key: LineKey
     quantity: Quantity = Decimal("0")
@@ -63,6 +75,9 @@ def default_lines():
 
 
 class InvoiceInput(InvoiceModel):
+    # Keep the bill-to snapshot even if a company record changes in the future.
+    # Older saved invoices have no company reference and remain readable.
+    company_id: UUID | None = None
     client_name: str = Field(default="", max_length=150)
     client_address: str = Field(default="", max_length=500)
     client_gstin: str = Field(default="", max_length=30)
@@ -115,6 +130,7 @@ class Invoice(InvoiceInput):
     created_at: datetime
     updated_at: datetime
     totals: InvoiceTotals
+    payment_status: Literal["Pending", "Paid"] = "Pending"
 
 
 def round_money(amount: Decimal) -> Decimal:
