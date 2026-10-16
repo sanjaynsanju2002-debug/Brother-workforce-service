@@ -40,6 +40,11 @@ INDEXES: dict[str, list[IndexModel]] = {
         IndexModel([("visible", ASCENDING), ("sort_order", ASCENDING)], name="visible_order"),
     ],
     "settings": [IndexModel([("id", ASCENDING)], name="id", unique=True)],
+    "invoices": [
+        IndexModel([("id", ASCENDING)], name="id", unique=True),
+        IndexModel([("invoice_number", ASCENDING)], name="invoice_number", unique=True),
+        IndexModel([("created_at", DESCENDING)], name="created_desc"),
+    ],
     "admin_sessions": [
         IndexModel([("token_hash", ASCENDING)], name="token_hash", unique=True),
         IndexModel([("expires_at", ASCENDING)], name="expires_ttl", expireAfterSeconds=0),

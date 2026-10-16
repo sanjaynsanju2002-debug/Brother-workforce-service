@@ -18,6 +18,7 @@ import TrafficChart from "@/components/site/TrafficChart";
 import Shortlists from "@/components/site/Shortlists";
 import JobMatches from "@/components/site/JobMatches";
 import TalentBank from "@/components/site/TalentBank";
+import Invoices from "@/components/site/Invoices";
 import { waLink, workerMessage, companyMessage } from "@/lib/wa";
 import {
   Table,
@@ -364,6 +365,7 @@ function Dashboard({
                 <TabsTrigger value="workforce" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-workforce">Company Workforce</TabsTrigger>
                 <TabsTrigger value="requests" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-requests">Company Enquiries</TabsTrigger>
                 <TabsTrigger value="clients" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-clients">Clients</TabsTrigger>
+                <TabsTrigger value="invoices" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-invoices">Invoices</TabsTrigger>
                 <TabsTrigger value="jobs" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-jobs">Job Postings</TabsTrigger>
                 <TabsTrigger value="email" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-email">Email Settings</TabsTrigger>
                 <TabsTrigger value="security" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-security">Security</TabsTrigger>
@@ -989,6 +991,9 @@ function Dashboard({
             <EmailSettings pin={pin} />
           </TabsContent>
 
+          <TabsContent value="invoices" className="mt-0">
+            <Invoices />
+          </TabsContent>
           <TabsContent value="workforce" className="mt-6">
             <WorkforceManager pin={pin} />
           </TabsContent>
