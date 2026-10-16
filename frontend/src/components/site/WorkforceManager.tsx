@@ -15,6 +15,7 @@ type Assignment = {
   client_id: string;
   company_name: string;
   worker_id: string | null;
+  employee_id: string | null;
   full_name: string;
   mobile: string | null;
   role: string | null;
@@ -24,8 +25,8 @@ type Assignment = {
   created_at: string;
 };
 
-type Form = { client_id: string; worker_id: string; full_name: string; mobile: string; role: string; start_date: string; notes: string };
-const EMPTY: Form = { client_id: "", worker_id: "", full_name: "", mobile: "", role: "", start_date: "", notes: "" };
+type Form = { client_id: string; worker_id: string; employee_id: string; full_name: string; mobile: string; role: string; start_date: string; notes: string };
+const EMPTY: Form = { client_id: "", worker_id: "", employee_id: "", full_name: "", mobile: "", role: "", start_date: "", notes: "" };
 
 function errorMessage(error: unknown): string {
   if (error instanceof ApiError) {
@@ -42,6 +43,8 @@ export default function WorkforceManager({ pin }: { pin: string }) {
   const [form, setForm] = useState<Form>(EMPTY);
   const [companyFilter, setCompanyFilter] = useState("");
   const [newCompany, setNewCompany] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [employeeId, setEmployeeId] = useState("");
   const clients = useQuery({ queryKey: ["admin-clients", pin], queryFn: () => apiGet<Client[]>(`/admin/clients${q}`) });
   const workers = useQuery({ queryKey: ["assignment-workers", pin], queryFn: () => apiGet<Worker[]>(`/admin/workers${q}`) });
   const assignments = useQuery({ queryKey: key, queryFn: () => apiGet<Assignment[]>(`/admin/assignments${q}`) });
@@ -73,6 +76,12 @@ export default function WorkforceManager({ pin }: { pin: string }) {
   const remove = useMutation({
     mutationFn: (id: string) => apiDelete<{ ok: boolean }>(`/admin/assignments/${id}${q}`),
     onSuccess: () => { refresh(); toast.success("Assignment removed"); },
+    onError: (e) => toast.error(errorMessage(e)),
+  });
+  const saveEmployeeId = useMutation({
+    mutationFn: (value: { id: string; employee_id: string }) =>
+      apiPatch<Assignment>(`/admin/assignments/${value.id}${q}`, { employee_id: value.employee_id }),
+    onSuccess: () => { setEditingId(null); refresh(); toast.success("Employee ID saved"); },
     onError: (e) => toast.error(errorMessage(e)),
   });
 
@@ -125,6 +134,7 @@ export default function WorkforceManager({ pin }: { pin: string }) {
             </select>
           </div>
           <div><Label className="mb-2 block">Person's name *</Label><Input value={form.full_name} disabled={!!form.worker_id} onChange={(e) => setForm({ ...form, full_name: e.target.value })} data-testid="assignment-name" /></div>
+          <div><Label htmlFor="assignment-employee-id" className="mb-2 block">Employee ID</Label><Input id="assignment-employee-id" maxLength={80} value={form.employee_id} onChange={(e) => setForm({ ...form, employee_id: e.target.value })} placeholder="e.g. BWS-001" data-testid="assignment-employee-id" /></div>
           <div><Label className="mb-2 block">Mobile</Label><Input value={form.mobile} disabled={!!form.worker_id} onChange={(e) => setForm({ ...form, mobile: e.target.value })} data-testid="assignment-mobile" /></div>
           <div><Label className="mb-2 block">Role / work</Label><Input value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })} placeholder="Machine operator" data-testid="assignment-role" /></div>
           <div><Label className="mb-2 block">Start date</Label><Input type="date" value={form.start_date} onChange={(e) => setForm({ ...form, start_date: e.target.value })} data-testid="assignment-start-date" /></div>
@@ -151,13 +161,21 @@ export default function WorkforceManager({ pin }: { pin: string }) {
             <div className="min-w-[200px] flex-1">
               <p className="font-semibold text-[#0F2444]">{a.full_name} <Badge variant={a.status === "Active" ? "default" : "secondary"} className="ml-2">{a.status}</Badge></p>
               <p className="mt-1 text-sm text-slate-600">{a.company_name}{a.role ? ` · ${a.role}` : ""}</p>
+              <p className="mt-1 text-sm text-slate-600" data-testid={`assignment-employee-id-${a.id}`}>Employee ID: <span className="font-medium">{a.employee_id || "Not set"}</span></p>
               <p className="mt-1 text-xs text-slate-500">{a.mobile || "No mobile"}{a.start_date ? ` · Started ${a.start_date}` : ""}{a.notes ? ` · ${a.notes}` : ""}</p>
+              {editingId === a.id && <form className="mt-3 flex max-w-md flex-wrap items-center gap-2" onSubmit={(event) => { event.preventDefault(); saveEmployeeId.mutate({ id: a.id, employee_id: employeeId }); }}>
+                <Label htmlFor={`employee-id-${a.id}`} className="sr-only">Employee ID for {a.full_name}</Label>
+                <Input id={`employee-id-${a.id}`} className="min-w-0 flex-1 basis-40" maxLength={80} value={employeeId} disabled={saveEmployeeId.isPending} onChange={(event) => setEmployeeId(event.target.value)} autoFocus data-testid={`assignment-edit-id-input-${a.id}`} />
+                <Button type="submit" size="sm" disabled={saveEmployeeId.isPending}>Save ID</Button>
+                <Button type="button" variant="outline" size="sm" disabled={saveEmployeeId.isPending} onClick={() => setEditingId(null)}>Cancel</Button>
+              </form>}
             </div>
-            <div className="flex items-center gap-2">
-              <Button size="sm" variant="outline" disabled={changeStatus.isPending} onClick={() => changeStatus.mutate({ id: a.id, status: a.status === "Active" ? "Completed" : "Active" })}>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button type="button" size="sm" variant="outline" disabled={saveEmployeeId.isPending || remove.isPending || changeStatus.isPending} onClick={() => { setEditingId(a.id); setEmployeeId(a.employee_id || ""); }} data-testid={`assignment-edit-id-${a.id}`}>{a.employee_id ? "Edit ID" : "Add ID"}</Button>
+              <Button size="sm" variant="outline" disabled={changeStatus.isPending || saveEmployeeId.isPending || remove.isPending} onClick={() => changeStatus.mutate({ id: a.id, status: a.status === "Active" ? "Completed" : "Active" })}>
                 Mark {a.status === "Active" ? "completed" : "active"}
               </Button>
-              <Button size="icon-sm" variant="outline" aria-label={`Remove ${a.full_name}`} disabled={remove.isPending} onClick={() => {
+              <Button size="icon-sm" variant="outline" aria-label={`Remove ${a.full_name}`} disabled={remove.isPending || saveEmployeeId.isPending || changeStatus.isPending} onClick={() => {
                 if (window.confirm(`Remove ${a.full_name}'s assignment at ${a.company_name}?`)) remove.mutate(a.id);
               }}><Trash2 className="h-4 w-4" /></Button>
             </div>

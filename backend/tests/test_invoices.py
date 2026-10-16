@@ -261,6 +261,13 @@ class InvoiceCollection:
         row.update(copy.deepcopy(changes["$set"]))
         return SimpleNamespace(matched_count=1)
 
+    async def delete_one(self, query):
+        row = next((row for row in self.records if self.matches(row, query)), None)
+        if row is None:
+            return SimpleNamespace(deleted_count=0)
+        self.records.remove(row)
+        return SimpleNamespace(deleted_count=1)
+
 
 @pytest.mark.asyncio
 async def test_private_create_retry_update_conflict_and_downloads(monkeypatch):
@@ -399,3 +406,47 @@ async def test_status_persists_without_altering_amounts_and_rejects_stale_update
         assert pending.status_code == 200
         assert pending.json()["totals"] == edited.json()["totals"]
         assert pending.json()["payment_status"] == "Pending"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("payment_status", ["Pending", "Paid"])
+async def test_delete_is_private_checks_revision_and_preserves_other_records_and_numbering(monkeypatch, payment_status):
+    fake = FakeDB()
+    fake.invoices = InvoiceCollection()
+    fake.invoice_counters = InvoiceCollection()
+    fake.invoice_companies = InvoiceCollection()
+    monkeypatch.setattr(auth, "db", fake)
+    monkeypatch.setattr(invoices, "db", fake)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="https://brothersworkforcesolutions.in") as client:
+        assert (await client.delete("/api/admin/invoices/missing?revision=1")).status_code == 401
+        await client.post("/api/admin/login", json={"pin": "123456"})
+        companies = []
+        created = []
+        for name in ("Factory A", "Factory B"):
+            company = (await client.post("/api/admin/invoices/companies", json={"name": name})).json()
+            companies.append(company)
+            created.append((await client.post("/api/admin/invoices", json={**payload(), "company_id": company["id"], "client_name": name})).json())
+        target, other = created
+        path = f"/api/admin/invoices/{target['id']}"
+        if payment_status == "Paid":
+            target = (await client.patch(f"{path}/status", json={"payment_status": "Paid", "revision": 1})).json()
+        revision = target["revision"]
+        assert (await client.delete(path)).status_code == 422
+        assert (await client.delete(path, params={"revision": 0})).status_code == 422
+        assert (await client.delete(path, params={"revision": revision + 1})).status_code == 409
+        assert (await client.delete(path, params={"revision": revision}, headers={"Origin": "https://another.example"})).status_code == 403
+        assert len(fake.invoices.records) == 2
+        response = await client.delete(path, params={"revision": revision})
+        assert response.status_code == 204
+        assert response.content == b""
+        assert [row["id"] for row in fake.invoices.records] == [other["id"]]
+        assert (await client.get(f"/api/admin/invoices/{other['id']}")).json() == other
+        assert (await client.get("/api/admin/invoices", params={"company_id": companies[0]["id"]})).json()["total"] == 0
+        assert (await client.get("/api/admin/invoices", params={"company_id": companies[1]["id"]})).json()["total"] == 1
+        assert len((await client.get("/api/admin/invoices/companies")).json()) == 2
+        for suffix in ("", "/download/pdf", "/download/xlsx"):
+            assert (await client.get(f"{path}{suffix}")).status_code == 404
+        assert (await client.delete(path, params={"revision": revision})).status_code == 404
+        assert (await client.patch(f"{path}/status", json={"payment_status": "Paid", "revision": revision})).status_code == 404
+        next_invoice = (await client.post("/api/admin/invoices", json={**payload(), "company_id": companies[0]["id"], "client_name": companies[0]["name"]})).json()
+        assert next_invoice["invoice_number"] == "BWS/26-27/0003"

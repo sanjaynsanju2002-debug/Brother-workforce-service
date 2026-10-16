@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Building2, Download, FileText, Loader2, Plus, Save } from "lucide-react";
+import { Building2, Download, FileText, Loader2, Plus, Save, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { ApiError, apiGet, apiPatch, apiPost, apiPut } from "@/lib/api";
+import { ApiError, apiDelete, apiGet, apiPatch, apiPost, apiPut } from "@/lib/api";
 import { BRAND } from "@/lib/brand";
 
 type Profile = { name: string; address: string; phone: string; email: string; website: string; gstin: string; payment_details: string };
@@ -158,7 +158,27 @@ export default function Invoices() {
     },
     onError: (error) => { qc.invalidateQueries({ queryKey: ["invoices"] }); toast.error(errorMessage(error)); },
   });
-  const busy = save.isPending || addCompany.isPending || changeStatus.isPending;
+  const remove = useMutation({
+    mutationFn: (invoice: Invoice) => apiDelete<void>(`/admin/invoices/${invoice.id}?revision=${invoice.revision}`),
+    onSuccess: (_, invoice) => {
+      if (saved?.id === invoice.id) {
+        setSaved(null);
+        setForm(emptyForm(profile.data || DEFAULT_PROFILE, selectedCompany));
+        setRequestId(crypto.randomUUID());
+        setDirty(false);
+        setProblem("");
+      }
+      if (page > 1 && history.data?.items.length === 1 && history.data.items[0].id === invoice.id) setPage(page - 1);
+      qc.invalidateQueries({ queryKey: ["invoices"] });
+      toast.success(`${invoice.invoice_number} deleted`);
+    },
+    onError: (error) => { qc.invalidateQueries({ queryKey: ["invoices"] }); toast.error(errorMessage(error)); },
+  });
+  const busy = save.isPending || addCompany.isPending || changeStatus.isPending || remove.isPending;
+  const confirmDelete = (invoice: Invoice) => {
+    const unsaved = saved?.id === invoice.id && dirty ? " Unsaved changes to this invoice will also be discarded." : "";
+    if (window.confirm(`Permanently delete invoice ${invoice.invoice_number} for ${invoice.client_name}? This cannot be undone.${unsaved}`)) remove.mutate(invoice);
+  };
   const discardChanges = () => !dirty || window.confirm("Discard the unsaved changes to this invoice?");
   function startForCompany(company?: Company) {
     setCompanyId(company?.id || "");
@@ -279,6 +299,7 @@ export default function Invoices() {
             <Button type="submit" className="bg-[#EA580C] text-white hover:bg-[#C2410C]" data-testid="invoice-save">{save.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />} Save invoice</Button>
             <Button type="button" variant="outline" onClick={() => saveAs("pdf")} data-testid="invoice-download-pdf"><Download className="mr-2 h-4 w-4" /> Download PDF</Button>
             <Button type="button" variant="outline" onClick={() => saveAs("xlsx")} data-testid="invoice-download-xlsx"><Download className="mr-2 h-4 w-4" /> Download Excel</Button>
+            {saved && <Button type="button" variant="outline" className="border-red-200 text-red-700 hover:bg-red-50" onClick={() => confirmDelete(saved)} data-testid="invoice-delete-current"><Trash2 className="mr-2 h-4 w-4" /> Delete invoice</Button>}
           </div>
           <p className="text-xs text-slate-500">Download buttons save the current invoice first. Excel keeps editable formulas and your original template.</p>
         </fieldset>
@@ -288,11 +309,14 @@ export default function Invoices() {
         {history.isPending && <p className="text-sm text-slate-500">Loading invoices...</p>}
         {history.isError && <p role="alert" className="text-sm text-red-700">Could not load saved invoices. <button type="button" className="underline" onClick={() => history.refetch()}>Try again</button></p>}
         {history.data?.items.length === 0 && <p className="text-sm text-slate-500">No invoices found.</p>}
-        <div className="space-y-3" data-testid="invoice-history">{history.data?.items.map((invoice) => <div key={invoice.id} className="grid items-center gap-4 rounded-lg border border-slate-200 p-4 text-center sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(7rem,auto)_8rem_5rem]" data-testid={`invoice-row-${invoice.id}`}>
+        <div className="space-y-3" data-testid="invoice-history">{history.data?.items.map((invoice) => <div key={invoice.id} className="grid items-center gap-4 rounded-lg border border-slate-200 p-4 text-center sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(7rem,auto)_8rem_10rem]" data-testid={`invoice-row-${invoice.id}`}>
           <div className="min-w-0"><p className="break-words text-center font-medium text-[#0F2444]" data-testid={`invoice-number-${invoice.id}`}>{invoice.invoice_number}</p><p className="mt-1 break-words text-xs text-slate-500">{invoice.client_name}</p><p className="mt-1 text-xs text-slate-500">{invoice.invoice_date}{invoice.billing_period && ` · ${invoice.billing_period}`}</p></div>
           <div><p className="mb-1 text-xs text-slate-500">Total</p><p className="text-center text-sm font-semibold tabular-nums">{money(invoice.totals.total)}</p></div>
           <div><Label htmlFor={`invoice-status-${invoice.id}`} className="mb-1 block text-xs text-slate-500">Payment status</Label><select id={`invoice-status-${invoice.id}`} className={`${selectStyle} text-center font-medium ${invoice.payment_status === "Paid" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-amber-200 bg-amber-50 text-amber-800"}`} value={invoice.payment_status} disabled={busy} data-testid={`invoice-status-${invoice.id}`} onChange={(event) => changeStatus.mutate({ invoice, status: event.target.value as PaymentStatus })}><option value="Pending">Pending</option><option value="Paid">Paid</option></select></div>
-          <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => changeInvoice(invoice)} data-testid={`invoice-open-${invoice.id}`}>Open</Button>
+          <div className="flex flex-wrap justify-center gap-2">
+            <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => changeInvoice(invoice)} data-testid={`invoice-open-${invoice.id}`}>Open</Button>
+            <Button type="button" variant="outline" size="sm" className="border-red-200 text-red-700 hover:bg-red-50" disabled={busy} aria-label={`Delete invoice ${invoice.invoice_number}`} onClick={() => confirmDelete(invoice)} data-testid={`invoice-delete-${invoice.id}`}><Trash2 className="mr-1 h-4 w-4" /> Delete</Button>
+          </div>
         </div>)}</div>
         {!!history.data?.total && <div className="mt-4 flex items-center justify-between gap-3 text-sm"><span>Page {page} of {Math.ceil(history.data.total / 50)} · {history.data.total} invoices</span><div className="flex gap-2"><Button type="button" variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>Previous</Button><Button type="button" variant="outline" size="sm" disabled={page * 50 >= history.data.total} onClick={() => setPage(page + 1)}>Next</Button></div></div>}
       </div>

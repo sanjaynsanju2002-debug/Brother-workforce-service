@@ -161,6 +161,16 @@ async def get_invoice(invoice_id: str):
     return await find_invoice(invoice_id)
 
 
+@router.delete("/{invoice_id}", status_code=204)
+async def delete_invoice(invoice_id: str, revision: int = Query(ge=1)):
+    await find_invoice(invoice_id)
+    # Match the reviewed version atomically; never reuse its invoice number.
+    result = await db.invoices.delete_one({"id": invoice_id, "revision": revision})
+    if result.deleted_count == 0:
+        raise HTTPException(409, "This invoice changed in another session. Refresh the saved invoices before deleting it.")
+    return Response(status_code=204)
+
+
 @router.put("/{invoice_id}", response_model=Invoice)
 async def update_invoice(invoice_id: str, payload: InvoiceUpdate):
     validate_save(payload)

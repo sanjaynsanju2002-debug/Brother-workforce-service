@@ -5,7 +5,7 @@ from typing import Literal
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from lib.auth import require_admin
 from lib.db import db
@@ -13,7 +13,16 @@ from lib.db import db
 router = APIRouter(prefix="/admin", dependencies=[Depends(require_admin)])
 
 
-class AssignmentCreate(BaseModel):
+class EmployeeIdInput(BaseModel):
+    employee_id: str | None = Field(default=None, max_length=80)
+
+    @field_validator("employee_id")
+    @classmethod
+    def clean_employee_id(cls, value: str | None) -> str | None:
+        return (value.strip() or None) if value is not None else None
+
+
+class AssignmentCreate(EmployeeIdInput):
     client_id: str
     worker_id: str | None = None
     full_name: str = Field(min_length=1, max_length=150)
@@ -23,8 +32,8 @@ class AssignmentCreate(BaseModel):
     notes: str | None = None
 
 
-class AssignmentUpdate(BaseModel):
-    status: Literal["Active", "Completed"]
+class AssignmentUpdate(EmployeeIdInput):
+    status: Literal["Active", "Completed"] | None = None
 
 
 class Assignment(AssignmentCreate):
@@ -76,8 +85,11 @@ async def create_assignment(payload: AssignmentCreate) -> Assignment:
 
 @router.patch("/assignments/{assignment_id}", response_model=Assignment)
 async def update_assignment(assignment_id: str, payload: AssignmentUpdate) -> Assignment:
+    changes = payload.model_dump(exclude_unset=True)
+    if not changes or ("status" in changes and changes["status"] is None):
+        raise HTTPException(status_code=422, detail="Enter an employee ID or a valid assignment status")
     doc = await db.assignments.find_one_and_update(
-        {"id": assignment_id}, {"$set": {"status": payload.status}}, return_document=True,
+        {"id": assignment_id}, {"$set": changes}, return_document=True,
     )
     if not doc:
         raise HTTPException(status_code=404, detail="Assignment not found")
