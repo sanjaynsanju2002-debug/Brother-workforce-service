@@ -82,9 +82,29 @@ def export_xlsx(invoice: Invoice) -> bytes:
         write("E26", invoice.service_percentage)
         write("F26", totals.service_charge, "ROUND(SUM(F19:F25,F27)*E26/100,2)")
         write("F29", totals.subtotal, "SUM(F19:F27)")
-        write("F30", totals.gst_amount)
-        write("F32", totals.total, "SUM(F29:F30)")
-        write("A39", "Amounts in INR. Enter 10 for 10% service charge in E26 (before GST). GST is the amount entered on the invoice.")
+        if invoice.uses_gst_percentages:
+            # The template's spare row holds SGST without moving payment details
+            # or the total. Unmerge the old GST label to expose the rate input.
+            merges = sheet.find(f"{{{NS}}}mergeCells")
+            for merge in list(merges):
+                if merge.get("ref") == "D30:E30":
+                    merges.remove(merge)
+            merges.set("count", str(len(merges)))
+            for row, label, percentage, tax in (
+                (30, "CGST (%)", invoice.cgst_percentage, totals.cgst_amount),
+                (31, "SGST (%)", invoice.sgst_percentage, totals.sgst_amount),
+            ):
+                cells[f"E{row}"].set("s", cells["E26"].get("s"))
+                cells[f"F{row}"].set("s", cells["F30"].get("s"))
+                write(f"D{row}", label)
+                write(f"E{row}", percentage)
+                write(f"F{row}", tax, f"ROUND($F$29*E{row}/100,2)")
+            write("F32", totals.total, "SUM(F29:F31)")
+            write("A39", "Amounts in INR. Enter 10 for 10%. CGST and SGST apply to the subtotal including service charges.")
+        else:
+            write("F30", totals.gst_amount)
+            write("F32", totals.total, "SUM(F29:F30)")
+            write("A39", "Amounts in INR. Enter 10 for 10% service charge in E26 (before GST). GST is the amount recorded on this invoice.")
 
         output = BytesIO()
         with ZipFile(output, "w", ZIP_DEFLATED) as target:
@@ -114,7 +134,7 @@ def export_pdf(invoice: Invoice) -> bytes:
     from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
     from reportlab.pdfbase import pdfmetrics
     from reportlab.pdfbase.ttfonts import TTFont
-    from reportlab.platypus import Image, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+    from reportlab.platypus import Image, KeepTogether, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
     output = BytesIO()
     # Embed the fonts shipped with ReportLab so PDFs do not rely on a viewer's
@@ -155,23 +175,27 @@ def export_pdf(invoice: Invoice) -> bytes:
         label, gender = LINE_LABELS[line.key]
         rows.append([p(label, small), p(gender, small), p(f"{line.quantity:g}", right), p(amount(line.rate), right), p(amount(invoice.totals.line_amounts[line.key]), right)])
     table = Table(rows, colWidths=[doc.width * .31, doc.width * .16, doc.width * .13, doc.width * .19, doc.width * .21], repeatRows=1)
-    table.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#E2E8F0")), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("LINEBELOW", (0, 0), (-1, -1), .4, colors.HexColor("#CBD5E1")), ("TOPPADDING", (0, 0), (-1, -1), 5), ("BOTTOMPADDING", (0, 0), (-1, -1), 5)]))
+    table.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#E2E8F0")), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("LINEBELOW", (0, 0), (-1, -1), .4, colors.HexColor("#CBD5E1")), ("TOPPADDING", (0, 0), (-1, -1), 4), ("BOTTOMPADDING", (0, 0), (-1, -1), 4)]))
     story.extend([table, Spacer(1, 12)])
     totals = invoice.totals
+    tax_rows = [
+        [p(f"CGST ({invoice.cgst_percentage:g}%)"), p(amount(totals.cgst_amount), right)],
+        [p(f"SGST ({invoice.sgst_percentage:g}%)"), p(amount(totals.sgst_amount), right)],
+    ] if invoice.uses_gst_percentages else [[p("GST (recorded amount)"), p(amount(totals.gst_amount), right)]]
     summary = Table([
         [p("Worker, overtime and other charges"), p(amount(totals.base_amount), right)],
         [p(f"Service charge ({invoice.service_percentage:g}%)"), p(amount(totals.service_charge), right)],
-        [p("Subtotal"), p(amount(totals.subtotal), right)],
-        [p("GST (amount entered)"), p(amount(totals.gst_amount), right)],
+        [p("Subtotal before GST"), p(amount(totals.subtotal), right)],
+        *tax_rows,
         [p("TOTAL (INR)", heading), p(amount(totals.total), right)],
     ], colWidths=[doc.width * .73, doc.width * .27])
-    summary.setStyle(TableStyle([("TOPPADDING", (0, 0), (-1, -1), 5), ("BOTTOMPADDING", (0, 0), (-1, -1), 5), ("BACKGROUND", (0, -1), (-1, -1), colors.HexColor("#FFEDD5"))]))
-    story.extend([summary, Spacer(1, 18)])
+    summary.setStyle(TableStyle([("TOPPADDING", (0, 0), (-1, -1), 4), ("BOTTOMPADDING", (0, 0), (-1, -1), 4), ("BACKGROUND", (0, -1), (-1, -1), colors.HexColor("#FFEDD5"))]))
+    story.extend([summary, Spacer(1, 12)])
     if supplier.payment_details:
         story.extend([p("PAYMENT DETAILS", heading), p(supplier.payment_details), Spacer(1, 12)])
     if invoice.notes:
         story.extend([p("Notes", heading), p(invoice.notes), Spacer(1, 12)])
-    story.extend([p(f"For {supplier.name}", right), Spacer(1, 24), p("Authorised signatory", right)])
+    story.append(KeepTogether([p(f"For {supplier.name}", right), Spacer(1, 16), p("Authorised signatory", right)]))
 
     def footer(canvas, document):
         canvas.setFont("InvoiceSans", 8)

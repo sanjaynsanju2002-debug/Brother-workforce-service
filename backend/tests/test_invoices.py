@@ -41,7 +41,7 @@ def payload():
         "request_id": str(uuid4()), "client_name": "Example Manufacturing Pvt Ltd",
         "client_address": "Hebbal Industrial Area\nMysore, Karnataka", "client_gstin": "",
         "invoice_date": "2026-10-16", "due_date": "2026-11-15", "billing_period": "October 2026",
-        "lines": lines, "service_percentage": "10", "gst_amount": "0",
+        "lines": lines, "service_percentage": "10", "cgst_percentage": "0", "sgst_percentage": "0",
         "notes": "Payment within 30 days.",
     }
 
@@ -61,10 +61,57 @@ def test_percentage_includes_overtime_and_other_charges_before_gst():
     assert invoice.totals.subtotal == Decimal("298100.00")
     assert invoice.totals.total == Decimal("298100.00")
     data = invoice.model_dump(include=set(InvoiceInput.model_fields))
-    data.update(service_percentage="8", gst_amount="123.45")
+    data.update(service_percentage="8", cgst_percentage="9", sgst_percentage="9")
     totals = calculate_invoice(InvoiceInput(**data))
     assert totals.service_charge == Decimal("21680.00")
-    assert totals.total == Decimal("292803.45")
+    assert totals.subtotal == Decimal("292680.00")
+    assert totals.cgst_amount == Decimal("26341.20")
+    assert totals.sgst_amount == Decimal("26341.20")
+    assert totals.gst_amount == Decimal("52682.40")
+    assert totals.total == Decimal("345362.40")
+
+
+def test_gst_uses_wages_plus_service_charges_and_recalculates_each_rate():
+    data = payload()
+    data.pop("request_id")
+    data["lines"] = [line.model_dump(mode="json") for line in default_lines()]
+    data["lines"][0].update(quantity="10", rate="10000")
+    data.update(cgst_percentage="9", sgst_percentage="9", gst_amount="999")
+    invoice = InvoiceInput(**data)
+    totals = calculate_invoice(invoice)
+    assert invoice.gst_amount == 0  # Never add an old manual amount on top of the percentages.
+    assert totals.subtotal == Decimal("110000.00")
+    assert totals.cgst_amount == totals.sgst_amount == Decimal("9900.00")
+    assert totals.total == Decimal("129800.00")
+    data.update(service_percentage="8", cgst_percentage="2.5", sgst_percentage="0")
+    totals = calculate_invoice(InvoiceInput(**data))
+    assert totals.subtotal == Decimal("108000.00")
+    assert totals.cgst_amount == Decimal("2700.00")
+    assert totals.sgst_amount == Decimal("0.00")
+    assert totals.total == Decimal("110700.00")
+
+
+def test_historical_invoices_keep_recorded_gst_until_percentages_are_entered():
+    data = payload()
+    data.pop("cgst_percentage")
+    data.pop("sgst_percentage")
+    data["gst_amount"] = "123.45"
+    old = saved_invoice(data).model_dump(mode="json")
+    for key in ("cgst_percentage", "sgst_percentage"):
+        old.pop(key)
+    for key in ("cgst_amount", "sgst_amount"):
+        old["totals"].pop(key)
+    invoice = Invoice(**old)
+    assert not invoice.uses_gst_percentages
+    assert calculate_invoice(invoice).total == invoice.totals.total == Decimal("298223.45")
+    assert "GST (recorded amount)" in " ".join(page.extract_text() for page in PdfReader(BytesIO(export_pdf(invoice))).pages)
+    with ZipFile(BytesIO(export_xlsx(invoice))) as archive:
+        sheet = ET.fromstring(archive.read("xl/worksheets/sheet1.xml"))
+        ns = {"s": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
+        assert sheet.find(".//s:c[@r='F30']/s:v", ns).text == "123.45"
+        assert sheet.find(".//s:c[@r='F32']/s:f", ns).text == "SUM(F29:F30)"
+    updated = InvoiceInput(**{**invoice.model_dump(include=set(InvoiceInput.model_fields)), "cgst_percentage": "9", "sgst_percentage": "9"})
+    assert calculate_invoice(updated).total == Decimal("351758.00")
 
 
 def test_rounding_zero_percentage_and_invalid_inputs():
@@ -74,7 +121,7 @@ def test_rounding_zero_percentage_and_invalid_inputs():
     data["lines"][6].update(quantity="0.5", rate="0.01")
     data["service_percentage"] = "0"
     assert calculate_invoice(InvoiceInput(**data)).total == Decimal("0.01")
-    for update in ({"service_percentage": "-1"}, {"service_percentage": "101"}, {"gst_amount": "NaN"}, {"gst_amount": "-1"}, {"due_date": "2026-10-01"}, {"client_name": "Invalid\x00name"}):
+    for update in ({"service_percentage": "-1"}, {"service_percentage": "101"}, {"gst_amount": "NaN"}, {"gst_amount": "-1"}, {"cgst_percentage": "-1"}, {"sgst_percentage": "101"}, {"cgst_percentage": "NaN"}, {"sgst_percentage": "9.001"}, {"due_date": "2026-10-01"}, {"client_name": "Invalid\x00name"}):
         with pytest.raises(ValidationError):
             InvoiceInput(**{**data, **update})
     data["lines"][0]["quantity"] = "1.5"
@@ -86,24 +133,45 @@ def test_rounding_zero_percentage_and_invalid_inputs():
         InvoiceInput(**data)
 
 
+def test_each_tax_rounds_to_paise_independently():
+    data = payload()
+    data.pop("request_id")
+    data["lines"] = [line.model_dump(mode="json") for line in default_lines()]
+    data["lines"][7].update(quantity="1", rate="0.05")
+    data.update(service_percentage="0", cgst_percentage="10", sgst_percentage="10")
+    totals = calculate_invoice(InvoiceInput(**data))
+    assert totals.cgst_amount == totals.sgst_amount == Decimal("0.01")
+    assert totals.gst_amount == Decimal("0.02")
+    assert totals.total == Decimal("0.07")
+
+
 def test_excel_caches_and_formulas_match_pdf_and_saved_totals():
-    invoice = saved_invoice()
+    invoice = saved_invoice({**payload(), "cgst_percentage": "9", "sgst_percentage": "9", "supplier": {"payment_details": "Account name: Brothers Workforce Solutions\nBank / account / IFSC: To be provided"}})
     with ZipFile(BytesIO(export_xlsx(invoice))) as archive:
         ns = {"s": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
         sheet = ET.fromstring(archive.read("xl/worksheets/sheet1.xml"))
         cells = {cell.get("r"): cell for cell in sheet.findall(".//s:c", ns)}
-        for cell, value in {"F19": "180000.00", "F20": "90000.00", "F25": "150.00", "F27": "850.00", "F26": "27100.00", "F29": "298100.00", "F30": "0", "F32": "298100.00"}.items():
+        for cell, value in {"F19": "180000.00", "F20": "90000.00", "F25": "150.00", "F27": "850.00", "F26": "27100.00", "F29": "298100.00", "E30": "9", "E31": "9", "F30": "26829.00", "F31": "26829.00", "F32": "351758.00"}.items():
             assert Decimal(cells[cell].find("s:v", ns).text) == Decimal(value)
         assert cells["E26"].find("s:v", ns).text == "10"
         assert cells["F26"].find("s:f", ns).text == "ROUND(SUM(F19:F25,F27)*E26/100,2)"
-        assert cells["F32"].find("s:f", ns).text == "SUM(F29:F30)"
+        assert cells["F30"].find("s:f", ns).text == "ROUND($F$29*E30/100,2)"
+        assert cells["F31"].find("s:f", ns).text == "ROUND($F$29*E31/100,2)"
+        assert cells["F32"].find("s:f", ns).text == "SUM(F29:F31)"
+        assert "D30:E30" not in [item.get("ref") for item in sheet.findall("s:mergeCells/s:mergeCell", ns)]
+        assert cells["D30"].find("s:is/s:t", ns).text == "CGST (%)"
+        assert cells["D31"].find("s:is/s:t", ns).text == "SGST (%)"
         assert "xl/media/image.png" in archive.namelist()
         styles = ET.fromstring(archive.read("xl/styles.xml"))
         date_style = styles.find("s:cellXfs", ns)[int(cells["F5"].get("s"))]
         assert styles.find(f"s:numFmts/s:numFmt[@numFmtId='{date_style.get('numFmtId')}']", ns).get("formatCode") == "dd/mm/yyyy"
     pdf = PdfReader(BytesIO(export_pdf(invoice)))
+    assert len(pdf.pages) == 1
     text = " ".join(page.extract_text() for page in pdf.pages)
     assert "298,100.00" in text
+    assert "351,758.00" in text
+    assert "CGST (9%)" in text
+    assert "SGST (9%)" in text
     assert invoice.invoice_number in text
     assert "Example Manufacturing" in text
     assert "Service charge (10%)" in text
@@ -188,6 +256,10 @@ async def test_private_create_retry_update_conflict_and_downloads(monkeypatch):
         profile = await client.get("/api/admin/invoices/profile")
         assert profile.status_code == 200
         data["supplier"] = profile.json()
+        preview = await client.post("/api/admin/invoices/preview", json={key: value for key, value in {**data, "cgst_percentage": "9", "sgst_percentage": "9"}.items() if key != "request_id"})
+        assert preview.status_code == 200
+        assert preview.json()["cgst_amount"] == preview.json()["sgst_amount"] == "26829.00"
+        assert preview.json()["total"] == "351758.00"
         created = await client.post("/api/admin/invoices", json=data)
         assert created.status_code == 200, created.text
         invoice = created.json()
@@ -200,11 +272,16 @@ async def test_private_create_retry_update_conflict_and_downloads(monkeypatch):
         assert fake.invoice_counters.records[0]["number"] == 1
         assert (await client.post("/api/admin/invoices", json={**data, "service_percentage": "8"})).status_code == 409
         update = {key: value for key, value in data.items() if key != "request_id"}
-        update.update(revision=1, service_percentage="8")
+        update.update(revision=1, service_percentage="8", cgst_percentage="9", sgst_percentage="9")
         changed = await client.put(f"/api/admin/invoices/{invoice['id']}", json=update)
         assert changed.status_code == 200, changed.text
         assert changed.json()["revision"] == 2
-        assert changed.json()["totals"]["total"] == "292680.00"
+        assert changed.json()["totals"]["cgst_amount"] == "26341.20"
+        assert changed.json()["totals"]["sgst_amount"] == "26341.20"
+        assert changed.json()["totals"]["total"] == "345362.40"
+        reopened = (await client.get(f"/api/admin/invoices/{invoice['id']}")).json()
+        assert reopened["cgst_percentage"] == reopened["sgst_percentage"] == "9"
+        assert reopened["totals"] == changed.json()["totals"]
         assert (await client.put(f"/api/admin/invoices/{invoice['id']}", json=update)).status_code == 409
         assert (await client.get("/api/admin/invoices")).json()["total"] == 1
         for format, signature in (("pdf", b"%PDF"), ("xlsx", b"PK")):

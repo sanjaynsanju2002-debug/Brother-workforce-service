@@ -11,8 +11,8 @@ import { BRAND } from "@/lib/brand";
 
 type Profile = { name: string; address: string; phone: string; email: string; website: string; gstin: string; payment_details: string };
 type Line = { key: string; quantity: string; rate: string };
-type Form = { client_name: string; client_address: string; client_gstin: string; invoice_date: string; due_date: string; billing_period: string; supplier: Profile; lines: Line[]; service_percentage: string; gst_amount: string; notes: string };
-type Totals = { line_amounts: Record<string, string>; base_amount: string; service_charge: string; subtotal: string; gst_amount: string; total: string };
+type Form = { client_name: string; client_address: string; client_gstin: string; invoice_date: string; due_date: string; billing_period: string; supplier: Profile; lines: Line[]; service_percentage: string; cgst_percentage: string | null; sgst_percentage: string | null; gst_amount: string; notes: string };
+type Totals = { line_amounts: Record<string, string>; base_amount: string; service_charge: string; subtotal: string; cgst_amount: string; sgst_amount: string; gst_amount: string; total: string };
 type Invoice = Omit<Form, "due_date"> & { due_date: string | null; id: string; invoice_number: string; revision: number; totals: Totals; created_at: string; updated_at: string };
 type InvoicePage = { items: Invoice[]; total: number; page: number; page_size: number };
 
@@ -27,16 +27,16 @@ const money = (value: string) => new Intl.NumberFormat("en-IN", { style: "curren
 const today = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
 
 function emptyForm(supplier: Profile): Form {
-  return { client_name: "", client_address: "", client_gstin: "", invoice_date: today(), due_date: "", billing_period: "", supplier: { ...supplier }, lines: ROWS.map(([key]) => ({ key, quantity: "0", rate: "0" })), service_percentage: "0", gst_amount: "0", notes: "" };
+  return { client_name: "", client_address: "", client_gstin: "", invoice_date: today(), due_date: "", billing_period: "", supplier: { ...supplier }, lines: ROWS.map(([key]) => ({ key, quantity: "0", rate: "0" })), service_percentage: "0", cgst_percentage: "0", sgst_percentage: "0", gst_amount: "0", notes: "" };
 }
 
 function formData(form: Form) {
-  return { ...form, due_date: form.due_date || null, service_percentage: form.service_percentage || "0", gst_amount: form.gst_amount || "0", lines: form.lines.map((line) => ({ ...line, quantity: line.quantity || "0", rate: line.rate || "0" })) };
+  return { ...form, due_date: form.due_date || null, service_percentage: form.service_percentage || "0", cgst_percentage: form.cgst_percentage === null ? null : form.cgst_percentage || "0", sgst_percentage: form.sgst_percentage === null ? null : form.sgst_percentage || "0", gst_amount: form.gst_amount || "0", lines: form.lines.map((line) => ({ ...line, quantity: line.quantity || "0", rate: line.rate || "0" })) };
 }
 
 function fromInvoice(invoice: Invoice): Form {
-  const { client_name, client_address, client_gstin, invoice_date, due_date, billing_period, supplier, lines, service_percentage, gst_amount, notes } = invoice;
-  return { client_name, client_address, client_gstin, invoice_date, due_date: due_date || "", billing_period, supplier: { ...supplier }, lines: lines.map((line) => ({ ...line })), service_percentage, gst_amount, notes };
+  const { client_name, client_address, client_gstin, invoice_date, due_date, billing_period, supplier, lines, service_percentage, cgst_percentage, sgst_percentage, gst_amount, notes } = invoice;
+  return { client_name, client_address, client_gstin, invoice_date, due_date: due_date || "", billing_period, supplier: { ...supplier }, lines: lines.map((line) => ({ ...line })), service_percentage, cgst_percentage: cgst_percentage ?? null, sgst_percentage: sgst_percentage ?? null, gst_amount, notes };
 }
 
 function errorMessage(error: unknown) {
@@ -98,6 +98,8 @@ export default function Invoices() {
   const previewCurrent = JSON.stringify(previewInput) === JSON.stringify(formData(form));
   const totals = previewCurrent ? preview.data : undefined;
   const edit = (change: Partial<Form>) => { setForm((current) => ({ ...current, ...change })); setDirty(true); setProblem(""); };
+  const legacyGst = form.cgst_percentage === null && form.sgst_percentage === null;
+  const editTax = (key: "cgst_percentage" | "sgst_percentage", value: string) => edit({ cgst_percentage: form.cgst_percentage ?? "0", sgst_percentage: form.sgst_percentage ?? "0", gst_amount: "0", [key]: value });
   const editLine = (key: string, field: "quantity" | "rate", value: string) => edit({ lines: form.lines.map((line) => line.key === key ? { ...line, [field]: value } : line) });
   const editSupplier = (key: keyof Profile, value: string) => edit({ supplier: { ...form.supplier, [key]: value } });
 
@@ -174,11 +176,22 @@ export default function Invoices() {
             <div className="mt-5 grid gap-5 sm:grid-cols-2">
               <div className="space-y-4">
                 <div><Label htmlFor="invoice-service" className="mb-2 block">Service charge (%)</Label><Input id="invoice-service" type="number" inputMode="decimal" min="0" max="100" step="0.01" value={form.service_percentage} onChange={(e) => edit({ service_percentage: e.target.value })} data-testid="invoice-service" /><p className="mt-1 text-xs text-slate-500">Enter 10 for 10%. Applied to worker, overtime and other charges before GST.</p></div>
-                <div><Label htmlFor="invoice-gst" className="mb-2 block">GST amount (INR)</Label><Input id="invoice-gst" type="number" inputMode="decimal" min="0" max="1000000000" step="0.01" value={form.gst_amount} onChange={(e) => edit({ gst_amount: e.target.value })} data-testid="invoice-gst" /><p className="mt-1 text-xs text-slate-500">Enter the GST amount for this invoice, or 0, as in your template.</p></div>
+                <div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div><Label htmlFor="invoice-cgst" className="mb-2 block">CGST (%)</Label><Input id="invoice-cgst" type="number" inputMode="decimal" min="0" max="100" step="0.01" value={form.cgst_percentage ?? ""} onChange={(e) => editTax("cgst_percentage", e.target.value)} data-testid="invoice-cgst" aria-describedby="invoice-tax-help" /></div>
+                    <div><Label htmlFor="invoice-sgst" className="mb-2 block">SGST (%)</Label><Input id="invoice-sgst" type="number" inputMode="decimal" min="0" max="100" step="0.01" value={form.sgst_percentage ?? ""} onChange={(e) => editTax("sgst_percentage", e.target.value)} data-testid="invoice-sgst" aria-describedby="invoice-tax-help" /></div>
+                  </div>
+                  <p id="invoice-tax-help" className="mt-2 text-xs text-slate-500">Enter 9 for 9%. Each tax applies to the subtotal after adding service charges.</p>
+                  {legacyGst && <p className="mt-2 text-xs text-amber-700">This saved invoice has a recorded GST amount of {money(form.gst_amount)}. Enter CGST and SGST percentages to recalculate it.</p>}
+                </div>
               </div>
               <div className="space-y-3 rounded-lg bg-slate-50 p-4 text-sm" aria-live="polite" data-testid="invoice-totals">
                 {!totals && <p className="text-slate-500">{preview.isError && previewCurrent ? errorMessage(preview.error) : "Calculating totals..."}</p>}
-                {([ ["Charges before service fee", "base_amount"], ["Service charge", "service_charge"], ["Subtotal", "subtotal"], ["GST", "gst_amount"], ["Total", "total"] ] as const).map(([label, key]) => <div key={key} className={`flex items-center justify-between gap-3 ${key === "total" ? "border-t border-slate-200 pt-3 text-lg font-bold text-[#0F2444]" : ""}`}><span>{label}</span><span className="tabular-nums" data-testid={`invoice-${key}`}>{totals ? money(totals[key]) : "—"}</span></div>)}
+                {([
+                  ["Charges before service fee", "base_amount"], ["Service charge", "service_charge"], ["Subtotal before GST", "subtotal"],
+                  ...(legacyGst ? [["GST (recorded amount)", "gst_amount"] as const] : [[`CGST (${form.cgst_percentage || "0"}%)`, "cgst_amount"] as const, [`SGST (${form.sgst_percentage || "0"}%)`, "sgst_amount"] as const]),
+                  ["Total", "total"],
+                ] as const).map(([label, key]) => <div key={key} className={`flex items-center justify-between gap-3 ${key === "total" ? "border-t border-slate-200 pt-3 text-lg font-bold text-[#0F2444]" : ""}`}><span>{label}</span><span className="tabular-nums" data-testid={`invoice-${key}`}>{totals ? money(totals[key]) : "—"}</span></div>)}
               </div>
             </div>
           </div>

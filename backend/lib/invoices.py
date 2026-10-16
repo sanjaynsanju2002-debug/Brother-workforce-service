@@ -72,6 +72,9 @@ class InvoiceInput(InvoiceModel):
     supplier: InvoiceProfile = Field(default_factory=InvoiceProfile)
     lines: list[InvoiceLine] = Field(default_factory=default_lines, min_length=8, max_length=8)
     service_percentage: Percentage = Decimal("0")
+    cgst_percentage: Percentage | None = None
+    sgst_percentage: Percentage | None = None
+    # Retain the recorded amount on invoices saved before percentage GST existed.
     gst_amount: Money = Decimal("0")
     notes: str = Field(default="", max_length=1000)
 
@@ -83,7 +86,15 @@ class InvoiceInput(InvoiceModel):
             raise ValueError("Payment due date cannot be before the invoice date")
         # A stable order keeps saved invoices and both exports aligned with the template.
         self.lines.sort(key=lambda line: list(LINE_LABELS).index(line.key))
+        if self.uses_gst_percentages:
+            self.cgst_percentage = self.cgst_percentage if self.cgst_percentage is not None else Decimal("0")
+            self.sgst_percentage = self.sgst_percentage if self.sgst_percentage is not None else Decimal("0")
+            self.gst_amount = Decimal("0")
         return self
+
+    @property
+    def uses_gst_percentages(self) -> bool:
+        return self.cgst_percentage is not None or self.sgst_percentage is not None
 
 
 class InvoiceTotals(InvoiceModel):
@@ -91,6 +102,8 @@ class InvoiceTotals(InvoiceModel):
     base_amount: Decimal
     service_charge: Decimal
     subtotal: Decimal
+    cgst_amount: Decimal = Decimal("0")
+    sgst_amount: Decimal = Decimal("0")
     gst_amount: Decimal
     total: Decimal
 
@@ -113,8 +126,11 @@ def calculate_invoice(invoice: InvoiceInput) -> InvoiceTotals:
     base = sum(amounts.values(), Decimal("0.00"))
     service = round_money(base * invoice.service_percentage / Decimal("100"))
     subtotal = base + service
+    cgst = round_money(subtotal * (invoice.cgst_percentage or Decimal("0")) / Decimal("100"))
+    sgst = round_money(subtotal * (invoice.sgst_percentage or Decimal("0")) / Decimal("100"))
+    gst = cgst + sgst if invoice.uses_gst_percentages else invoice.gst_amount
     return InvoiceTotals(
         line_amounts=amounts, base_amount=base, service_charge=service,
-        subtotal=subtotal, gst_amount=invoice.gst_amount,
-        total=subtotal + invoice.gst_amount,
+        subtotal=subtotal, cgst_amount=cgst, sgst_amount=sgst, gst_amount=gst,
+        total=subtotal + gst,
     )
