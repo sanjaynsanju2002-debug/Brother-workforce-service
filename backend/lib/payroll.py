@@ -5,7 +5,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Annotated, Literal
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import AwareDatetime, Field, field_validator, model_validator
 
 from lib.invoices import InvoiceModel, InvoiceProfile, Money, Percentage, round_money
 from lib.months import MONTH_PATTERN
@@ -62,6 +62,7 @@ class PayrollInput(InvoiceModel):
 
 class PayrollSave(PayrollInput):
     revision: int | None = Field(default=None, ge=1)
+    created_at: AwareDatetime | None = None
 
 
 class PayrollEmployee(InvoiceModel):

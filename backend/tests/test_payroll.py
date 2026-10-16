@@ -2,7 +2,7 @@
 
 import copy
 import os
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from io import BytesIO
 from types import SimpleNamespace
@@ -169,7 +169,7 @@ async def test_save_retry_stale_updates_history_and_downloads_keep_snapshots(mon
         assert (await client.post("/api/admin/payroll", json=payload())).json() == saved
         assert len(fake.payroll.records) == 1
         assert (await client.post("/api/admin/payroll", json={**payload(), "notes": "changed"})).status_code == 409
-        changed_data = {**payload(), "notes": "Updated attendance", "revision": 1}
+        changed_data = {**payload(), "notes": "Updated attendance", "revision": 1, "created_at": saved["created_at"]}
         changed_data["lines"][0]["worked_days"] = "25"
         changed = await client.post("/api/admin/payroll", json=changed_data)
         assert changed.status_code == 200, changed.text
@@ -219,8 +219,92 @@ async def test_competing_create_and_update_cannot_overwrite_another_save(monkeyp
             return SimpleNamespace(matched_count=0)
 
         monkeypatch.setattr(fake.payroll, "update_one", lost_update)
-        assert (await client.post("/api/admin/payroll", json={**payload(), "revision": 1})).status_code == 409
+        assert (await client.post("/api/admin/payroll", json={**payload(), "revision": 1, "created_at": fake.payroll.records[0]["created_at"]})).status_code == 409
         assert fake.payroll.records[0]["notes"] == "Concurrent save"
+
+
+@pytest.mark.asyncio
+async def test_delete_is_private_version_checked_and_only_removes_the_selected_payroll(monkeypatch):
+    fake = fake_db(monkeypatch)
+    workforce = copy.deepcopy(fake.assignments.records)
+    companies = copy.deepcopy(fake.clients.records)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="https://brothersworkforcesolutions.in") as client:
+        assert (await client.delete("/api/admin/payroll/missing", params={"revision": 1, "updated_at": datetime.now(timezone.utc).isoformat()})).status_code == 401
+        await client.post("/api/admin/login", json={"pin": "123456"})
+        target = (await client.post("/api/admin/payroll", json=payload())).json()
+        other = (await client.post("/api/admin/payroll", json={**payload(), "month": "2026-09"})).json()
+        path = f"/api/admin/payroll/{target['id']}"
+        params = {"revision": target["revision"], "updated_at": target["updated_at"]}
+        for invalid in ({}, {"revision": 1}, {"updated_at": target["updated_at"]}, {**params, "revision": 0}, {**params, "updated_at": "not-a-date"}, {**params, "updated_at": "2026-10-16T12:00:00"}):
+            assert (await client.delete(path, params=invalid)).status_code == 422
+        assert (await client.delete(path, params={**params, "revision": 2})).status_code == 409
+        assert (await client.delete(path, params={**params, "updated_at": "2026-01-01T00:00:00Z"})).status_code == 409
+        assert (await client.delete(path, params=params, headers={"Origin": "https://another.invalid"})).status_code == 403
+        assert len(fake.payroll.records) == 2
+        response = await client.delete(path, params=params)
+        assert response.status_code == 204 and response.content == b""
+        assert [row["id"] for row in fake.payroll.records] == [other["id"]]
+        assert (await client.get(f"/api/admin/payroll/{other['id']}")).json() == other
+        assert (await client.get("/api/admin/payroll?company_id=company-a")).json()["total"] == 1
+        draft = (await client.get("/api/admin/payroll/draft?company_id=company-a&month=2026-10")).json()
+        assert draft["payroll"] is None and len(draft["employees"]) == 2
+        for suffix in ("", "/download/pdf", "/download/xlsx"):
+            assert (await client.get(path + suffix)).status_code == 404
+        assert (await client.delete(path, params=params)).status_code == 404
+        assert fake.assignments.records == workforce
+        assert fake.clients.records == companies
+
+
+@pytest.mark.asyncio
+async def test_deleted_month_can_be_recreated_without_stale_deletes_or_saves_overwriting_it(monkeypatch):
+    fake = fake_db(monkeypatch)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="https://brothersworkforcesolutions.in") as client:
+        await client.post("/api/admin/login", json={"pin": "123456"})
+        old = (await client.post("/api/admin/payroll", json=payload())).json()
+        path = f"/api/admin/payroll/{old['id']}"
+        params = {"revision": old["revision"], "updated_at": old["updated_at"]}
+        assert (await client.delete(path, params=params)).status_code == 204
+        replacement = (await client.post("/api/admin/payroll", json={**payload(), "notes": "Replacement payroll"})).json()
+        assert replacement["id"] == old["id"] and replacement["revision"] == old["revision"] == 1
+        assert replacement["created_at"] != old["created_at"]
+        assert (await client.delete(path, params=params)).status_code == 409
+        assert (await client.post("/api/admin/payroll", json={**payload(), "revision": old["revision"], "created_at": old["created_at"], "notes": "Stale edit"})).status_code == 409
+        assert (await client.get(path)).json() == replacement
+        changed = await client.post("/api/admin/payroll", json={**payload(), "revision": 1, "created_at": replacement["created_at"], "notes": "Approved replacement"})
+        assert changed.status_code == 200, changed.text
+        assert changed.json()["revision"] == 2
+        assert (await client.delete(path, params={"revision": 1, "updated_at": replacement["updated_at"]})).status_code == 409
+        assert len(fake.payroll.records) == 1
+
+
+@pytest.mark.asyncio
+async def test_deletion_and_save_match_the_reviewed_record_atomically(monkeypatch):
+    fake = fake_db(monkeypatch)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="https://brothersworkforcesolutions.in") as client:
+        await client.post("/api/admin/login", json={"pin": "123456"})
+        saved = (await client.post("/api/admin/payroll", json=payload())).json()
+        delete = fake.payroll.delete_one
+
+        async def competing_change(query):
+            # The row changes after the endpoint's read but before Mongo deletes.
+            fake.payroll.records[0]["updated_at"] = (datetime.now(timezone.utc) + timedelta(seconds=1)).isoformat()
+            return await delete(query)
+
+        monkeypatch.setattr(fake.payroll, "delete_one", competing_change)
+        path = f"/api/admin/payroll/{saved['id']}"
+        assert (await client.delete(path, params={"revision": 1, "updated_at": saved["updated_at"]})).status_code == 409
+        assert len(fake.payroll.records) == 1
+        update = fake.payroll.update_one
+
+        async def competing_replacement(query, changes):
+            # Deleting and recreating a month resets its revision to 1.
+            fake.payroll.records[0]["created_at"] = (datetime.now(timezone.utc) + timedelta(seconds=1)).isoformat()
+            return await update(query, changes)
+
+        monkeypatch.setattr(fake.payroll, "update_one", competing_replacement)
+        assert (await client.post("/api/admin/payroll", json={**payload(), "revision": 1, "created_at": saved["created_at"], "notes": "Stale save"})).status_code == 409
+        assert fake.payroll.records[0]["revision"] == 1
+        assert fake.payroll.records[0]["notes"] == payload()["notes"]
 
 
 @pytest.mark.asyncio

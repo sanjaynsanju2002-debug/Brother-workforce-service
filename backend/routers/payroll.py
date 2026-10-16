@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from uuid import NAMESPACE_URL, uuid5
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from pydantic import AwareDatetime
 from pymongo.errors import DuplicateKeyError
 from starlette.concurrency import run_in_threadpool
 
@@ -97,7 +98,7 @@ async def save_payroll(payload: PayrollSave):
         raise HTTPException(422, "Enter a daily rate for every employee with worked days")
     run_id = register_id(payload.company_id, payload.month)
     existing = await db.payroll.find_one({"_id": run_id})
-    data = payload.model_dump(mode="json", exclude={"revision"})
+    data = payload.model_dump(mode="json", exclude={"revision", "created_at"})
     data["lines"] = sorted(data["lines"], key=lambda line: line["assignment_id"])
     fingerprint = hashlib.sha256(json.dumps(data, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
     if existing and existing.get("input_hash") == fingerprint:
@@ -105,6 +106,11 @@ async def save_payroll(payload: PayrollSave):
     if (existing and payload.revision != existing["revision"]) or (not existing and payload.revision is not None):
         raise HTTPException(409, CONFLICT)
     old = record_model(existing) if existing else None
+    # A deleted month may later be recreated with the same deterministic ID.
+    # Match its creation as well as its revision so an old editor cannot change
+    # a replacement register, including a replacement created during this save.
+    if (old and payload.created_at != old.created_at) or (not old and payload.created_at is not None):
+        raise HTTPException(409, CONFLICT)
     company = await db.clients.find_one({"id": payload.company_id})
     if not company and not old:
         raise HTTPException(404, "Company not found. Add it in Company Workforce first.")
@@ -134,7 +140,7 @@ async def save_payroll(payload: PayrollSave):
     )
     record = {**payroll.model_dump(mode="json"), "input_hash": fingerprint}
     if old:
-        result = await db.payroll.update_one({"_id": run_id, "revision": payload.revision}, {"$set": record})
+        result = await db.payroll.update_one({"_id": run_id, "revision": payload.revision, "created_at": existing["created_at"]}, {"$set": record})
         if result.matched_count == 0:
             raise HTTPException(409, CONFLICT)
     else:
@@ -151,6 +157,21 @@ async def save_payroll(payload: PayrollSave):
 @router.get("/{run_id}", response_model=Payroll)
 async def get_payroll(run_id: str):
     return await find_payroll(run_id)
+
+
+@router.delete("/{run_id}", status_code=204)
+async def delete_payroll(run_id: str, revision: int = Query(ge=1), updated_at: AwareDatetime = Query()):
+    doc = await db.payroll.find_one({"_id": run_id})
+    if not doc:
+        raise HTTPException(404, "Payroll not found")
+    saved = record_model(doc)
+    conflict = "This payroll changed in another session. Refresh saved payroll before deleting it."
+    if saved.revision != revision or saved.updated_at != updated_at:
+        raise HTTPException(409, conflict)
+    result = await db.payroll.delete_one({"_id": run_id, "revision": revision, "updated_at": doc["updated_at"]})
+    if result.deleted_count == 0:
+        raise HTTPException(409, conflict)
+    return Response(status_code=204)
 
 
 @router.get("/{run_id}/download/{format}")

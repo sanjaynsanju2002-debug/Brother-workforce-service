@@ -1,19 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Building2, Download, FileSpreadsheet, Loader2, RotateCcw, Save } from "lucide-react";
+import { Building2, Download, FileSpreadsheet, Loader2, RotateCcw, Save, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { apiGet, apiPost } from "@/lib/api";
+import { apiDelete, apiGet, apiPost } from "@/lib/api";
 import { indiaToday, monthLabel, rupees } from "@/lib/finance";
-import { downloadPayroll, payrollError, payrollRows, type PayrollAmounts, type PayrollCompany, type PayrollDraft, type PayrollInput, type PayrollPage, type PayrollRecord, type PayrollTotals } from "@/lib/payroll";
+import { downloadPayroll, payrollError, payrollRows, type PayrollAmounts, type PayrollCompany, type PayrollDraft, type PayrollInput, type PayrollPage, type PayrollRecord, type PayrollSummary, type PayrollTotals } from "@/lib/payroll";
 
 const orange = "bg-[#C2410C] text-white hover:bg-[#9A3412]";
 const selectStyle = "h-9 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm disabled:opacity-50";
 
 export default function Payroll() {
+  const qc = useQueryClient();
   const [companyId, setCompanyId] = useState("");
   const [month, setMonth] = useState(() => indiaToday().slice(0, 7));
   const [page, setPage] = useState(1);
@@ -23,14 +24,35 @@ export default function Payroll() {
   const companies = useQuery({ queryKey: ["payroll-companies"], queryFn: () => apiGet<PayrollCompany[]>("/admin/payroll/companies") });
   const draft = useQuery({ queryKey: ["payroll-draft", companyId, month], queryFn: () => apiGet<PayrollDraft>(`/admin/payroll/draft?company_id=${encodeURIComponent(companyId)}&month=${month}`), enabled: !!companyId, refetchOnWindowFocus: false });
   const history = useQuery({ queryKey: ["payroll-history", companyId, page], queryFn: () => apiGet<PayrollPage>(`/admin/payroll?page=${page}${companyId ? `&company_id=${encodeURIComponent(companyId)}` : ""}`) });
+  const remove = useMutation({
+    mutationFn: (record: PayrollSummary) => apiDelete<void>(`/admin/payroll/${record.id}?${new URLSearchParams({ revision: String(record.revision), updated_at: record.updated_at })}`),
+    onSuccess: async (_, record) => {
+      if (record.company_id === companyId && record.month === month) {
+        setCompanyId(""); setDirty(false); setEditorVersion((value) => value + 1); setPage(1);
+      } else if (page > 1 && history.data?.items.length === 1 && history.data.items[0].id === record.id) setPage(page - 1);
+      const key = ["payroll-draft", record.company_id, record.month];
+      await qc.cancelQueries({ queryKey: key, exact: true });
+      qc.removeQueries({ queryKey: key, exact: true });
+      void qc.invalidateQueries({ queryKey: ["payroll-history"] });
+      void qc.invalidateQueries({ queryKey: ["payroll-companies"] });
+      toast.success(`Payroll for ${record.company_name} · ${monthLabel(record.month)} deleted`);
+    },
+    onError: (error) => { void qc.invalidateQueries({ queryKey: ["payroll-history"] }); toast.error(payrollError(error)); },
+  });
+  const working = busy || remove.isPending;
+  const confirmDelete = (record: PayrollSummary) => {
+    if (working) return;
+    const unsaved = dirty && companyId === record.company_id && month === record.month ? " Unsaved changes to this payroll will also be discarded." : "";
+    if (window.confirm(`Permanently delete saved payroll for ${record.company_name} — ${monthLabel(record.month)}? This cannot be undone.${unsaved}`)) remove.mutate(record);
+  };
   const discard = () => !dirty || window.confirm("Discard the unsaved payroll changes?");
   const reload = async () => {
-    if (busy || !discard()) return;
+    if (working || !discard()) return;
     const response = await draft.refetch();
     if (!response.isError) { setDirty(false); setEditorVersion((value) => value + 1); }
   };
   const open = async (company: string, period: string) => {
-    if (busy || !discard()) return;
+    if (working || !discard()) return;
     setDirty(false);
     if (companyId === company && month === period) { const response = await draft.refetch(); if (!response.isError) setEditorVersion((value) => value + 1); }
     else { setCompanyId(company); setMonth(period); setEditorVersion((value) => value + 1); }
@@ -42,11 +64,11 @@ export default function Payroll() {
   return <section className="space-y-6 text-[#0F2444]" data-testid="payroll-panel">
     <div><h1 className="text-2xl font-bold">Payroll</h1><p className="mt-1 text-sm text-slate-600">Calculate company payroll from your workforce roster, then save the month and download your register.</p></div>
     <div className="grid gap-4 rounded-xl border border-slate-200 bg-white p-5 sm:grid-cols-[minmax(0,1fr)_14rem]">
-      <div><Label htmlFor="payroll-company" className="mb-2 flex items-center gap-2"><Building2 className="h-4 w-4" /> Company</Label><select id="payroll-company" className={selectStyle} disabled={busy || companies.isPending} value={companyId} onChange={(event) => {
+      <div><Label htmlFor="payroll-company" className="mb-2 flex items-center gap-2"><Building2 className="h-4 w-4" /> Company</Label><select id="payroll-company" className={selectStyle} disabled={working || companies.isPending} value={companyId} onChange={(event) => {
         if (!discard()) return;
         setDirty(false); setCompanyId(event.target.value); setPage(1); setEditorVersion((value) => value + 1);
       }} data-testid="payroll-company"><option value="">Select a company</option>{companies.data?.map((company) => <option key={company.id} value={company.id}>{company.name}{company.saved_only ? " (saved payroll)" : ""}</option>)}</select></div>
-      <div><Label htmlFor="payroll-month" className="mb-2 block">Payroll month</Label><Input id="payroll-month" type="month" value={month} disabled={busy} onChange={(event) => {
+      <div><Label htmlFor="payroll-month" className="mb-2 block">Payroll month</Label><Input id="payroll-month" type="month" value={month} disabled={working} onChange={(event) => {
         if (!event.target.value || !discard()) return;
         setDirty(false); setMonth(event.target.value); setEditorVersion((value) => value + 1);
       }} data-testid="payroll-month" /></div>
@@ -56,7 +78,7 @@ export default function Payroll() {
     {!companyId ? <div className="rounded-xl border border-dashed border-slate-300 bg-white p-6 text-center text-sm text-slate-600">Select a company to load its employees and payroll.</div>
       : draft.isPending ? <p role="status" className="flex items-center gap-2 p-6"><Loader2 className="h-4 w-4 animate-spin" />Loading payroll…</p>
       : draft.isError ? <div role="alert" className="rounded-xl border border-red-200 bg-white p-5"><p>{payrollError(draft.error)}</p><Button type="button" variant="outline" className="mt-3" onClick={() => draft.refetch()}>Try again</Button></div>
-      : draft.data && <PayrollEditor key={`${companyId}-${month}-${editorVersion}`} draft={draft.data} month={month} onDirty={setDirty} onBusy={setBusy} onReload={reload} />}
+      : draft.data && <PayrollEditor key={`${companyId}-${month}-${editorVersion}`} draft={draft.data} month={month} deleting={remove.isPending} onDirty={setDirty} onBusy={setBusy} onReload={reload} />}
     <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
       <h2 className="border-b px-5 py-4 text-lg font-semibold">Saved payroll</h2>
       {history.isPending ? <p className="p-5" role="status">Loading saved payroll…</p>
@@ -64,14 +86,14 @@ export default function Payroll() {
         : !history.data?.items.length ? <p className="p-5 text-sm text-slate-600">No saved payroll for {companyId ? "this company" : "your companies"} yet.</p>
         : <div className="divide-y">{history.data.items.map((record) => <div key={record.id} className="flex flex-wrap items-center justify-between gap-4 p-5">
           <div><p className="font-semibold">{record.company_name}</p><p className="mt-1 text-sm text-slate-600">{monthLabel(record.month)} · {record.totals.employee_count} employees · Payable {rupees(record.totals.payable)}</p></div>
-          <div className="flex flex-wrap gap-2"><Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => void open(record.company_id, record.month)}>Open</Button><Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => void download(record, "pdf")}><Download className="h-4 w-4" />PDF</Button><Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => void download(record, "xlsx")}><FileSpreadsheet className="h-4 w-4" />Excel</Button></div>
+          <div className="flex flex-wrap gap-2"><Button type="button" variant="outline" size="sm" disabled={working} onClick={() => void open(record.company_id, record.month)}>Open</Button><Button type="button" variant="outline" size="sm" disabled={working} onClick={() => void download(record, "pdf")}><Download className="h-4 w-4" />PDF</Button><Button type="button" variant="outline" size="sm" disabled={working} onClick={() => void download(record, "xlsx")}><FileSpreadsheet className="h-4 w-4" />Excel</Button><Button type="button" variant="outline" size="sm" className="border-red-200 text-red-700 hover:bg-red-50" disabled={working} onClick={() => confirmDelete(record)} aria-label={`Delete payroll for ${record.company_name}, ${monthLabel(record.month)}`} data-testid={`payroll-delete-${record.id}`}>{remove.isPending && remove.variables?.id === record.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}Delete</Button></div>
         </div>)}</div>}
-      {history.data && history.data.total > history.data.page_size && <div className="flex items-center justify-between border-t p-4"><Button type="button" variant="outline" disabled={busy || page === 1} onClick={() => setPage((value) => value - 1)}>Previous</Button><span className="text-sm">Page {page} of {Math.ceil(history.data.total / history.data.page_size)}</span><Button type="button" variant="outline" disabled={busy || page * history.data.page_size >= history.data.total} onClick={() => setPage((value) => value + 1)}>Next</Button></div>}
+      {history.data && history.data.total > history.data.page_size && <div className="flex items-center justify-between border-t p-4"><Button type="button" variant="outline" disabled={working || page === 1} onClick={() => setPage((value) => value - 1)}>Previous</Button><span className="text-sm">Page {page} of {Math.ceil(history.data.total / history.data.page_size)}</span><Button type="button" variant="outline" disabled={working || page * history.data.page_size >= history.data.total} onClick={() => setPage((value) => value + 1)}>Next</Button></div>}
     </div>
   </section>;
 }
 
-function PayrollEditor({ draft, month, onDirty, onBusy, onReload }: { draft: PayrollDraft; month: string; onDirty: (value: boolean) => void; onBusy: (value: boolean) => void; onReload: () => Promise<void> }) {
+function PayrollEditor({ draft, month, deleting, onDirty, onBusy, onReload }: { draft: PayrollDraft; month: string; deleting: boolean; onDirty: (value: boolean) => void; onBusy: (value: boolean) => void; onReload: () => Promise<void> }) {
   const qc = useQueryClient();
   const form = useRef<HTMLFormElement>(null);
   const [rows, setRows] = useState(() => payrollRows(draft));
@@ -98,7 +120,7 @@ function PayrollEditor({ draft, month, onDirty, onBusy, onReload }: { draft: Pay
   const save = useMutation({
     mutationFn: async (format?: "pdf" | "xlsx") => {
       if (saved && !dirty && format) { await downloadPayroll(saved, format); return saved; }
-      const record = await apiPost<PayrollRecord>("/admin/payroll", { ...payload, revision: saved?.revision ?? null });
+      const record = await apiPost<PayrollRecord>("/admin/payroll", { ...payload, revision: saved?.revision ?? null, created_at: saved?.created_at ?? null });
       setSaved(record); setDirty(false); onDirty(false); setProblem("");
       const byId = new Map(record.lines.map((line) => [line.assignment_id, line]));
       setRows((items) => items.map((row) => byId.has(row.assignment_id) ? { ...row, ...byId.get(row.assignment_id)! } : row));
@@ -113,6 +135,7 @@ function PayrollEditor({ draft, month, onDirty, onBusy, onReload }: { draft: Pay
     onSettled: () => onBusy(false),
   });
   const startSave = (format?: "pdf" | "xlsx") => {
+    if (deleting || save.isPending) return;
     if (!(saved && !dirty && format) && !form.current?.reportValidity()) return;
     onBusy(true); save.mutate(format);
   };
@@ -127,14 +150,14 @@ function PayrollEditor({ draft, month, onDirty, onBusy, onReload }: { draft: Pay
   const selected = rows.filter((row) => row.selected).length;
 
   return <div className="space-y-5" data-testid="payroll-editor">
-    <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-semibold">{draft.company.name} · {monthLabel(month)}</h2><p className="mt-1 text-xs text-slate-500">{selected} selected employees{saved ? " · Saved payroll" : " · New payroll"}{dirty && " · Unsaved changes"}</p></div><Button type="button" variant="outline" disabled={save.isPending} onClick={() => void onReload()}><RotateCcw className="h-4 w-4" />Reload payroll</Button></div>
+    <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-semibold">{draft.company.name} · {monthLabel(month)}</h2><p className="mt-1 text-xs text-slate-500">{selected} selected employees{saved ? " · Saved payroll" : " · New payroll"}{dirty && " · Unsaved changes"}</p></div><Button type="button" variant="outline" disabled={deleting || save.isPending} onClick={() => void onReload()}><RotateCcw className="h-4 w-4" />Reload payroll</Button></div>
     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-live="polite">{[["Gross wages", totals?.gross_wages], ["ESI deduction", totals?.esi_deduction], ["PF deduction", totals?.pf_deduction], ["Payable amount", totals?.payable]].map(([label, value], index) => <div key={label} className={`rounded-xl p-5 ${index === 3 ? "bg-[#0F2444] text-white" : "border border-slate-200 bg-white"}`}><p className={`text-sm ${index === 3 ? "text-slate-200" : "text-slate-600"}`}>{label}</p><p className="mt-2 break-words text-2xl font-bold" data-testid={`payroll-total-${index}`}>{value ? rupees(value) : "Calculating…"}</p></div>)}</div>
     <div className="rounded-xl border border-slate-200 bg-white p-5">
       <h3 className="font-semibold">Apply values to selected employees</h3><p className="mt-1 text-xs text-slate-500">Fill the values you want to apply. You can still edit each employee below.</p>
-      <div className="mt-4 grid items-end gap-3 sm:grid-cols-2 lg:grid-cols-5">{([['worked_days', 'Worked days', monthDays], ['daily_rate', 'Daily rate (₹)', 1000000000], ['esi_percentage', 'ESI (%)', 100], ['pf_percentage', 'PF (%)', 100]] as const).map(([key, label, maximum]) => <div key={key}><Label htmlFor={`payroll-bulk-${key}`} className="mb-2 block">{label}</Label><Input id={`payroll-bulk-${key}`} type="number" min="0" max={maximum} step="0.01" inputMode="decimal" value={bulk[key]} disabled={save.isPending} onChange={(event) => setBulk({ ...bulk, [key]: event.target.value })} placeholder="Leave unchanged" /></div>)}<Button type="button" variant="outline" disabled={save.isPending || !selected || Object.values(bulk).every((value) => value === "")} onClick={applyBulk}>Apply to selected</Button></div>
+      <div className="mt-4 grid items-end gap-3 sm:grid-cols-2 lg:grid-cols-5">{([['worked_days', 'Worked days', monthDays], ['daily_rate', 'Daily rate (₹)', 1000000000], ['esi_percentage', 'ESI (%)', 100], ['pf_percentage', 'PF (%)', 100]] as const).map(([key, label, maximum]) => <div key={key}><Label htmlFor={`payroll-bulk-${key}`} className="mb-2 block">{label}</Label><Input id={`payroll-bulk-${key}`} type="number" min="0" max={maximum} step="0.01" inputMode="decimal" value={bulk[key]} disabled={deleting || save.isPending} onChange={(event) => setBulk({ ...bulk, [key]: event.target.value })} placeholder="Leave unchanged" /></div>)}<Button type="button" variant="outline" disabled={deleting || save.isPending || !selected || Object.values(bulk).every((value) => value === "")} onClick={applyBulk}>Apply to selected</Button></div>
     </div>
     <form ref={form} onSubmit={(event) => { event.preventDefault(); startSave(); }} className="space-y-5">
-      <fieldset disabled={save.isPending} className="min-w-0 space-y-5">
+      <fieldset disabled={deleting || save.isPending} className="min-w-0 space-y-5">
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
           <div className="border-b p-5"><h3 className="font-semibold">Employee payroll</h3><p className="mt-1 text-xs text-slate-500">Gross wages = worked days × daily rate. ESI and PF are each deducted from gross wages using the percentages you enter. Completed employees can be selected when needed.</p></div>
           {!rows.length ? <p className="p-5 text-sm text-slate-600">Add employees to this company in Company Workforce, then reload payroll.</p> : <div className="overflow-x-auto"><table className="w-full min-w-[1280px] text-left text-sm" data-testid="payroll-table"><thead className="bg-slate-50 text-slate-600"><tr><th scope="col" className="p-3"><input type="checkbox" aria-label="Select all employees" checked={rows.length > 0 && selected === rows.length} onChange={(event) => { setRows((items) => items.map((row) => ({ ...row, selected: event.target.checked }))); change(); }} /></th><th scope="col" className="min-w-56 p-3">Employee</th><th scope="col" className="w-28 p-3 text-center">Worked days</th><th scope="col" className="w-32 p-3">Daily rate (₹)</th><th scope="col" className="p-3">Gross wages</th><th scope="col" className="w-24 p-3">ESI (%)</th><th scope="col" className="p-3">ESI deduction</th><th scope="col" className="w-24 p-3">PF (%)</th><th scope="col" className="p-3">PF deduction</th><th scope="col" className="p-3">Payable</th></tr></thead><tbody>{rows.map((row) => {
