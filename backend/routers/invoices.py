@@ -7,23 +7,25 @@ from uuid import NAMESPACE_URL, UUID, uuid5
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import Field
-from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
 from starlette.concurrency import run_in_threadpool
 
 from lib.auth import require_admin
 from lib.db import db
-from lib.invoices import Invoice, InvoiceCompany, InvoiceCompanyInput, InvoiceInput, InvoiceModel, InvoiceProfile, calculate_invoice
+from lib.invoices import Invoice, InvoiceCompany, InvoiceCompanyInput, InvoiceInput, InvoiceModel, InvoiceNumber, InvoiceProfile, calculate_invoice
 
 router = APIRouter(prefix="/admin/invoices", dependencies=[Depends(require_admin)])
 
 
 class InvoiceCreate(InvoiceInput):
     request_id: UUID
+    invoice_number: InvoiceNumber
 
 
 class InvoiceUpdate(InvoiceInput):
     revision: int = Field(ge=1)
+    # Preserve the saved number for older clients that do not send this field.
+    invoice_number: InvoiceNumber | None = None
 
 
 class InvoiceStatusUpdate(InvoiceModel):
@@ -43,6 +45,15 @@ def validate_save(payload: InvoiceInput) -> None:
         raise HTTPException(422, "Enter a quantity and rate in at least one charge row")
     if not payload.service_month:
         raise HTTPException(422, "Select the service month this invoice belongs to")
+
+
+NUMBER_CONFLICT = "This invoice number is already in use. Enter a different invoice number."
+
+
+async def require_available_number(number: str, invoice_id: str | None = None) -> None:
+    existing = await db.invoices.find_one({"invoice_number": number}, {"id": 1})
+    if existing and existing.get("id") != invoice_id:
+        raise HTTPException(409, NUMBER_CONFLICT)
 
 
 async def find_company(company_id: UUID) -> InvoiceCompany:
@@ -130,21 +141,20 @@ async def create_invoice(payload: InvoiceCreate):
         if any(existing.get(key) != value for key, value in data.items()):
             raise HTTPException(409, "This request was already saved with different values. Reopen the saved invoice.")
         return Invoice(**{key: value for key, value in existing.items() if key != "_id"})
-    year = payload.invoice_date.year - (payload.invoice_date.month < 4)
-    period = f"{year % 100:02d}-{(year + 1) % 100:02d}"
-    counter = await db.invoice_counters.find_one_and_update(
-        {"_id": period}, {"$inc": {"number": 1}}, upsert=True, return_document=ReturnDocument.AFTER,
-    )
+    await require_available_number(payload.invoice_number)
     now = datetime.now(timezone.utc)
     invoice = Invoice(
-        **data, id=invoice_id, invoice_number=f"BWS/{period}/{counter['number']:04d}",
+        **data, id=invoice_id,
         revision=1, created_at=now, updated_at=now, totals=calculate_invoice(payload),
     )
     try:
         await db.invoices.insert_one({"_id": invoice_id, **invoice.model_dump(mode="json")})
     except DuplicateKeyError:
         existing = await db.invoices.find_one({"_id": invoice_id})
-        if not existing or any(existing.get(key) != value for key, value in data.items()):
+        if not existing:
+            # The unique invoice_number index also protects simultaneous saves.
+            raise HTTPException(409, NUMBER_CONFLICT)
+        if any(existing.get(key) != value for key, value in data.items()):
             raise HTTPException(409, "Invoice could not be saved. Please reload and try again.")
         return Invoice(**{key: value for key, value in existing.items() if key != "_id"})
     return invoice
@@ -166,7 +176,7 @@ async def get_invoice(invoice_id: str):
 @router.delete("/{invoice_id}", status_code=204)
 async def delete_invoice(invoice_id: str, revision: int = Query(ge=1)):
     await find_invoice(invoice_id)
-    # Match the reviewed version atomically; never reuse its invoice number.
+    # Match the reviewed version atomically.
     result = await db.invoices.delete_one({"id": invoice_id, "revision": revision})
     if result.deleted_count == 0:
         raise HTTPException(409, "This invoice changed in another session. Refresh the saved invoices before deleting it.")
@@ -183,14 +193,20 @@ async def update_invoice(invoice_id: str, payload: InvoiceUpdate):
         raise HTTPException(422, "A saved invoice stays with its company. Create a new invoice for another company.")
     if payload.invoice_date != old.invoice_date:
         raise HTTPException(422, "The date of a numbered invoice is fixed. Create a new invoice to use another date.")
+    number = payload.invoice_number if payload.invoice_number is not None else old.invoice_number
+    await require_available_number(number, old.id)
+    data = {**input_data(payload), "invoice_number": number}
     invoice = Invoice(
-        **input_data(payload), id=old.id, invoice_number=old.invoice_number,
+        **data, id=old.id,
         revision=payload.revision + 1, created_at=old.created_at,
         updated_at=datetime.now(timezone.utc), totals=calculate_invoice(payload), payment_status=old.payment_status,
     )
-    result = await db.invoices.update_one(
-        {"id": invoice_id, "revision": payload.revision}, {"$set": invoice.model_dump(mode="json")},
-    )
+    try:
+        result = await db.invoices.update_one(
+            {"id": invoice_id, "revision": payload.revision}, {"$set": invoice.model_dump(mode="json")},
+        )
+    except DuplicateKeyError:
+        raise HTTPException(409, NUMBER_CONFLICT)
     if result.matched_count == 0:
         raise HTTPException(409, "This invoice changed in another session. Reopen it before saving.")
     return invoice

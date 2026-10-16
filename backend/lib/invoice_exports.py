@@ -173,10 +173,10 @@ def export_pdf(invoice: Invoice) -> bytes:
     details = Table([[billed, period]], colWidths=[doc.width * .58, doc.width * .42])
     details.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#F1F5F9")), ("TOPPADDING", (0, 0), (-1, -1), 8), ("BOTTOMPADDING", (0, 0), (-1, -1), 8)]))
     story.extend([details, Spacer(1, 10)])
-    rows = [[p("Description", small_center), p("Men / Women", small_center), p("Quantity", small_center), p("Rate (INR)", small), p("Amount (INR)", small)]]
+    rows = [[p("Description", small), p("Men / Women", small_center), p("Quantity", small_center), p("Rate (INR)", small), p("Amount (INR)", small)]]
     for line in invoice.lines:
         label, gender = LINE_LABELS[line.key]
-        rows.append([p(label, small_center), p(gender, small_center), p(f"{line.quantity:g}", center), p(amount(line.rate)), p(amount(invoice.totals.line_amounts[line.key]))])
+        rows.append([p(label, small), p(gender, small_center), p(f"{line.quantity:g}", center), p(amount(line.rate)), p(amount(invoice.totals.line_amounts[line.key]))])
     table = Table(rows, colWidths=[doc.width * .31, doc.width * .16, doc.width * .13, doc.width * .19, doc.width * .21], repeatRows=1)
     table.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#E2E8F0")), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("LINEBELOW", (0, 0), (-1, -1), .4, colors.HexColor("#CBD5E1")), ("TOPPADDING", (0, 0), (-1, -1), 3.5), ("BOTTOMPADDING", (0, 0), (-1, -1), 3.5)]))
     story.extend([table, Spacer(1, 8)])

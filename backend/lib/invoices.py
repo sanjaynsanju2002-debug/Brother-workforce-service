@@ -11,6 +11,7 @@ from lib.months import MONTH_PATTERN, month_label, parse_billing_period
 Money = Annotated[Decimal, Field(ge=0, le=1_000_000_000, decimal_places=2, allow_inf_nan=False)]
 Quantity = Annotated[Decimal, Field(ge=0, le=1_000_000, decimal_places=2, allow_inf_nan=False)]
 Percentage = Annotated[Decimal, Field(ge=0, le=100, decimal_places=2, allow_inf_nan=False)]
+InvoiceNumber = Annotated[str, Field(min_length=1, max_length=16, pattern=r"^[A-Za-z0-9/-]+$")]
 LineKey = Literal["skilled_men", "skilled_women", "semi_men", "semi_women", "unskilled_men", "unskilled_women", "overtime", "other"]
 LINE_LABELS = {
     "skilled_men": ("Skilled", "Men"),
@@ -79,6 +80,9 @@ class InvoiceInput(InvoiceModel):
     # Keep the bill-to snapshot even if a company record changes in the future.
     # Older saved invoices have no company reference and remain readable.
     company_id: UUID | None = None
+    # A draft can calculate totals before its number is entered. Saving a new
+    # invoice requires the stricter InvoiceNumber field on InvoiceCreate.
+    invoice_number: str = Field(default="", max_length=16)
     client_name: str = Field(default="", max_length=150)
     client_address: str = Field(default="", max_length=500)
     client_gstin: str = Field(default="", max_length=30)

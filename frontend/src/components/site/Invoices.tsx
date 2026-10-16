@@ -15,7 +15,7 @@ type CompanyInput = { name: string; address: string; gstin: string };
 type Company = CompanyInput & { id: string; created_at: string };
 type PaymentStatus = "Pending" | "Paid";
 type Line = { key: string; quantity: string; rate: string };
-type Form = { company_id: string | null; client_name: string; client_address: string; client_gstin: string; invoice_date: string; due_date: string; service_month: string; billing_period: string; supplier: Profile; lines: Line[]; service_percentage: string; cgst_percentage: string | null; sgst_percentage: string | null; gst_amount: string; notes: string };
+type Form = { company_id: string | null; invoice_number: string; client_name: string; client_address: string; client_gstin: string; invoice_date: string; due_date: string; service_month: string; billing_period: string; supplier: Profile; lines: Line[]; service_percentage: string; cgst_percentage: string | null; sgst_percentage: string | null; gst_amount: string; notes: string };
 type Totals = { line_amounts: Record<string, string>; base_amount: string; service_charge: string; subtotal: string; cgst_amount: string; sgst_amount: string; gst_amount: string; total: string };
 type Invoice = Omit<Form, "due_date" | "service_month"> & { due_date: string | null; service_month: string | null; id: string; invoice_number: string; revision: number; totals: Totals; payment_status: PaymentStatus; created_at: string; updated_at: string };
 type InvoicePage = { items: Invoice[]; total: number; page: number; page_size: number };
@@ -35,7 +35,7 @@ const normalizedName = (name: string) => name.trim().replace(/\s+/g, " ").toLoca
 function emptyForm(supplier: Profile, company?: Company): Form {
   const invoiceDate = today();
   const serviceMonth = previousMonth(invoiceDate);
-  return { company_id: company?.id || null, client_name: company?.name || "", client_address: company?.address || "", client_gstin: company?.gstin || "", invoice_date: invoiceDate, due_date: "", service_month: serviceMonth, billing_period: monthLabel(serviceMonth), supplier: { ...supplier }, lines: ROWS.map(([key]) => ({ key, quantity: "0", rate: "0" })), service_percentage: "0", cgst_percentage: "0", sgst_percentage: "0", gst_amount: "0", notes: "" };
+  return { company_id: company?.id || null, invoice_number: "", client_name: company?.name || "", client_address: company?.address || "", client_gstin: company?.gstin || "", invoice_date: invoiceDate, due_date: "", service_month: serviceMonth, billing_period: monthLabel(serviceMonth), supplier: { ...supplier }, lines: ROWS.map(([key]) => ({ key, quantity: "0", rate: "0" })), service_percentage: "0", cgst_percentage: "0", sgst_percentage: "0", gst_amount: "0", notes: "" };
 }
 
 function formData(form: Form) {
@@ -43,8 +43,8 @@ function formData(form: Form) {
 }
 
 function fromInvoice(invoice: Invoice): Form {
-  const { company_id, client_name, client_address, client_gstin, invoice_date, due_date, service_month, billing_period, supplier, lines, service_percentage, cgst_percentage, sgst_percentage, gst_amount, notes } = invoice;
-  return { company_id: company_id || null, client_name, client_address, client_gstin, invoice_date, due_date: due_date || "", service_month: service_month || "", billing_period, supplier: { ...supplier }, lines: lines.map((line) => ({ ...line })), service_percentage, cgst_percentage: cgst_percentage ?? null, sgst_percentage: sgst_percentage ?? null, gst_amount, notes };
+  const { company_id, invoice_number, client_name, client_address, client_gstin, invoice_date, due_date, service_month, billing_period, supplier, lines, service_percentage, cgst_percentage, sgst_percentage, gst_amount, notes } = invoice;
+  return { company_id: company_id || null, invoice_number, client_name, client_address, client_gstin, invoice_date, due_date: due_date || "", service_month: service_month || "", billing_period, supplier: { ...supplier }, lines: lines.map((line) => ({ ...line })), service_percentage, cgst_percentage: cgst_percentage ?? null, sgst_percentage: sgst_percentage ?? null, gst_amount, notes };
 }
 
 function errorMessage(error: unknown) {
@@ -245,16 +245,17 @@ export default function Invoices() {
       {(!!selectedCompany || !!saved) && <form ref={formRef} onSubmit={(event) => { event.preventDefault(); saveAs(); }} className="space-y-6">
         <fieldset disabled={busy} className="min-w-0 space-y-6">
           <div className="rounded-xl border border-slate-200 bg-white p-4 sm:p-6">
-            <h2 className="mb-2 flex items-center justify-center gap-2 text-center font-semibold text-[#0F2444]" data-testid="invoice-heading"><FileText className="h-4 w-4 shrink-0 text-[#C2410C]" /><span className="min-w-0 break-words">{saved?.invoice_number || "New invoice"}</span></h2>
+            <h2 className="mb-2 flex items-center justify-center gap-2 text-center font-semibold text-[#0F2444]" data-testid="invoice-heading"><FileText className="h-4 w-4 shrink-0 text-[#C2410C]" /><span className="min-w-0 break-words">{form.invoice_number || "New invoice"}</span></h2>
             <p className="mb-4 text-center text-xs text-slate-500">{saved ? `Payment status: ${saved.payment_status}` : "New invoices are saved as Pending."}{dirty && <span className="ml-2 text-amber-700">Unsaved changes</span>}</p>
             <div className="grid gap-4 sm:grid-cols-2">
+              <div><Label htmlFor="invoice-number" className="mb-2 block">Invoice number *</Label><Input id="invoice-number" required maxLength={16} pattern={"[A-Za-z0-9\\/\\-]+"} value={form.invoice_number} onChange={(e) => edit({ invoice_number: e.target.value })} aria-describedby="invoice-number-help" data-testid="invoice-number" /><p id="invoice-number-help" className="mt-1 text-xs text-slate-500">Enter your own invoice number. Use up to 16 letters, numbers, / or -.</p></div>
               <div><Label htmlFor="invoice-client" className="mb-2 block">Client / company name *</Label><Input id="invoice-client" value={form.client_name} readOnly={!!form.company_id} required maxLength={150} onChange={(e) => edit({ client_name: e.target.value })} data-testid="invoice-client" /></div>
               <div><Label htmlFor="invoice-service-month" className="mb-2 block">Service month *</Label><Input id="invoice-service-month" type="month" required value={form.service_month} onChange={(e) => edit({ service_month: e.target.value, billing_period: e.target.value ? monthLabel(e.target.value) : "" })} data-testid="invoice-service-month" /><p className="mt-1 text-xs text-slate-500">Choose the month the work was done. October services billed in November count as October revenue.</p></div>
               <div><Label htmlFor="invoice-date" className="mb-2 block">Invoice date *</Label><Input id="invoice-date" type="date" required disabled={!!saved} value={form.invoice_date} onChange={(e) => {
                 const invoiceDate = e.target.value;
                 if (invoiceDate && form.service_month === previousMonth(form.invoice_date)) { const serviceMonth = previousMonth(invoiceDate); edit({ invoice_date: invoiceDate, service_month: serviceMonth, billing_period: monthLabel(serviceMonth) }); }
                 else edit({ invoice_date: invoiceDate });
-              }} /><p className="mt-1 text-xs text-slate-500">{saved ? "The date stays fixed after an invoice is numbered." : "New invoices start with the previous service month. You can change it above."}</p></div>
+              }} /><p className="mt-1 text-xs text-slate-500">{saved ? "The date stays fixed after an invoice is saved." : "New invoices start with the previous service month. You can change it above."}</p></div>
               <div><Label htmlFor="invoice-due" className="mb-2 block">Payment due date</Label><Input id="invoice-due" type="date" min={form.invoice_date} value={form.due_date} onChange={(e) => edit({ due_date: e.target.value })} /></div>
               <div><Label htmlFor="invoice-address" className="mb-2 block">Client address</Label><Textarea id="invoice-address" value={form.client_address} maxLength={500} onChange={(e) => edit({ client_address: e.target.value })} /></div>
               <div><Label htmlFor="invoice-gstin" className="mb-2 block">Client GSTIN</Label><Input id="invoice-gstin" value={form.client_gstin} maxLength={30} onChange={(e) => edit({ client_gstin: e.target.value })} /></div>

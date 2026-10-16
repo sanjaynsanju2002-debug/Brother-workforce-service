@@ -40,7 +40,7 @@ def payload():
         if line["key"] == "other":
             line.update(quantity="1", rate="850")
     return {
-        "request_id": str(uuid4()), "client_name": "Example Manufacturing Pvt Ltd",
+        "request_id": str(uuid4()), "invoice_number": f"INV-{uuid4().hex[:12]}", "client_name": "Example Manufacturing Pvt Ltd",
         "client_address": "Hebbal Industrial Area\nMysore, Karnataka", "client_gstin": "",
         "invoice_date": "2026-10-16", "due_date": "2026-11-15", "billing_period": "October 2026",
         "lines": lines, "service_percentage": "10", "cgst_percentage": "0", "sgst_percentage": "0",
@@ -52,7 +52,7 @@ def saved_invoice(data=None):
     data = data or payload()
     data = {key: value for key, value in data.items() if key != "request_id"}
     model = InvoiceInput(**data)
-    return Invoice(**model.model_dump(), id=str(uuid4()), invoice_number="BWS/26-27/0001", revision=1,
+    return Invoice(**model.model_dump(exclude={"invoice_number"}), id=str(uuid4()), invoice_number="BWS/26-27/0001", revision=1,
                    created_at=datetime.now(timezone.utc), updated_at=datetime.now(timezone.utc), totals=calculate_invoice(model))
 
 
@@ -238,6 +238,8 @@ class InvoiceCollection:
     async def insert_one(self, data):
         if "_id" in data and any(row.get("_id") == data["_id"] for row in self.records):
             raise DuplicateKeyError("duplicate _id")
+        if "invoice_number" in data and any(row.get("invoice_number") == data["invoice_number"] for row in self.records):
+            raise DuplicateKeyError("duplicate invoice_number")
         self.records.append(copy.deepcopy(data))
 
     async def count_documents(self, query):
@@ -258,6 +260,9 @@ class InvoiceCollection:
         row = next((row for row in self.records if all(row.get(k) == v for k, v in query.items())), None)
         if row is None:
             return SimpleNamespace(matched_count=0)
+        number = changes["$set"].get("invoice_number")
+        if number is not None and any(other is not row and other.get("invoice_number") == number for other in self.records):
+            raise DuplicateKeyError("duplicate invoice_number")
         row.update(copy.deepcopy(changes["$set"]))
         return SimpleNamespace(matched_count=1)
 
@@ -279,7 +284,7 @@ async def test_private_create_retry_update_conflict_and_downloads(monkeypatch):
     monkeypatch.setattr(invoices, "db", fake)
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="https://brothersworkforcesolutions.in") as client:
-        data = payload()
+        data = {**payload(), "invoice_number": "MYS/26-27/0123"}
         assert (await client.get("/api/admin/invoices")).status_code == 401
         assert (await client.post("/api/admin/invoices", json=data)).status_code == 401
         assert (await client.get("/api/admin/invoices/missing/download/pdf")).status_code == 401
@@ -297,14 +302,14 @@ async def test_private_create_retry_update_conflict_and_downloads(monkeypatch):
         created = await client.post("/api/admin/invoices", json=data)
         assert created.status_code == 200, created.text
         invoice = created.json()
-        assert invoice["invoice_number"] == "BWS/26-27/0001"
+        assert invoice["invoice_number"] == data["invoice_number"]
         assert invoice["totals"]["total"] == "298100.00"
         assert invoice["payment_status"] == "Pending"
         retry = await client.post("/api/admin/invoices", json=data)
         assert retry.status_code == 200
         assert retry.json()["id"] == invoice["id"]
         assert len(fake.invoices.records) == 1
-        assert fake.invoice_counters.records[0]["number"] == 1
+        assert fake.invoice_counters.records == []
         assert (await client.post("/api/admin/invoices", json={**data, "service_percentage": "8"})).status_code == 409
         update = {key: value for key, value in data.items() if key != "request_id"}
         update.update(revision=1, service_percentage="8", cgst_percentage="9", sgst_percentage="9")
@@ -324,7 +329,7 @@ async def test_private_create_retry_update_conflict_and_downloads(monkeypatch):
             assert result.status_code == 200
             assert result.content.startswith(signature)
             assert "private, no-store" in result.headers["cache-control"]
-            assert "BWS-26-27-0001" in result.headers["content-disposition"]
+            assert data["invoice_number"].replace("/", "-") in result.headers["content-disposition"]
         invalid = {**data, "request_id": str(uuid4()), "client_name": " "}
         assert (await client.post("/api/admin/invoices", json=invalid)).status_code == 422
 
@@ -448,5 +453,90 @@ async def test_delete_is_private_checks_revision_and_preserves_other_records_and
             assert (await client.get(f"{path}{suffix}")).status_code == 404
         assert (await client.delete(path, params={"revision": revision})).status_code == 404
         assert (await client.patch(f"{path}/status", json={"payment_status": "Paid", "revision": revision})).status_code == 404
-        next_invoice = (await client.post("/api/admin/invoices", json={**payload(), "company_id": companies[0]["id"], "client_name": companies[0]["name"]})).json()
-        assert next_invoice["invoice_number"] == "BWS/26-27/0003"
+        next_data = {**payload(), "company_id": companies[0]["id"], "client_name": companies[0]["name"], "invoice_number": "OWNER-CHOSEN-003"}
+        next_invoice = (await client.post("/api/admin/invoices", json=next_data)).json()
+        assert next_invoice["invoice_number"] == next_data["invoice_number"]
+        assert fake.invoice_counters.records == []
+
+
+@pytest.mark.asyncio
+async def test_manual_number_required_unique_editable_and_used_in_downloads(monkeypatch):
+    fake = FakeDB()
+    fake.invoices = InvoiceCollection()
+    fake.invoice_companies = InvoiceCollection()
+    monkeypatch.setattr(auth, "db", fake)
+    monkeypatch.setattr(invoices, "db", fake)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="https://brothersworkforcesolutions.in") as client:
+        await client.post("/api/admin/login", json={"pin": "123456"})
+        company = (await client.post("/api/admin/invoices/companies", json={"name": "Manual invoice customer"})).json()
+        data = {**payload(), "company_id": company["id"], "invoice_number": "MANUAL/001"}
+        draft = {key: value for key, value in data.items() if key not in ("request_id", "invoice_number")}
+        assert (await client.post("/api/admin/invoices/preview", json=draft)).status_code == 200
+        assert (await client.post("/api/admin/invoices", json={**draft, "request_id": data["request_id"]})).status_code == 422
+        for number in ("", "   ", "X" * 17, "INV 001", 'INV"001', "INV\n001", "INV.001"):
+            assert (await client.post("/api/admin/invoices", json={**data, "invoice_number": number})).status_code == 422
+        assert fake.invoices.records == []
+        created = (await client.post("/api/admin/invoices", json={**data, "invoice_number": "  MANUAL/001  "})).json()
+        assert created["invoice_number"] == "MANUAL/001"
+        assert (await client.post("/api/admin/invoices", json=data)).json()["id"] == created["id"]
+        assert (await client.post("/api/admin/invoices", json={**data, "request_id": str(uuid4())})).status_code == 409
+        second = await client.post("/api/admin/invoices", json={**data, "request_id": str(uuid4()), "invoice_number": "MANUAL/002"})
+        assert second.status_code == 200
+        path = f"/api/admin/invoices/{created['id']}"
+        update = {key: value for key, value in created.items() if key in invoices.InvoiceUpdate.model_fields}
+        assert (await client.put(path, json={**update, "invoice_number": "MANUAL/002"})).status_code == 409
+        assert (await client.get(path)).json() == created
+        changed = await client.put(path, json={**update, "invoice_number": "MY-CUSTOM-003"})
+        assert changed.status_code == 200, changed.text
+        assert changed.json()["invoice_number"] == "MY-CUSTOM-003"
+        assert changed.json()["id"] == created["id"]
+        assert changed.json()["totals"] == created["totals"]
+        assert (await client.put(path, json={**update, "invoice_number": "MY-CUSTOM-004"})).status_code == 409
+        for format in ("pdf", "xlsx"):
+            downloaded = await client.get(f"{path}/download/{format}")
+            assert downloaded.status_code == 200
+            assert f'MY-CUSTOM-003.{format}' in downloaded.headers["content-disposition"]
+            if format == "pdf":
+                assert "MY-CUSTOM-003" in PdfReader(BytesIO(downloaded.content)).pages[0].extract_text()
+            else:
+                with ZipFile(BytesIO(downloaded.content)) as archive:
+                    ns = {"s": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
+                    sheet = ET.fromstring(archive.read("xl/worksheets/sheet1.xml"))
+                    assert sheet.find(".//s:c[@r='F4']/s:is/s:t", ns).text == "MY-CUSTOM-003"
+        # A client without the new field can still edit an existing invoice.
+        update.pop("invoice_number")
+        unchanged_number = await client.put(path, json={**update, "revision": 2, "notes": "Updated payment note"})
+        assert unchanged_number.status_code == 200
+        assert unchanged_number.json()["invoice_number"] == "MY-CUSTOM-003"
+
+
+@pytest.mark.asyncio
+async def test_number_conflicts_with_old_invoices_and_database_races_are_clear(monkeypatch):
+    fake = FakeDB()
+    fake.invoices = InvoiceCollection()
+    fake.invoice_companies = InvoiceCollection()
+    monkeypatch.setattr(auth, "db", fake)
+    monkeypatch.setattr(invoices, "db", fake)
+    old = saved_invoice().model_dump(mode="json")
+    await fake.invoices.insert_one(old)
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="https://brothersworkforcesolutions.in") as client:
+        await client.post("/api/admin/login", json={"pin": "123456"})
+        company = (await client.post("/api/admin/invoices/companies", json={"name": "Number collision customer"})).json()
+        data = {**payload(), "company_id": company["id"], "invoice_number": old["invoice_number"]}
+        conflict = await client.post("/api/admin/invoices", json=data)
+        assert conflict.status_code == 409
+        assert "number is already in use" in conflict.json()["detail"]
+
+        async def collide(*args, **kwargs):
+            raise DuplicateKeyError("invoice_number raced with another save")
+
+        monkeypatch.setattr(fake.invoices, "insert_one", collide)
+        raced_create = await client.post("/api/admin/invoices", json={**data, "invoice_number": "MANUAL-RACE-001"})
+        assert raced_create.status_code == 409
+        assert "number is already in use" in raced_create.json()["detail"]
+        monkeypatch.setattr(fake.invoices, "update_one", collide)
+        update = {key: value for key, value in old.items() if key in invoices.InvoiceUpdate.model_fields}
+        raced_update = await client.put(f"/api/admin/invoices/{old['id']}", json={**update, "invoice_number": "MANUAL-RACE-002"})
+        assert raced_update.status_code == 409
+        assert "number is already in use" in raced_update.json()["detail"]
+        assert fake.invoices.records == [old]
