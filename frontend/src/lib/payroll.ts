@@ -7,6 +7,8 @@ export type PayrollEmployee = {
 export type PayrollAmounts = { assignment_id: string; gross_wages: string; esi_deduction: string; pf_deduction: string; payable: string };
 export type PayrollTotals = { employee_count: number; worked_days: string; gross_wages: string; esi_deduction: string; pf_deduction: string; payable: string };
 export type PayrollRow = PayrollEmployee & { selected: boolean; worked_days: string; daily_rate: string; esi_percentage: string; pf_percentage: string };
+export type PayrollValueField = "worked_days" | "daily_rate" | "esi_percentage" | "pf_percentage";
+export type PayrollIssue = { assignment_id: string; field: PayrollValueField; message: string };
 export type PayrollInput = { company_id: string; month: string; notes: string; lines: { assignment_id: string; worked_days: string; daily_rate: string; esi_percentage: string; pf_percentage: string }[] };
 export type PayrollRecord = {
   id: string; company_id: string; company_name: string; company_location: string; month: string; notes: string;
@@ -29,6 +31,39 @@ export function payrollRows(draft: PayrollDraft): PayrollRow[] {
       pf_percentage: line?.pf_percentage ?? "0",
     };
   });
+}
+
+// All included employees must be checked even when only one employee's inputs
+// are mounted in the details panel. Amounts still come from the backend.
+export function firstPayrollIssue(rows: PayrollRow[], monthDays: number): PayrollIssue | undefined {
+  const included = rows.filter((row) => row.selected);
+  for (const row of included) {
+    for (const [field, label, maximum] of [
+      ["worked_days", "worked days", monthDays], ["daily_rate", "daily rate", 1_000_000_000],
+      ["esi_percentage", "ESI percentage", 100], ["pf_percentage", "PF percentage", 100],
+    ] as const) {
+      const value = row[field].trim();
+      if (field === "daily_rate" && !value && Number(row.worked_days) === 0) continue;
+      if (!value || !/^(?:\d+|\d*\.\d{1,2})$/.test(value) || !Number.isFinite(Number(value)) || Number(value) > maximum) {
+        return { assignment_id: row.assignment_id, field, message: `${row.full_name}: enter ${label} from 0 to ${maximum}, with up to 2 decimal places.` };
+      }
+      if (field === "daily_rate" && Number(row.worked_days) > 0 && Number(value) === 0) {
+        return { assignment_id: row.assignment_id, field, message: `${row.full_name}: enter a daily rate greater than 0 for worked days.` };
+      }
+    }
+    if (Math.round(Number(row.esi_percentage) * 100) + Math.round(Number(row.pf_percentage) * 100) > 10_000) {
+      return { assignment_id: row.assignment_id, field: "pf_percentage", message: `${row.full_name}: combined ESI and PF percentages cannot exceed 100%.` };
+    }
+  }
+  if (included.length && !included.some((row) => Number(row.worked_days) > 0)) {
+    return { assignment_id: included[0].assignment_id, field: "worked_days", message: "Enter worked days for at least one included employee." };
+  }
+}
+
+export function payrollDeductionTotal(totals: PayrollTotals): string {
+  const paise = (value: string) => { const [whole, fraction = ""] = value.split("."); return BigInt(whole) * 100n + BigInt(fraction.padEnd(2, "0")); };
+  const total = paise(totals.esi_deduction) + paise(totals.pf_deduction);
+  return `${total / 100n}.${String(total % 100n).padStart(2, "0")}`;
 }
 
 export function payrollError(error: unknown): string {
