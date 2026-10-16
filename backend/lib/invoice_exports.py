@@ -129,7 +129,7 @@ def export_xlsx(invoice: Invoice) -> bytes:
 def export_pdf(invoice: Invoice) -> bytes:
     import reportlab
     from reportlab.lib import colors
-    from reportlab.lib.enums import TA_RIGHT
+    from reportlab.lib.enums import TA_CENTER
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
     from reportlab.pdfbase import pdfmetrics
@@ -146,10 +146,10 @@ def export_pdf(invoice: Invoice) -> bytes:
     doc = SimpleDocTemplate(output, pagesize=A4, rightMargin=36, leftMargin=36, topMargin=30, bottomMargin=36,
                             title=invoice.invoice_number, author=invoice.supplier.name)
     styles = getSampleStyleSheet()
-    normal = ParagraphStyle("InvoiceBody", parent=styles["Normal"], fontName="InvoiceSans", fontSize=9, leading=13, textColor=colors.HexColor("#0F2444"))
+    normal = ParagraphStyle("InvoiceBody", parent=styles["Normal"], fontName="InvoiceSans", fontSize=9, leading=13, alignment=TA_CENTER, textColor=colors.HexColor("#0F2444"))
     small = ParagraphStyle("InvoiceSmall", parent=normal, fontSize=8, leading=11)
+    bold = ParagraphStyle("InvoiceBold", parent=normal, fontName="InvoiceSansBold")
     heading = ParagraphStyle("InvoiceHeading", parent=normal, fontName="InvoiceSansBold", fontSize=11, leading=15)
-    right = ParagraphStyle("InvoiceRight", parent=normal, alignment=TA_RIGHT)
 
     def p(text, style=normal):
         return Paragraph(escape(str(text)).replace("\n", "<br/>"), style)
@@ -158,50 +158,58 @@ def export_pdf(invoice: Invoice) -> bytes:
         return f"{value:,.2f}"
 
     with ZipFile(TEMPLATE) as archive:
-        logo = Image(BytesIO(archive.read("xl/media/image.png")), width=100, height=68.2)
-    metadata = [p("INVOICE", heading), p(invoice.invoice_number, heading), p(f"Date: {invoice.invoice_date:%d/%m/%Y}"),
-                p(f"Payment due: {invoice.due_date:%d/%m/%Y}" if invoice.due_date else "")]
-    story = [Table([[logo, metadata]], colWidths=[doc.width * .58, doc.width * .42]), Spacer(1, 12)]
+        logo = Image(BytesIO(archive.read("xl/media/image.png")), width=80, height=54.56)
+    logo.hAlign = "CENTER"
+    story = [logo, Spacer(1, 6)]
     supplier = invoice.supplier
     story.extend([p(supplier.name, heading), p(supplier.address), p(f"{supplier.phone}  |  {supplier.email}", small),
-                  p(supplier.website, small), p(f"GSTIN: {supplier.gstin}" if supplier.gstin else "", small), Spacer(1, 14)])
+                  p(supplier.website, small), p(f"GSTIN: {supplier.gstin}" if supplier.gstin else "", small), Spacer(1, 6),
+                  p("INVOICE", heading), p(invoice.invoice_number, heading),
+                  p(f"Date: {invoice.invoice_date:%d/%m/%Y}" + (f"  |  Payment due: {invoice.due_date:%d/%m/%Y}" if invoice.due_date else ""), small), Spacer(1, 8)])
     billed = [p("BILL TO", heading), p(invoice.client_name), p(invoice.client_address), p(f"GSTIN: {invoice.client_gstin}" if invoice.client_gstin else "")]
     period = [p("BILLING PERIOD", heading), p(invoice.billing_period or "-")]
-    details = Table([[billed, period]], colWidths=[doc.width * .58, doc.width * .42])
-    details.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#F1F5F9")), ("TOPPADDING", (0, 0), (-1, -1), 10), ("BOTTOMPADDING", (0, 0), (-1, -1), 10)]))
-    story.extend([details, Spacer(1, 16)])
+    details = Table([[billed, period]], colWidths=[doc.width * .5, doc.width * .5])
+    details.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#F1F5F9")), ("TOPPADDING", (0, 0), (-1, -1), 8), ("BOTTOMPADDING", (0, 0), (-1, -1), 8)]))
+    story.extend([details, Spacer(1, 10)])
     rows = [[p("Description", small), p("Men / Women", small), p("Quantity", small), p("Rate (INR)", small), p("Amount (INR)", small)]]
     for line in invoice.lines:
         label, gender = LINE_LABELS[line.key]
-        rows.append([p(label, small), p(gender, small), p(f"{line.quantity:g}", right), p(amount(line.rate), right), p(amount(invoice.totals.line_amounts[line.key]), right)])
+        rows.append([p(label, small), p(gender, small), p(f"{line.quantity:g}"), p(amount(line.rate)), p(amount(invoice.totals.line_amounts[line.key]))])
     table = Table(rows, colWidths=[doc.width * .31, doc.width * .16, doc.width * .13, doc.width * .19, doc.width * .21], repeatRows=1)
-    table.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#E2E8F0")), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("LINEBELOW", (0, 0), (-1, -1), .4, colors.HexColor("#CBD5E1")), ("TOPPADDING", (0, 0), (-1, -1), 4), ("BOTTOMPADDING", (0, 0), (-1, -1), 4)]))
-    story.extend([table, Spacer(1, 12)])
+    table.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#E2E8F0")), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("LINEBELOW", (0, 0), (-1, -1), .4, colors.HexColor("#CBD5E1")), ("TOPPADDING", (0, 0), (-1, -1), 3.5), ("BOTTOMPADDING", (0, 0), (-1, -1), 3.5)]))
+    story.extend([table, Spacer(1, 8)])
     totals = invoice.totals
     tax_rows = [
-        [p(f"CGST ({invoice.cgst_percentage:g}%)"), p(amount(totals.cgst_amount), right)],
-        [p(f"SGST ({invoice.sgst_percentage:g}%)"), p(amount(totals.sgst_amount), right)],
-    ] if invoice.uses_gst_percentages else [[p("GST (recorded amount)"), p(amount(totals.gst_amount), right)]]
+        [p(f"CGST ({invoice.cgst_percentage:g}%)"), p(amount(totals.cgst_amount))],
+        [p(f"SGST ({invoice.sgst_percentage:g}%)"), p(amount(totals.sgst_amount))],
+    ] if invoice.uses_gst_percentages else [[p("GST (recorded amount)"), p(amount(totals.gst_amount))]]
+    # Wages cover the six workforce rows. Keep extras separate so the wage label
+    # remains accurate without changing the saved service-charge or GST totals.
+    wages = totals.base_amount - totals.line_amounts["overtime"] - totals.line_amounts["other"]
+    additional_rows = [
+        [p(LINE_LABELS[key][0]), p(amount(totals.line_amounts[key]))]
+        for key in ("overtime", "other") if totals.line_amounts[key]
+    ]
     summary = Table([
-        [p("Worker, overtime and other charges"), p(amount(totals.base_amount), right)],
-        [p(f"Service charge ({invoice.service_percentage:g}%)"), p(amount(totals.service_charge), right)],
-        [p("Subtotal before GST"), p(amount(totals.subtotal), right)],
+        [p("Total wages"), p(amount(wages))],
+        *additional_rows,
+        [p(f"Service charge ({invoice.service_percentage:g}%)"), p(amount(totals.service_charge))],
+        [p("Subtotal before GST", bold), p(amount(totals.subtotal), bold)],
         *tax_rows,
-        [p("TOTAL (INR)", heading), p(amount(totals.total), right)],
-    ], colWidths=[doc.width * .73, doc.width * .27])
-    summary.setStyle(TableStyle([("TOPPADDING", (0, 0), (-1, -1), 4), ("BOTTOMPADDING", (0, 0), (-1, -1), 4), ("BACKGROUND", (0, -1), (-1, -1), colors.HexColor("#FFEDD5"))]))
-    story.extend([summary, Spacer(1, 12)])
+        [p("TOTAL (INR)", heading), p(amount(totals.total), bold)],
+    ], colWidths=[doc.width * .79, doc.width * .21])
+    summary.setStyle(TableStyle([("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3), ("BACKGROUND", (0, -1), (-1, -1), colors.HexColor("#FFEDD5"))]))
+    story.extend([summary, Spacer(1, 8)])
     if supplier.payment_details:
-        story.extend([p("PAYMENT DETAILS", heading), p(supplier.payment_details), Spacer(1, 12)])
+        story.extend([p("PAYMENT DETAILS", heading), p(supplier.payment_details), Spacer(1, 8)])
     if invoice.notes:
-        story.extend([p("Notes", heading), p(invoice.notes), Spacer(1, 12)])
-    story.append(KeepTogether([p(f"For {supplier.name}", right), Spacer(1, 16), p("Authorised signatory", right)]))
+        story.extend([p("Notes", heading), p(invoice.notes), Spacer(1, 8)])
+    story.append(KeepTogether([p(f"For {supplier.name}"), Spacer(1, 16), p("Authorised signatory")]))
 
     def footer(canvas, document):
         canvas.setFont("InvoiceSans", 8)
         canvas.setFillColor(colors.HexColor("#64748B"))
-        canvas.drawString(36, 19, invoice.invoice_number)
-        canvas.drawRightString(A4[0] - 36, 19, f"Page {document.page}")
+        canvas.drawCentredString(A4[0] / 2, 19, f"{invoice.invoice_number}  |  Page {document.page}")
 
     doc.build(story, onFirstPage=footer, onLaterPages=footer)
     return output.getvalue()
