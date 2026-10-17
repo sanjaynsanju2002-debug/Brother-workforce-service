@@ -1,3 +1,4 @@
+import { translateText, useSiteLanguage } from "@/lib/language";
 import { useQuery } from "@tanstack/react-query";
 import {
   CartesianGrid,
@@ -17,6 +18,7 @@ function shortDate(iso: string): string {
 }
 
 export default function TrafficChart({ pin }: { pin: string }) {
+  useSiteLanguage();
   const q = "?days=30";
   const daily = useQuery({
     queryKey: ["admin-traffic-daily", pin],
@@ -31,16 +33,12 @@ export default function TrafficChart({ pin }: { pin: string }) {
 
   return (
     <div className="mt-6 rounded-lg border border-slate-200 bg-white p-4 sm:p-6" data-testid="traffic-chart">
-      <h2 className="text-base font-semibold text-[#0F2444]">Last 30 Days</h2>
-      <p className="mt-1 text-sm text-slate-500">
-        Daily website visits against worker registrations and manpower requests.
-      </p>
+      <h2 className="text-base font-semibold text-[#0F2444]">{translateText("Last 30 Days")}</h2>
+      <p className="mt-1 text-sm text-slate-500">{translateText("Daily website visits against worker registrations and manpower requests.")}</p>
 
       <div className="mt-5 h-[230px] w-full sm:h-[280px]">
         {data.length === 0 ? (
-          <div className="flex h-full items-center justify-center text-sm text-slate-400">
-            Loading chart…
-          </div>
+          <div className="flex h-full items-center justify-center text-sm text-slate-400">{translateText("Loading chart…")}</div>
         ) : (
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={data} margin={{ top: 5, right: 10, bottom: 0, left: -20 }}>
@@ -64,7 +62,7 @@ export default function TrafficChart({ pin }: { pin: string }) {
               <Line
                 type="monotone"
                 dataKey="visits"
-                name="Visits"
+                name={translateText("Visits")}
                 stroke="#0F2444"
                 strokeWidth={2.5}
                 dot={false}
@@ -73,7 +71,7 @@ export default function TrafficChart({ pin }: { pin: string }) {
               <Line
                 type="monotone"
                 dataKey="applications"
-                name="Worker Registrations"
+                name={translateText("Worker Registrations")}
                 stroke="#EA580C"
                 strokeWidth={2.5}
                 dot={false}
@@ -82,7 +80,7 @@ export default function TrafficChart({ pin }: { pin: string }) {
               <Line
                 type="monotone"
                 dataKey="requests"
-                name="Manpower Requests"
+                name={translateText("Manpower Requests")}
                 stroke="#16A34A"
                 strokeWidth={2.5}
                 dot={false}
@@ -101,15 +99,13 @@ export default function TrafficChart({ pin }: { pin: string }) {
         ].map(([color, label]) => (
           <span key={label} className="inline-flex items-center gap-2">
             <span className="h-2.5 w-2.5 rounded-full" style={{ background: color }} />
-            {label}
+            {translateText(label)}
           </span>
         ))}
       </div>
 
       {!hasAny && data.length > 0 && (
-        <p className="mt-3 text-xs text-slate-500" data-testid="traffic-chart-empty">
-          No activity recorded yet — the lines will fill in as people visit and apply.
-        </p>
+        <p className="mt-3 text-xs text-slate-500" data-testid="traffic-chart-empty">{translateText("No activity recorded yet — the lines will fill in as people visit and apply.")}</p>
       )}
     </div>
   );

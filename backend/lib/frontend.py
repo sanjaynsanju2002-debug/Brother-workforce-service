@@ -44,7 +44,7 @@ class WebsiteFiles(StaticFiles):
     async def get_response(self, path, scope):
         response = await super().get_response(path, scope)
         # Let installed clients discover new releases on their next visit.
-        if path in {"sw.js", "install.js", "manifest.webmanifest", "offline.html"}:
+        if path in {"sw.js", "install.js", "language.js", "manifest.webmanifest", "offline.html"}:
             response.headers["Cache-Control"] = "no-cache"
         elif response.headers.get("content-type", "").startswith("text/html"):
             response.headers["Cache-Control"] = "no-store, max-age=0"

@@ -1,3 +1,4 @@
+import { translateText, useSiteLanguage } from "@/lib/language";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Building2, Eye, EyeOff, ImagePlus, Loader2, Plus, Trash2 } from "lucide-react";
@@ -31,6 +32,7 @@ function apiMessage(err: unknown, fallback: string): string {
 const EMPTY = { name: "", industry: "", location: "", headcount: "", service_summary: "", outcome: "" };
 
 export default function ClientsManager({ pin }: { pin: string }) {
+  useSiteLanguage();
   const qc = useQueryClient();
   const q = "";
   const key = ["admin-clients", pin];
@@ -49,9 +51,9 @@ export default function ClientsManager({ pin }: { pin: string }) {
     onSuccess: () => {
       setForm(EMPTY);
       refresh();
-      toast.success("Client added");
+      toast.success(translateText("Client added"));
     },
-    onError: (e) => toast.error(apiMessage(e, "Could not add client")),
+    onError: (e) => toast.error(translateText(apiMessage(e, "Could not add client"))),
   });
 
   const edit = useMutation({
@@ -60,25 +62,25 @@ export default function ClientsManager({ pin }: { pin: string }) {
       setEditingClientId(null);
       setForm(EMPTY);
       refresh();
-      toast.success("Client profile updated");
+      toast.success(translateText("Client profile updated"));
     },
-    onError: (e) => toast.error(apiMessage(e, "Could not update client")),
+    onError: (e) => toast.error(translateText(apiMessage(e, "Could not update client"))),
   });
 
   const toggle = useMutation({
     mutationFn: (v: { id: string; visible: boolean }) =>
       apiPatch<Client>(`/admin/clients/${v.id}${q}`, { visible: v.visible }),
     onSuccess: refresh,
-    onError: (e) => toast.error(apiMessage(e, "Could not update client")),
+    onError: (e) => toast.error(translateText(apiMessage(e, "Could not update client"))),
   });
 
   const remove = useMutation({
     mutationFn: (id: string) => apiDelete<{ ok: boolean }>(`/admin/clients/${id}${q}`),
     onSuccess: () => {
       refresh();
-      toast.success("Client removed");
+      toast.success(translateText("Client removed"));
     },
-    onError: (e) => toast.error(apiMessage(e, "Could not remove client")),
+    onError: (e) => toast.error(translateText(apiMessage(e, "Could not remove client"))),
   });
 
   const uploadLogo = useMutation({
@@ -91,9 +93,9 @@ export default function ClientsManager({ pin }: { pin: string }) {
     },
     onSuccess: () => {
       refresh();
-      toast.success("Logo uploaded");
+      toast.success(translateText("Logo uploaded"));
     },
-    onError: () => toast.error("Could not upload that logo"),
+    onError: () => toast.error(translateText("Could not upload that logo")),
   });
 
   const rows = clients.data ?? [];
@@ -103,18 +105,16 @@ export default function ClientsManager({ pin }: { pin: string }) {
       <Card className="border-slate-200 bg-white">
         <CardContent className="p-4 sm:p-6">
           <h3 className="flex items-center gap-2 text-lg font-semibold text-[#0F2444]">
-            <Building2 className="h-5 w-5 text-[#C2410C]" /> {editingClientId ? "Edit Client" : "Add a Client"}
+            <Building2 className="h-5 w-5 text-[#C2410C]" /> {translateText(editingClientId ? "Edit Client" : "Add a Client")}
           </h3>
-          <p className="mt-1 text-sm text-slate-500">
-            Publish names, logos, service details and outcomes only with client permission and verified figures.
-          </p>
+          <p className="mt-1 text-sm text-slate-500">{translateText("Publish names, logos, service details and outcomes only with client permission and verified figures.")}</p>
           <form
             className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4"
             data-testid="client-add-form"
             onSubmit={(e) => {
               e.preventDefault();
               if (!form.name.trim()) {
-                toast.error("Name is required");
+                toast.error(translateText("Name is required"));
                 return;
               }
               if (editingClientId) edit.mutate({ id: editingClientId, body: form });
@@ -122,48 +122,48 @@ export default function ClientsManager({ pin }: { pin: string }) {
             }}
           >
             <div>
-              <Label className="mb-2 block text-sm">Name / Sector *</Label>
+              <Label className="mb-2 block text-sm">{translateText("Name / Sector *")}</Label>
               <Input
-                placeholder="Auto Component Manufacturer"
+                placeholder={translateText("Auto Component Manufacturer")}
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
                 data-testid="client-input-name"
               />
             </div>
             <div>
-              <Label className="mb-2 block text-sm">Industry</Label>
+              <Label className="mb-2 block text-sm">{translateText("Industry")}</Label>
               <Input
-                placeholder="Automobile"
+                placeholder={translateText("Automobile")}
                 value={form.industry}
                 onChange={(e) => setForm({ ...form, industry: e.target.value })}
                 data-testid="client-input-industry"
               />
             </div>
             <div>
-              <Label className="mb-2 block text-sm">Location</Label>
+              <Label className="mb-2 block text-sm">{translateText("Location")}</Label>
               <Input
-                placeholder="Nanjangud Industrial Area"
+                placeholder={translateText("Nanjangud Industrial Area")}
                 value={form.location}
                 onChange={(e) => setForm({ ...form, location: e.target.value })}
                 data-testid="client-input-location"
               />
             </div>
             <div>
-              <Label className="mb-2 block text-sm">Workforce Deployed</Label>
+              <Label className="mb-2 block text-sm">{translateText("Workforce Deployed")}</Label>
               <Input
-                placeholder="80+ workers"
+                placeholder={translateText("80+ workers")}
                 value={form.headcount}
                 onChange={(e) => setForm({ ...form, headcount: e.target.value })}
                 data-testid="client-input-headcount"
               />
             </div>
             <div className="sm:col-span-2">
-              <Label htmlFor="client-service-summary" className="mb-2 block text-sm">Service provided (optional)</Label>
-              <Textarea id="client-service-summary" rows={2} placeholder="Verified staffing service for this client" value={form.service_summary} onChange={(e) => setForm({ ...form, service_summary: e.target.value })} data-testid="client-input-service-summary" />
+              <Label htmlFor="client-service-summary" className="mb-2 block text-sm">{translateText("Service provided (optional)")}</Label>
+              <Textarea id="client-service-summary" rows={2} placeholder={translateText("Verified staffing service for this client")} value={form.service_summary} onChange={(e) => setForm({ ...form, service_summary: e.target.value })} data-testid="client-input-service-summary" />
             </div>
             <div className="sm:col-span-2">
-              <Label htmlFor="client-outcome" className="mb-2 block text-sm">Approved result or testimonial (optional)</Label>
-              <Textarea id="client-outcome" rows={2} placeholder="Only add a confirmed result or client-approved quote" value={form.outcome} onChange={(e) => setForm({ ...form, outcome: e.target.value })} data-testid="client-input-outcome" />
+              <Label htmlFor="client-outcome" className="mb-2 block text-sm">{translateText("Approved result or testimonial (optional)")}</Label>
+              <Textarea id="client-outcome" rows={2} placeholder={translateText("Only add a confirmed result or client-approved quote")} value={form.outcome} onChange={(e) => setForm({ ...form, outcome: e.target.value })} data-testid="client-input-outcome" />
             </div>
             <div className="sm:col-span-2 lg:col-span-4">
               <Button
@@ -177,9 +177,9 @@ export default function ClientsManager({ pin }: { pin: string }) {
                 ) : (
                   <Plus className="mr-2 h-4 w-4" />
                 )}
-                {editingClientId ? "Save Client" : "Add Client"}
+                {translateText(editingClientId ? "Save Client" : "Add Client")}
               </Button>
-              {editingClientId && <Button type="button" variant="outline" className="ml-2" onClick={() => { setEditingClientId(null); setForm(EMPTY); }}>Cancel</Button>}
+              {editingClientId && <Button type="button" variant="outline" className="ml-2" onClick={() => { setEditingClientId(null); setForm(EMPTY); }}>{translateText("Cancel")}</Button>}
             </div>
           </form>
         </CardContent>
@@ -190,21 +190,19 @@ export default function ClientsManager({ pin }: { pin: string }) {
           <Table className="min-w-[760px]" data-testid="clients-table">
             <TableHeader>
               <TableRow>
-                <TableHead>Logo</TableHead>
-                <TableHead>Name</TableHead>
-                <TableHead>Industry</TableHead>
-                <TableHead>Location</TableHead>
-                <TableHead>Deployed</TableHead>
-                <TableHead>Shown</TableHead>
+                <TableHead>{translateText("Logo")}</TableHead>
+                <TableHead>{translateText("Name")}</TableHead>
+                <TableHead>{translateText("Industry")}</TableHead>
+                <TableHead>{translateText("Location")}</TableHead>
+                <TableHead>{translateText("Deployed")}</TableHead>
+                <TableHead>{translateText("Shown")}</TableHead>
                 <TableHead></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {rows.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={7} className="py-10 text-center text-slate-500">
-                    No client profiles yet. Add one only when the client has approved the public details.
-                  </TableCell>
+                  <TableCell colSpan={7} className="py-10 text-center text-slate-500">{translateText("No client profiles yet. Add one only when the client has approved the public details.")}</TableCell>
                 </TableRow>
               )}
               {rows.map((c) => (
@@ -213,20 +211,20 @@ export default function ClientsManager({ pin }: { pin: string }) {
                     {c.logo_filename ? (
                       <img
                         src={`/api/clients/${c.id}/logo`}
-                        alt={c.name}
+                        alt={translateText(c.name)}
                         className="h-9 w-9 rounded object-contain"
                       />
                     ) : (
                       <Building2 className="h-6 w-6 text-slate-300" />
                     )}
                   </TableCell>
-                  <TableCell className="font-medium text-[#0F2444]">{c.name}</TableCell>
-                  <TableCell>{c.industry || "—"}</TableCell>
-                  <TableCell>{c.location || "—"}</TableCell>
-                  <TableCell>{c.headcount || "—"}</TableCell>
+                  <TableCell className="font-medium text-[#0F2444]">{translateText(c.name)}</TableCell>
+                  <TableCell>{translateText(c.industry || "—")}</TableCell>
+                  <TableCell>{translateText(c.location || "—")}</TableCell>
+                  <TableCell>{translateText(c.headcount || "—")}</TableCell>
                   <TableCell>
                     <Badge variant={c.visible ? "default" : "secondary"}>
-                      {c.visible ? "Visible" : "Hidden"}
+                      {translateText(c.visible ? "Visible" : "Hidden")}
                     </Badge>
                   </TableCell>
                   <TableCell>
@@ -234,13 +232,12 @@ export default function ClientsManager({ pin }: { pin: string }) {
                       <Button size="xs" variant="outline" onClick={() => {
                         setEditingClientId(c.id);
                         setForm({ name: c.name, industry: c.industry ?? "", location: c.location ?? "", headcount: c.headcount ?? "", service_summary: c.service_summary ?? "", outcome: c.outcome ?? "" });
-                      }} data-testid={`client-edit-${c.id}`}>Edit</Button>
+                      }} data-testid={`client-edit-${c.id}`}>{translateText("Edit")}</Button>
                       <label
                         className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-600 transition-colors hover:border-[#EA580C] hover:text-[#C2410C]"
                         data-testid={`client-logo-label-${c.id}`}
                       >
-                        <ImagePlus className="h-3.5 w-3.5" /> Logo
-                        <input
+                        <ImagePlus className="h-3.5 w-3.5" />{translateText(" Logo")}<input
                           type="file"
                           className="hidden"
                           accept=".png,.jpg,.jpeg,.webp,.svg"
@@ -262,13 +259,13 @@ export default function ClientsManager({ pin }: { pin: string }) {
                         ) : (
                           <Eye className="mr-1.5 h-3.5 w-3.5" />
                         )}
-                        {c.visible ? "Hide" : "Show"}
+                        {translateText(c.visible ? "Hide" : "Show")}
                       </Button>
                       <Button
                         size="icon-xs"
                         variant="destructive"
                         onClick={() => {
-                          if (window.confirm(`Remove ${c.name} and its workforce assignments from Workforce, Payroll and Invoice company lists? Saved invoices, payroll records and Talent Bank profiles will be kept.`)) remove.mutate(c.id);
+                          if (window.confirm(translateText(`Remove ${c.name} and its workforce assignments from Workforce, Payroll and Invoice company lists? Saved invoices, payroll records and Talent Bank profiles will be kept.`))) remove.mutate(c.id);
                         }}
                         data-testid={`client-delete-${c.id}`}
                       >

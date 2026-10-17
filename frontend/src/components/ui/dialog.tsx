@@ -1,3 +1,4 @@
+import { translateText, useSiteLanguage } from "@/lib/language";
 "use client"
 
 import * as React from "react"
@@ -8,18 +9,22 @@ import { Button } from "@/components/ui/button"
 import { XIcon } from "lucide-react"
 
 function Dialog({ ...props }: DialogPrimitive.Root.Props) {
+  useSiteLanguage();
   return <DialogPrimitive.Root data-slot="dialog" {...props} />
 }
 
 function DialogTrigger({ ...props }: DialogPrimitive.Trigger.Props) {
+  useSiteLanguage();
   return <DialogPrimitive.Trigger data-slot="dialog-trigger" {...props} />
 }
 
 function DialogPortal({ ...props }: DialogPrimitive.Portal.Props) {
+  useSiteLanguage();
   return <DialogPrimitive.Portal data-slot="dialog-portal" {...props} />
 }
 
 function DialogClose({ ...props }: DialogPrimitive.Close.Props) {
+  useSiteLanguage();
   return <DialogPrimitive.Close data-slot="dialog-close" {...props} />
 }
 
@@ -27,6 +32,7 @@ function DialogOverlay({
   className,
   ...props
 }: DialogPrimitive.Backdrop.Props) {
+  useSiteLanguage();
   return (
     <DialogPrimitive.Backdrop
       data-slot="dialog-overlay"
@@ -47,6 +53,7 @@ function DialogContent({
 }: DialogPrimitive.Popup.Props & {
   showCloseButton?: boolean
 }) {
+  useSiteLanguage();
   return (
     <DialogPortal>
       <DialogOverlay />
@@ -58,7 +65,7 @@ function DialogContent({
         )}
         {...props}
       >
-        {children}
+        {translateText(children)}
         {showCloseButton && (
           <DialogPrimitive.Close
             data-slot="dialog-close"
@@ -72,7 +79,7 @@ function DialogContent({
           >
             <XIcon
             />
-            <span className="sr-only">Close</span>
+            <span className="sr-only">{translateText("Close")}</span>
           </DialogPrimitive.Close>
         )}
       </DialogPrimitive.Popup>
@@ -81,6 +88,7 @@ function DialogContent({
 }
 
 function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
+  useSiteLanguage();
   return (
     <div
       data-slot="dialog-header"
@@ -98,6 +106,7 @@ function DialogFooter({
 }: React.ComponentProps<"div"> & {
   showCloseButton?: boolean
 }) {
+  useSiteLanguage();
   return (
     <div
       data-slot="dialog-footer"
@@ -107,17 +116,16 @@ function DialogFooter({
       )}
       {...props}
     >
-      {children}
+      {translateText(children)}
       {showCloseButton && (
-        <DialogPrimitive.Close render={<Button variant="outline" />}>
-          Close
-        </DialogPrimitive.Close>
+        <DialogPrimitive.Close render={<Button variant="outline" />}>{translateText("Close")}</DialogPrimitive.Close>
       )}
     </div>
   )
 }
 
 function DialogTitle({ className, ...props }: DialogPrimitive.Title.Props) {
+  useSiteLanguage();
   return (
     <DialogPrimitive.Title
       data-slot="dialog-title"
@@ -134,6 +142,7 @@ function DialogDescription({
   className,
   ...props
 }: DialogPrimitive.Description.Props) {
+  useSiteLanguage();
   return (
     <DialogPrimitive.Description
       data-slot="dialog-description"

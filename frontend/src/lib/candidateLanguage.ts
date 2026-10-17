@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useSiteLanguage } from "@/lib/language";
 
 export type CandidateLanguage = "en" | "kn";
 
@@ -44,12 +44,5 @@ export const candidateCopy = {
 } as const;
 
 export function useCandidateLanguage(): [CandidateLanguage, (language: CandidateLanguage) => void] {
-  const [language, setLanguage] = useState<CandidateLanguage>(() =>
-    typeof window !== "undefined" && window.localStorage.getItem("bws-candidate-language") === "kn" ? "kn" : "en",
-  );
-  const change = (next: CandidateLanguage) => {
-    setLanguage(next);
-    window.localStorage.setItem("bws-candidate-language", next);
-  };
-  return [language, change];
+  return useSiteLanguage();
 }

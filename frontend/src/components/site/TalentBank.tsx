@@ -1,3 +1,4 @@
+import { translateText, useSiteLanguage } from "@/lib/language";
 import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Download, Loader2, MessageSquare, Plus, Trash2, Upload } from "lucide-react";
@@ -67,6 +68,7 @@ async function uploadResume(workerId: string, file: File): Promise<void> {
 }
 
 export default function TalentBank({ pin }: { pin: string }) {
+  useSiteLanguage();
   const qc = useQueryClient();
   const q = "";
   const [form, setForm] = useState<WorkerCreate>({ ...EMPTY_TALENT });
@@ -107,12 +109,12 @@ export default function TalentBank({ pin }: { pin: string }) {
       setForm({ ...EMPTY_TALENT });
       setResume(null);
       if (resumeUploaded) {
-        toast.success("Talent added to the Talent Bank");
+        toast.success(translateText("Talent added to the Talent Bank"));
       } else {
-        toast.warning("Talent saved, but the resume upload failed. You can upload it again below.");
+        toast.warning(translateText("Talent saved, but the resume upload failed. You can upload it again below."));
       }
     },
-    onError: () => toast.error("Could not add talent"),
+    onError: () => toast.error(translateText("Could not add talent")),
   });
 
   const bulkImport = useMutation({
@@ -136,12 +138,12 @@ export default function TalentBank({ pin }: { pin: string }) {
       if (importInputRef.current) importInputRef.current.value = "";
       const summary = `${result.imported} new, ${result.attached} resumes added${result.skipped ? `, ${result.skipped} skipped` : ""}`;
       if (result.errors.length) {
-        toast.warning(`${summary}. ${result.errors.length} row(s) need attention.`);
+        toast.warning(translateText(`${summary}. ${result.errors.length} row(s) need attention.`));
       } else {
-        toast.success(summary);
+        toast.success(translateText(summary));
       }
     },
-    onError: (err) => toast.error(err instanceof Error ? err.message : "Bulk import failed"),
+    onError: (err) => toast.error(translateText(err instanceof Error ? err.message : "Bulk import failed")),
   });
 
   const updateStatus = useMutation({
@@ -149,43 +151,43 @@ export default function TalentBank({ pin }: { pin: string }) {
       apiPatch<Worker>(`/admin/workers/${v.id}${q}`, { status: v.status }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-talents", pin] });
-      toast.success("Talent status updated");
+      toast.success(translateText("Talent status updated"));
     },
-    onError: () => toast.error("Could not update status"),
+    onError: () => toast.error(translateText("Could not update status")),
   });
 
   const deleteTalent = useMutation({
     mutationFn: (id: string) => apiDelete<Ok>(`/admin/talents/${id}${q}`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-talents", pin] });
-      toast.success("Talent removed");
+      toast.success(translateText("Talent removed"));
     },
-    onError: () => toast.error("Could not remove talent"),
+    onError: () => toast.error(translateText("Could not remove talent")),
   });
 
   const replaceResume = async (workerId: string, file: File | null) => {
     if (!file) return;
     if (file.size > MAX_RESUME_SIZE) {
-      toast.error("Resume must be 2 MB or smaller");
+      toast.error(translateText("Resume must be 2 MB or smaller"));
       return;
     }
     try {
       await uploadResume(workerId, file);
       await qc.invalidateQueries({ queryKey: ["admin-talents", pin] });
-      toast.success("Resume uploaded");
+      toast.success(translateText("Resume uploaded"));
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Resume upload failed");
+      toast.error(translateText(err instanceof Error ? err.message : "Resume upload failed"));
     }
   };
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.full_name.trim() || !form.mobile.trim() || !form.current_location.trim()) {
-      toast.error("Name, mobile number and location are required");
+      toast.error(translateText("Name, mobile number and location are required"));
       return;
     }
     if (resume && resume.size > MAX_RESUME_SIZE) {
-      toast.error("Resume must be 2 MB or smaller");
+      toast.error(translateText("Resume must be 2 MB or smaller"));
       return;
     }
     createTalent.mutate();
@@ -196,58 +198,56 @@ export default function TalentBank({ pin }: { pin: string }) {
       <Card className="border-slate-200 bg-white">
         <CardContent className="p-4 sm:p-6">
           <div className="mb-5">
-            <h3 className="text-lg font-semibold text-[#0F2444]">Add Talent</h3>
-            <p className="mt-1 text-sm text-slate-500">
-              Add candidates you source directly. Their resumes are stored privately and can be matched to your job posts.
-            </p>
+            <h3 className="text-lg font-semibold text-[#0F2444]">{translateText("Add Talent")}</h3>
+            <p className="mt-1 text-sm text-slate-500">{translateText("Add candidates you source directly. Their resumes are stored privately and can be matched to your job posts.")}</p>
           </div>
 
           <form onSubmit={submit} className="grid gap-4 md:grid-cols-2">
             <div>
-              <Label className="mb-2 block text-sm">Full name *</Label>
+              <Label className="mb-2 block text-sm">{translateText("Full name *")}</Label>
               <Input
                 value={form.full_name}
                 onChange={(e) => setForm({ ...form, full_name: e.target.value })}
-                placeholder="Candidate name"
+                placeholder={translateText("Candidate name")}
               />
             </div>
             <div>
-              <Label className="mb-2 block text-sm">Mobile number *</Label>
+              <Label className="mb-2 block text-sm">{translateText("Mobile number *")}</Label>
               <Input
                 value={form.mobile}
                 onChange={(e) => setForm({ ...form, mobile: e.target.value })}
-                placeholder="10-digit mobile number"
+                placeholder={translateText("10-digit mobile number")}
                 inputMode="tel"
               />
             </div>
             <div>
-              <Label className="mb-2 block text-sm">Email</Label>
+              <Label className="mb-2 block text-sm">{translateText("Email")}</Label>
               <Input
                 type="email"
                 value={form.email ?? ""}
                 onChange={(e) => setForm({ ...form, email: e.target.value })}
-                placeholder="candidate@example.com"
+                placeholder={translateText("candidate@example.com")}
               />
             </div>
             <div>
-              <Label className="mb-2 block text-sm">WhatsApp number</Label>
+              <Label className="mb-2 block text-sm">{translateText("WhatsApp number")}</Label>
               <Input
                 value={form.whatsapp ?? ""}
                 onChange={(e) => setForm({ ...form, whatsapp: e.target.value })}
-                placeholder="WhatsApp number"
+                placeholder={translateText("WhatsApp number")}
                 inputMode="tel"
               />
             </div>
             <div>
-              <Label className="mb-2 block text-sm">Current location *</Label>
+              <Label className="mb-2 block text-sm">{translateText("Current location *")}</Label>
               <Input
                 value={form.current_location}
                 onChange={(e) => setForm({ ...form, current_location: e.target.value })}
-                placeholder="Mysuru, Bengaluru, etc."
+                placeholder={translateText("Mysuru, Bengaluru, etc.")}
               />
             </div>
             <div>
-              <Label className="mb-2 block text-sm">Skill category *</Label>
+              <Label className="mb-2 block text-sm">{translateText("Skill category *")}</Label>
               <Select
                 value={form.skill_category}
                 onValueChange={(v: string) => setForm({ ...form, skill_category: v })}
@@ -258,46 +258,46 @@ export default function TalentBank({ pin }: { pin: string }) {
                 <SelectContent>
                   {SKILL_CATEGORIES.map((category) => (
                     <SelectItem key={category} value={category}>
-                      {category}
+                      {translateText(category)}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
             <div>
-              <Label className="mb-2 block text-sm">Skills / job role</Label>
+              <Label className="mb-2 block text-sm">{translateText("Skills / job role")}</Label>
               <Input
                 value={form.skills ?? ""}
                 onChange={(e) => setForm({ ...form, skills: e.target.value })}
-                placeholder="Welder, CNC operator, picker/packer..."
+                placeholder={translateText("Welder, CNC operator, picker/packer...")}
               />
             </div>
             <div>
-              <Label className="mb-2 block text-sm">Experience</Label>
+              <Label className="mb-2 block text-sm">{translateText("Experience")}</Label>
               <Input
                 value={form.experience ?? ""}
                 onChange={(e) => setForm({ ...form, experience: e.target.value })}
-                placeholder="e.g. 2 years"
+                placeholder={translateText("e.g. 2 years")}
               />
             </div>
             <div>
-              <Label className="mb-2 block text-sm">Education</Label>
+              <Label className="mb-2 block text-sm">{translateText("Education")}</Label>
               <Input
                 value={form.education ?? ""}
                 onChange={(e) => setForm({ ...form, education: e.target.value })}
-                placeholder="ITI, Diploma, SSLC..."
+                placeholder={translateText("ITI, Diploma, SSLC...")}
               />
             </div>
             <div>
-              <Label className="mb-2 block text-sm">Expected salary</Label>
+              <Label className="mb-2 block text-sm">{translateText("Expected salary")}</Label>
               <Input
                 value={form.expected_salary ?? ""}
                 onChange={(e) => setForm({ ...form, expected_salary: e.target.value })}
-                placeholder="e.g. ₹18,000 / month"
+                placeholder={translateText("e.g. ₹18,000 / month")}
               />
             </div>
             <div>
-              <Label className="mb-2 block text-sm">Availability</Label>
+              <Label className="mb-2 block text-sm">{translateText("Availability")}</Label>
               <Select
                 value={form.availability ?? "Immediate"}
                 onValueChange={(v: string) => setForm({ ...form, availability: v })}
@@ -308,15 +308,14 @@ export default function TalentBank({ pin }: { pin: string }) {
                 <SelectContent>
                   {AVAILABILITY.map((option) => (
                     <SelectItem key={option} value={option}>
-                      {option}
+                      {translateText(option)}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
             <div className="md:col-span-2">
-              <Label className="mb-2 block text-sm">
-                Resume <span className="font-normal text-slate-500">(PDF/DOC/image, maximum 2 MB)</span>
+              <Label className="mb-2 block text-sm">{translateText("Resume ")}<span className="font-normal text-slate-500">{translateText("(PDF/DOC/image, maximum 2 MB)")}</span>
               </Label>
               <Input
                 type="file"
@@ -324,7 +323,7 @@ export default function TalentBank({ pin }: { pin: string }) {
                 onChange={(e) => {
                   const file = e.target.files?.[0] ?? null;
                   if (file && file.size > MAX_RESUME_SIZE) {
-                    toast.error("Resume must be 2 MB or smaller");
+                    toast.error(translateText("Resume must be 2 MB or smaller"));
                     e.target.value = "";
                     setResume(null);
                     return;
@@ -334,8 +333,7 @@ export default function TalentBank({ pin }: { pin: string }) {
               />
               {resume && (
                 <p className="mt-2 text-xs text-slate-500">
-                  {resume.name} · {(resume.size / 1024 / 1024).toFixed(1)} MB
-                </p>
+                  {translateText(resume.name)} · {translateText((resume.size / 1024 / 1024).toFixed(1))}{translateText(" MB")}</p>
               )}
             </div>
             <div className="md:col-span-2">
@@ -348,9 +346,7 @@ export default function TalentBank({ pin }: { pin: string }) {
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : (
                   <Plus className="mr-2 h-4 w-4" />
-                )}
-                Add Talent
-              </Button>
+                )}{translateText("Add Talent")}</Button>
             </div>
           </form>
         </CardContent>
@@ -358,25 +354,23 @@ export default function TalentBank({ pin }: { pin: string }) {
 
       <Card className="border-slate-200 bg-white">
         <CardContent className="p-4 sm:p-6">
-          <h3 className="text-base font-semibold text-[#0F2444]">Bulk Import Talents</h3>
-          <p className="mt-1 text-sm text-slate-500">
-            Upload a prepared ZIP package containing talents.csv and the matching resume files. Existing candidates with a resume are skipped; missing resumes are added to their existing profiles.
-          </p>
+          <h3 className="text-base font-semibold text-[#0F2444]">{translateText("Bulk Import Talents")}</h3>
+          <p className="mt-1 text-sm text-slate-500">{translateText("Upload a prepared ZIP package containing talents.csv and the matching resume files. Existing candidates with a resume are skipped; missing resumes are added to their existing profiles.")}</p>
           {lastImport && (
             <div className={`mt-4 rounded-md border p-3 text-sm ${lastImport.errors.length ? "border-amber-300 bg-amber-50 text-amber-900" : "border-emerald-300 bg-emerald-50 text-emerald-900"}`}>
               <div className="font-semibold">
-                {lastImport.imported} new, {lastImport.attached} resumes added{lastImport.skipped ? `, ${lastImport.skipped} skipped` : ""}.
+                {translateText(lastImport.imported)}{translateText(" new, ")}{translateText(lastImport.attached)}{translateText(" resumes added")}{translateText(lastImport.skipped ? `, ${lastImport.skipped} skipped` : "")}.
               </div>
               {lastImport.errors.length > 0 && (
                 <div className="mt-2">
-                  <div className="font-medium">Resume/file issues:</div>
+                  <div className="font-medium">{translateText("Resume/file issues:")}</div>
                   <ul className="mt-1 list-disc space-y-1 pl-5">
                     {lastImport.errors.slice(0, 6).map((error, index) => (
-                      <li key={index}>{error}</li>
+                      <li key={index}>{translateText(error)}</li>
                     ))}
                   </ul>
                   {lastImport.errors.length > 6 && (
-                    <div className="mt-1">+ {lastImport.errors.length - 6} more issue(s)</div>
+                    <div className="mt-1">+ {translateText(lastImport.errors.length - 6)}{translateText(" more issue(s)")}</div>
                   )}
                 </div>
               )}
@@ -397,7 +391,7 @@ export default function TalentBank({ pin }: { pin: string }) {
               onClick={() => {
                 const file = importInputRef.current?.files?.[0] ?? importZip;
                 if (!file) {
-                  toast.error("Choose the Talent Bank ZIP file first");
+                  toast.error(translateText("Choose the Talent Bank ZIP file first"));
                   return;
                 }
                 bulkImport.mutate(file);
@@ -408,40 +402,34 @@ export default function TalentBank({ pin }: { pin: string }) {
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : (
                 <Upload className="mr-2 h-4 w-4" />
-              )}
-              Import ZIP
-            </Button>
+              )}{translateText("Import ZIP")}</Button>
           </div>
         </CardContent>
       </Card>
 
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h3 className="text-lg font-semibold text-[#0F2444]">Talent Bank</h3>
+          <h3 className="text-lg font-semibold text-[#0F2444]">{translateText("Talent Bank")}</h3>
           <p className="text-sm text-slate-500">
-            {talents.data?.length ?? 0} candidate{(talents.data?.length ?? 0) === 1 ? "" : "s"} saved
-          </p>
+            {translateText(talents.data?.length ?? 0)}{translateText(" candidate")}{translateText((talents.data?.length ?? 0) === 1 ? "" : "s")}{translateText(" saved")}</p>
         </div>
         <a
           href={`/api/admin/export/talents.csv${q}`}
           className="inline-flex items-center justify-center gap-2 rounded-md bg-[#0F2444] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0A172C]"
         >
-          <Download className="h-4 w-4" /> Download Spreadsheet
-        </a>
+          <Download className="h-4 w-4" />{translateText(" Download Spreadsheet")}</a>
       </div>
 
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
-        <Label htmlFor="talent-region" className="text-sm font-medium text-[#0F2444]">Filter by region</Label>
+        <Label htmlFor="talent-region" className="text-sm font-medium text-[#0F2444]">{translateText("Filter by region")}</Label>
         <Input
           id="talent-region"
           className="w-full sm:max-w-xs"
-          placeholder="City, district or state"
+          placeholder={translateText("City, district or state")}
           value={regionQuery}
           onChange={(e) => setRegionQuery(e.target.value)}
         />
-        <span className="text-sm text-slate-500">
-          Showing {filteredTalents.length} of {talents.data?.length ?? 0} candidates
-        </span>
+        <span className="text-sm text-slate-500">{translateText("Showing ")}{translateText(filteredTalents.length)}{translateText(" of ")}{translateText(talents.data?.length ?? 0)}{translateText(" candidates")}</span>
       </div>
 
       <Card className="border-slate-200 bg-white">
@@ -449,35 +437,29 @@ export default function TalentBank({ pin }: { pin: string }) {
           <Table className="min-w-[900px]">
             <TableHeader>
               <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Contact</TableHead>
-                <TableHead>Skills</TableHead>
-                <TableHead>Location</TableHead>
-                <TableHead>Resume</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Actions</TableHead>
+                <TableHead>{translateText("Name")}</TableHead>
+                <TableHead>{translateText("Contact")}</TableHead>
+                <TableHead>{translateText("Skills")}</TableHead>
+                <TableHead>{translateText("Location")}</TableHead>
+                <TableHead>{translateText("Resume")}</TableHead>
+                <TableHead>{translateText("Status")}</TableHead>
+                <TableHead>{translateText("Actions")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {talents.isLoading && (
                 <TableRow>
-                  <TableCell colSpan={7} className="py-10 text-center text-slate-500">
-                    Loading talents...
-                  </TableCell>
+                  <TableCell colSpan={7} className="py-10 text-center text-slate-500">{translateText("Loading talents...")}</TableCell>
                 </TableRow>
               )}
               {!talents.isLoading && (talents.data ?? []).length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={7} className="py-10 text-center text-slate-500">
-                    No talents added yet.
-                  </TableCell>
+                  <TableCell colSpan={7} className="py-10 text-center text-slate-500">{translateText("No talents added yet.")}</TableCell>
                 </TableRow>
               )}
               {!talents.isLoading && (talents.data ?? []).length > 0 && filteredTalents.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={7} className="py-10 text-center text-slate-500">
-                    No candidates match this region.
-                  </TableCell>
+                  <TableCell colSpan={7} className="py-10 text-center text-slate-500">{translateText("No candidates match this region.")}</TableCell>
                 </TableRow>
               )}
               {filteredTalents.map((talent) => (
@@ -485,26 +467,26 @@ export default function TalentBank({ pin }: { pin: string }) {
                   <TableCell className="font-medium text-[#0F2444]">
                     {talent.full_name}
                     {talent.experience && (
-                      <span className="block text-xs font-normal text-slate-500">{talent.experience}</span>
+                      <span className="block text-xs font-normal text-slate-500">{translateText(talent.experience)}</span>
                     )}
                   </TableCell>
                   <TableCell>
-                    {talent.mobile || <span className="text-slate-400">No mobile</span>}
+                    {translateText(talent.mobile || <span className="text-slate-400">{translateText("No mobile")}</span>)}
                     {talent.email && (
                       <span className="block text-xs text-slate-500">{talent.email}</span>
                     )}
                     {talent.whatsapp && talent.whatsapp !== talent.mobile && (
-                      <span className="block text-xs text-slate-500">WA: {talent.whatsapp}</span>
+                      <span className="block text-xs text-slate-500">{translateText("WA: ")}{talent.whatsapp}</span>
                     )}
                   </TableCell>
                   <TableCell>
-                    {talent.skills || talent.skill_category}
-                    <span className="block text-xs text-slate-500">{talent.skill_category}</span>
+                    {translateText(talent.skills || talent.skill_category)}
+                    <span className="block text-xs text-slate-500">{translateText(talent.skill_category)}</span>
                   </TableCell>
                   <TableCell>
-                    {talent.current_location}
+                    {translateText(talent.current_location)}
                     {talent.preferred_location && (
-                      <span className="block text-xs text-slate-500">Preferred: {talent.preferred_location}</span>
+                      <span className="block text-xs text-slate-500">{translateText("Preferred: ")}{translateText(talent.preferred_location)}</span>
                     )}
                   </TableCell>
                   <TableCell>
@@ -515,15 +497,13 @@ export default function TalentBank({ pin }: { pin: string }) {
                           target="_blank"
                           rel="noreferrer"
                           className="text-sm font-medium text-[#C2410C] underline"
-                        >
-                          Download
-                        </a>
+                        >{translateText("Download")}</a>
                       ) : (
-                        <span className="text-sm text-slate-400">No resume</span>
+                        <span className="text-sm text-slate-400">{translateText("No resume")}</span>
                       )}
                       <label className="inline-flex cursor-pointer items-center gap-1 rounded-md border border-slate-200 px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-50">
                         <Upload className="h-3.5 w-3.5" />
-                        {talent.resume_filename ? "Replace" : "Upload"}
+                        {translateText(talent.resume_filename ? "Replace" : "Upload")}
                         <input
                           type="file"
                           className="hidden"
@@ -548,7 +528,7 @@ export default function TalentBank({ pin }: { pin: string }) {
                       <SelectContent>
                         {TALENT_STATUS.map((status) => (
                           <SelectItem key={status} value={status}>
-                            {status}
+                            {translateText(status)}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -562,19 +542,18 @@ export default function TalentBank({ pin }: { pin: string }) {
                         rel="noreferrer"
                         className="inline-flex items-center gap-1.5 rounded-md bg-[#16A34A] px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-[#15803D]"
                       >
-                        <MessageSquare className="h-3.5 w-3.5" /> WhatsApp
-                      </a>
+                        <MessageSquare className="h-3.5 w-3.5" />{translateText(" WhatsApp")}</a>
                       <Button
                         type="button"
                         size="icon-xs"
                         variant="destructive"
                         disabled={deleteTalent.isPending}
                         onClick={() => {
-                          if (window.confirm(`Remove ${talent.full_name} from the Talent Bank?`)) {
+                          if (window.confirm(translateText(`Remove ${talent.full_name} from the Talent Bank?`))) {
                             deleteTalent.mutate(talent.id);
                           }
                         }}
-                        aria-label={`Delete ${talent.full_name}`}
+                        aria-label={translateText(`Delete ${talent.full_name}`)}
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </Button>

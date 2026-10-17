@@ -1,3 +1,4 @@
+import { translateText, useSiteLanguage } from "@/lib/language";
 import { useEffect, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { CheckCircle2, Loader2, Upload } from "lucide-react";
@@ -44,6 +45,7 @@ const EMPTY: WorkerCreate = {
 };
 
 export default function WorkerForm({ job, language = "en" }: { job?: Job; language?: CandidateLanguage }) {
+  useSiteLanguage();
   const copy = candidateCopy[language];
   const [form, setForm] = useState<WorkerCreate>({ ...EMPTY, skill_category: job?.skill_category ?? "" });
   const [resume, setResume] = useState<File | null>(null);
@@ -72,8 +74,8 @@ export default function WorkerForm({ job, language = "en" }: { job?: Job; langua
   };
   const retryResume = useMutation({
     mutationFn: async () => { if (savedReceipt) await upload(savedReceipt); },
-    onSuccess: () => { setResumeFailed(false); setResume(null); toast.success(copy.submitted); },
-    onError: () => toast.error(copy.savedWithoutResume),
+    onSuccess: () => { setResumeFailed(false); setResume(null); toast.success(translateText(copy.submitted)); },
+    onError: () => toast.error(translateText(copy.savedWithoutResume)),
   });
 
   const set = (k: keyof WorkerCreate, v: string) => setForm((f) => ({ ...f, [k]: v }));
@@ -99,14 +101,14 @@ export default function WorkerForm({ job, language = "en" }: { job?: Job; langua
       if (resumeUploaded) setResume(null);
       setConsent(false);
       if (resumeUploaded) {
-        toast.success(copy.submitted);
+        toast.success(translateText(copy.submitted));
       } else {
-        toast.warning(copy.savedWithoutResume);
+        toast.warning(translateText(copy.savedWithoutResume));
       }
     },
     onError: (error) => {
       const detail = error instanceof ApiError ? (error.body as { detail?: unknown } | null)?.detail : null;
-      toast.error(typeof detail === "string" ? detail : copy.submitError);
+      toast.error(translateText(typeof detail === "string" ? detail : copy.submitError));
     },
   });
 
@@ -118,22 +120,22 @@ export default function WorkerForm({ job, language = "en" }: { job?: Job; langua
       >
         <CheckCircle2 className="mx-auto mb-3 h-10 w-10 text-green-600" />
         <p className="text-lg font-semibold text-[#0F2444]">
-          {job ? copy.successJob : copy.successGeneral}
+          {translateText(job ? copy.successJob : copy.successGeneral)}
         </p>
-        {savedReceipt && <p className="mt-3 font-semibold">{language === "kn" ? "ಅರ್ಜಿ ಸಂಖ್ಯೆ" : "Application reference"}: {savedReceipt.application_reference}</p>}
-        {job && <p className="mt-2 text-sm">{job.title} · {job.location}</p>}
-        <p className="mt-3 text-sm">{language === "kn" ? "ನಮ್ಮ ನೇಮಕಾತಿ ತಂಡ ನಿಮ್ಮ ವಿವರಗಳನ್ನು ಪರಿಶೀಲಿಸಿ ಸೂಕ್ತ ಅವಕಾಶಗಳ ಬಗ್ಗೆ ಸಂಪರ್ಕಿಸುತ್ತದೆ." : "Our recruitment team will review your profile and contact you about suitable opportunities."}</p>
+        {savedReceipt && <p className="mt-3 font-semibold">{translateText(language === "kn" ? "ಅರ್ಜಿ ಸಂಖ್ಯೆ" : "Application reference")}: {savedReceipt.application_reference}</p>}
+        {job && <p className="mt-2 text-sm">{translateText(job.title)} · {translateText(job.location)}</p>}
+        <p className="mt-3 text-sm">{translateText(language === "kn" ? "ನಮ್ಮ ನೇಮಕಾತಿ ತಂಡ ನಿಮ್ಮ ವಿವರಗಳನ್ನು ಪರಿಶೀಲಿಸಿ ಸೂಕ್ತ ಅವಕಾಶಗಳ ಬಗ್ಗೆ ಸಂಪರ್ಕಿಸುತ್ತದೆ." : "Our recruitment team will review your profile and contact you about suitable opportunities.")}</p>
         {resumeFailed && <div role="alert" className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-4 text-amber-900">
-          <p>{copy.savedWithoutResume}</p>
-          <Button type="button" className="mt-3" disabled={retryResume.isPending} onClick={() => retryResume.mutate()}>{language === "kn" ? "ಸ್ವವಿವರ ಪತ್ರವನ್ನು ಮತ್ತೆ ಅಪ್‌ಲೋಡ್ ಮಾಡಿ" : "Retry resume upload"}</Button>
+          <p>{translateText(copy.savedWithoutResume)}</p>
+          <Button type="button" className="mt-3" disabled={retryResume.isPending} onClick={() => retryResume.mutate()}>{translateText(language === "kn" ? "ಸ್ವವಿವರ ಪತ್ರವನ್ನು ಮತ್ತೆ ಅಪ್‌ಲೋಡ್ ಮಾಡಿ" : "Retry resume upload")}</Button>
         </div>}
         <Button
           variant="outline"
           className="mt-5"
-          onClick={() => { if (resumeFailed && !window.confirm("Your application is saved, but its resume has not uploaded. Start another application?")) return; setDone(false); setResumeFailed(false); setResume(null); setSavedReceipt(null); setForm({ ...EMPTY, skill_category: job?.skill_category ?? "" }); requestId.current = crypto.randomUUID(); }}
+          onClick={() => { if (resumeFailed && !window.confirm(translateText("Your application is saved, but its resume has not uploaded. Start another application?"))) return; setDone(false); setResumeFailed(false); setResume(null); setSavedReceipt(null); setForm({ ...EMPTY, skill_category: job?.skill_category ?? "" }); requestId.current = crypto.randomUUID(); }}
           data-testid="worker-registration-another"
         >
-          {copy.another}
+          {translateText(copy.another)}
         </Button>
       </div>
     );
@@ -146,11 +148,11 @@ export default function WorkerForm({ job, language = "en" }: { job?: Job; langua
       onSubmit={(e) => {
         e.preventDefault();
         if (!form.full_name || !form.mobile || !form.current_location || !form.skill_category) {
-          toast.error(copy.requiredError);
+          toast.error(translateText(copy.requiredError));
           return;
         }
         if (!consent) {
-          toast.error(copy.consentError);
+          toast.error(translateText(copy.consentError));
           return;
         }
         mutation.mutate(form);
@@ -158,11 +160,11 @@ export default function WorkerForm({ job, language = "en" }: { job?: Job; langua
     >
       {job && (
         <div className="sm:col-span-2 rounded-lg border border-[#EA580C]/30 bg-orange-50 p-4 text-sm" data-testid="worker-selected-job">
-          {copy.appliedFor}: <strong>{job.title}</strong> · {job.location}
+          {translateText(copy.appliedFor)}: <strong>{translateText(job.title)}</strong> · {translateText(job.location)}
         </div>
       )}
-      <p className="sm:col-span-2 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm font-medium text-green-900">{copy.noFee}</p>
-      <Field id="worker-full-name" label={copy.fullName}>
+      <p className="sm:col-span-2 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm font-medium text-green-900">{translateText(copy.noFee)}</p>
+      <Field id="worker-full-name" label={translateText(copy.fullName)}>
         <Input
           id="worker-full-name"
           required
@@ -172,7 +174,7 @@ export default function WorkerForm({ job, language = "en" }: { job?: Job; langua
           data-testid="worker-input-full-name"
         />
       </Field>
-      <Field id="worker-mobile" label={copy.mobile}>
+      <Field id="worker-mobile" label={translateText(copy.mobile)}>
         <Input
           id="worker-mobile"
           required
@@ -180,13 +182,13 @@ export default function WorkerForm({ job, language = "en" }: { job?: Job; langua
           inputMode="tel"
           autoComplete="tel"
           pattern={String.raw`(?:[+]?91[ \-]?)?[6-9](?:[ \-]?[0-9]){9}`}
-          title="10-digit Indian mobile number, optionally with +91"
+          title={translateText("10-digit Indian mobile number, optionally with +91")}
           value={form.mobile}
           onChange={(e) => set("mobile", e.target.value)}
           data-testid="worker-input-mobile"
         />
       </Field>
-      <Field id="worker-location" label={copy.currentLocation}>
+      <Field id="worker-location" label={translateText(copy.currentLocation)}>
         <Input
           id="worker-location"
           required
@@ -196,43 +198,43 @@ export default function WorkerForm({ job, language = "en" }: { job?: Job; langua
           data-testid="worker-input-location"
         />
       </Field>
-      <Field id="worker-category" label={copy.skillCategory}>
+      <Field id="worker-category" label={translateText(copy.skillCategory)}>
         <Select value={form.skill_category} onValueChange={(v: string) => set("skill_category", v)}>
           <SelectTrigger id="worker-category" data-testid="worker-select-skill-category">
-            <SelectValue placeholder={copy.selectCategory} />
+            <SelectValue placeholder={translateText(copy.selectCategory)} />
           </SelectTrigger>
           <SelectContent>
             {SKILL_CATEGORIES.map((c) => (
               <SelectItem key={c} value={c}>
-                {language === "kn" ? SKILL_KN[c] || c : c}
+                {translateText(language === "kn" ? SKILL_KN[c] || c : c)}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
       </Field>
-      <Field id="worker-skills" label={copy.skills} full>
+      <Field id="worker-skills" label={translateText(copy.skills)} full>
         <Input
           id="worker-skills"
-          placeholder={language === "kn" ? "ಉದಾ. ವೆಲ್ಡಿಂಗ್, ಯಂತ್ರ ನಿರ್ವಹಣೆ" : "e.g. Welding, CNC operation, customer service"}
+          placeholder={translateText(language === "kn" ? "ಉದಾ. ವೆಲ್ಡಿಂಗ್, ಯಂತ್ರ ನಿರ್ವಹಣೆ" : "e.g. Welding, CNC operation, customer service")}
           value={form.skills ?? ""}
           onChange={(e) => set("skills", e.target.value)}
           data-testid="worker-input-skills"
         />
       </Field>
       <div className="sm:col-span-2">
-        <p className="mb-2 text-sm font-medium text-slate-700">{copy.resume} <span className="font-normal text-slate-500">(2 MB)</span></p>
+        <p className="mb-2 text-sm font-medium text-slate-700">{translateText(copy.resume)} <span className="font-normal text-slate-500">{translateText("(2 MB)")}</span></p>
         <label className="bws-upload-zone flex cursor-pointer items-center gap-3 rounded-xl border border-dashed border-slate-300 bg-white px-4 py-4 text-sm text-slate-600 hover:border-[#EA580C] focus-within:ring-2 focus-within:ring-orange-700">
           <Upload className="h-4 w-4 text-[#C2410C]" />
-          <span data-testid="worker-resume-name">{resume ? `${resume.name} (${(resume.size / 1024 / 1024).toFixed(1)} MB)` : copy.resumeHelp}</span>
+          <span data-testid="worker-resume-name">{translateText(resume ? `${resume.name} (${(resume.size / 1024 / 1024).toFixed(1)} MB)` : copy.resumeHelp)}</span>
           <input
             type="file"
             className="sr-only"
-            aria-label={copy.resume}
+            aria-label={translateText(copy.resume)}
             accept={RESUME_TYPES}
             onChange={(e) => {
               const file = e.target.files?.[0] ?? null;
               if (file && file.size > MAX_RESUME_SIZE) {
-                toast.error(copy.resumeTooLarge);
+                toast.error(translateText(copy.resumeTooLarge));
                 e.target.value = "";
                 setResume(null);
                 return;
@@ -245,40 +247,40 @@ export default function WorkerForm({ job, language = "en" }: { job?: Job; langua
       </div>
 
       <details className="sm:col-span-2 rounded-xl border border-slate-200 bg-white p-4" data-testid="worker-optional-details">
-        <summary className="cursor-pointer font-semibold text-[#0F2444]">{copy.optionalDetails}</summary>
-        <p className="mt-2 text-sm text-slate-500">{copy.optionalHelp}</p>
+        <summary className="cursor-pointer font-semibold text-[#0F2444]">{translateText(copy.optionalDetails)}</summary>
+        <p className="mt-2 text-sm text-slate-500">{translateText(copy.optionalHelp)}</p>
         <div className="mt-5 grid gap-5 sm:grid-cols-2">
-          <Field id="worker-whatsapp" label={copy.whatsapp}>
+          <Field id="worker-whatsapp" label={translateText(copy.whatsapp)}>
             <Input id="worker-whatsapp" type="tel" inputMode="tel" value={form.whatsapp ?? ""} onChange={(e) => set("whatsapp", e.target.value)} data-testid="worker-input-whatsapp" />
           </Field>
-          <Field id="worker-age" label={copy.age}>
+          <Field id="worker-age" label={translateText(copy.age)}>
             <Input id="worker-age" inputMode="numeric" value={form.age ?? ""} onChange={(e) => set("age", e.target.value)} data-testid="worker-input-age" />
           </Field>
-          <Field id="worker-gender" label={copy.gender}>
+          <Field id="worker-gender" label={translateText(copy.gender)}>
             <Select value={form.gender ?? ""} onValueChange={(v: string) => set("gender", v)}>
-              <SelectTrigger id="worker-gender" data-testid="worker-select-gender"><SelectValue placeholder={copy.select} /></SelectTrigger>
-              <SelectContent>{["Male", "Female", "Other"].map((g) => <SelectItem key={g} value={g}>{language === "kn" ? GENDER_KN[g] : g}</SelectItem>)}</SelectContent>
+              <SelectTrigger id="worker-gender" data-testid="worker-select-gender"><SelectValue placeholder={translateText(copy.select)} /></SelectTrigger>
+              <SelectContent>{["Male", "Female", "Other"].map((g) => <SelectItem key={g} value={g}>{translateText(language === "kn" ? GENDER_KN[g] : g)}</SelectItem>)}</SelectContent>
             </Select>
           </Field>
-          <Field id="worker-education" label={copy.education}>
+          <Field id="worker-education" label={translateText(copy.education)}>
             <Input id="worker-education" value={form.education ?? ""} onChange={(e) => set("education", e.target.value)} data-testid="worker-input-education" />
           </Field>
-          <Field id="worker-experience" label={copy.experience}>
-            <Input id="worker-experience" placeholder={language === "kn" ? "ಉದಾ. 3 ವರ್ಷ" : "e.g. 3 years"} value={form.experience ?? ""} onChange={(e) => set("experience", e.target.value)} data-testid="worker-input-experience" />
+          <Field id="worker-experience" label={translateText(copy.experience)}>
+            <Input id="worker-experience" placeholder={translateText(language === "kn" ? "ಉದಾ. 3 ವರ್ಷ" : "e.g. 3 years")} value={form.experience ?? ""} onChange={(e) => set("experience", e.target.value)} data-testid="worker-input-experience" />
           </Field>
-          <Field id="worker-availability" label={copy.availability}>
+          <Field id="worker-availability" label={translateText(copy.availability)}>
             <Select value={form.availability ?? ""} onValueChange={(v: string) => set("availability", v)}>
-              <SelectTrigger id="worker-availability" data-testid="worker-select-availability"><SelectValue placeholder={copy.selectAvailability} /></SelectTrigger>
-              <SelectContent>{AVAILABILITY.map((a) => <SelectItem key={a} value={a}>{language === "kn" ? AVAILABILITY_KN[a] || a : a}</SelectItem>)}</SelectContent>
+              <SelectTrigger id="worker-availability" data-testid="worker-select-availability"><SelectValue placeholder={translateText(copy.selectAvailability)} /></SelectTrigger>
+              <SelectContent>{AVAILABILITY.map((a) => <SelectItem key={a} value={a}>{translateText(language === "kn" ? AVAILABILITY_KN[a] || a : a)}</SelectItem>)}</SelectContent>
             </Select>
           </Field>
-          <Field id="worker-preferred-location" label={copy.preferredLocation}>
+          <Field id="worker-preferred-location" label={translateText(copy.preferredLocation)}>
             <Input id="worker-preferred-location" value={form.preferred_location ?? ""} onChange={(e) => set("preferred_location", e.target.value)} data-testid="worker-input-preferred-location" />
           </Field>
-          <Field id="worker-expected-salary" label={copy.expectedSalary}>
+          <Field id="worker-expected-salary" label={translateText(copy.expectedSalary)}>
             <Input id="worker-expected-salary" inputMode="numeric" value={form.expected_salary ?? ""} onChange={(e) => set("expected_salary", e.target.value)} data-testid="worker-input-expected-salary" />
           </Field>
-          <Field id="worker-previous-experience" label={copy.previousExperience} full>
+          <Field id="worker-previous-experience" label={translateText(copy.previousExperience)} full>
             <Textarea id="worker-previous-experience" rows={3} value={form.previous_experience ?? ""} onChange={(e) => set("previous_experience", e.target.value)} data-testid="worker-input-previous-experience" />
           </Field>
         </div>
@@ -287,7 +289,7 @@ export default function WorkerForm({ job, language = "en" }: { job?: Job; langua
       <div className="sm:col-span-2">
         <label className="mb-4 flex items-start gap-3 text-sm text-slate-700">
           <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} required className="mt-1" />
-          <span>{copy.consentBefore}<Link to="/privacy" onClick={(event) => { if (dirty && !window.confirm(language === "kn" ? "ಉಳಿಸದ ವಿವರಗಳನ್ನು ಬಿಟ್ಟು ಮುಂದುವರಿಯಬೇಕೇ?" : "Leave this application? Unsaved details will be lost.")) event.preventDefault(); }} className="text-[#0F2444] underline">{copy.privacy}</Link>{copy.consentAfter}</span>
+          <span>{translateText(copy.consentBefore)}<Link to="/privacy" onClick={(event) => { if (dirty && !window.confirm(translateText(language === "kn" ? "ಉಳಿಸದ ವಿವರಗಳನ್ನು ಬಿಟ್ಟು ಮುಂದುವರಿಯಬೇಕೇ?" : "Leave this application? Unsaved details will be lost."))) event.preventDefault(); }} className="text-[#0F2444] underline">{translateText(copy.privacy)}</Link>{translateText(copy.consentAfter)}</span>
         </label>
         <Button
           type="submit"
@@ -296,10 +298,10 @@ export default function WorkerForm({ job, language = "en" }: { job?: Job; langua
           data-testid="worker-registration-submit"
         >
           {mutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          {copy.applyNow}
+          {translateText(copy.applyNow)}
         </Button>
         <p className="mt-4 max-w-2xl text-xs leading-relaxed text-slate-600">
-          {copy.removalBefore}{" "}
+          {translateText(copy.removalBefore)}{translateText(" ")}
           <a className="font-medium text-[#0F2444] underline underline-offset-2 hover:text-[#C2410C]" href={`mailto:${BRAND.email}`}>
             {BRAND.email}
           </a>.
@@ -310,10 +312,11 @@ export default function WorkerForm({ job, language = "en" }: { job?: Job; langua
 }
 
 function Field({ id, label, children, full }: { id: string; label: string; children: React.ReactNode; full?: boolean }) {
+  useSiteLanguage();
   return (
     <div className={`bws-form-field ${full ? "sm:col-span-2" : ""}`}>
-      <Label htmlFor={id} className="mb-2 block text-sm font-medium text-slate-700">{label}</Label>
-      {children}
+      <Label htmlFor={id} className="mb-2 block text-sm font-medium text-slate-700">{translateText(label)}</Label>
+      {translateText(children)}
     </div>
   );
 }

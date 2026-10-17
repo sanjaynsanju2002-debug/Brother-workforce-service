@@ -1,3 +1,4 @@
+import { translateText, useSiteLanguage } from "@/lib/language";
 import React from "react";
 import { useId, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
@@ -37,6 +38,7 @@ const EMPTY: CompanyRequestCreate = {
 };
 
 export default function CompanyForm() {
+  useSiteLanguage();
   const [form, setForm] = useState<CompanyRequestCreate>(EMPTY);
   const [done, setDone] = useState(false);
 
@@ -47,9 +49,9 @@ export default function CompanyForm() {
     onSuccess: () => {
       setDone(true);
       setForm(EMPTY);
-      toast.success("Manpower request submitted");
+      toast.success(translateText("Manpower request submitted"));
     },
-    onError: (error) => { const detail = error instanceof ApiError ? (error.body as { detail?: unknown })?.detail : null; toast.error(typeof detail === "string" ? detail : "Could not submit your request. Please try again."); },
+    onError: (error) => { const detail = error instanceof ApiError ? (error.body as { detail?: unknown })?.detail : null; toast.error(translateText(typeof detail === "string" ? detail : "Could not submit your request. Please try again.")); },
   });
 
   if (done) {
@@ -59,17 +61,13 @@ export default function CompanyForm() {
         data-testid="manpower-request-success"
       >
         <CheckCircle2 className="mx-auto mb-3 h-10 w-10 text-green-600" />
-        <p className="text-lg font-semibold text-[#0F2444]">
-          Thank you. Our workforce team will review your requirement and contact you to confirm the details.
-        </p>
+        <p className="text-lg font-semibold text-[#0F2444]">{translateText("Thank you. Our workforce team will review your requirement and contact you to confirm the details.")}</p>
         <Button
           variant="outline"
           className="mt-5"
           onClick={() => setDone(false)}
           data-testid="manpower-request-another"
-        >
-          Submit another request
-        </Button>
+        >{translateText("Submit another request")}</Button>
       </div>
     );
   }
@@ -89,13 +87,13 @@ export default function CompanyForm() {
           "worker_count",
         ];
         if (required.some((k) => !form[k])) {
-          toast.error("Please fill all required fields");
+          toast.error(translateText("Please fill all required fields"));
           return;
         }
         mutation.mutate(form);
       }}
     >
-      <Field label="Company Name *">
+      <Field label={translateText("Company Name *")}>
         <Input
           required
           value={form.company_name}
@@ -103,7 +101,7 @@ export default function CompanyForm() {
           data-testid="company-input-name"
         />
       </Field>
-      <Field label="Contact Person *">
+      <Field label={translateText("Contact Person *")}>
         <Input
           required
           value={form.contact_person}
@@ -111,16 +109,16 @@ export default function CompanyForm() {
           data-testid="company-input-contact-person"
         />
       </Field>
-      <Field label="Mobile Number *">
+      <Field label={translateText("Mobile Number *")}>
         <Input
-          type="tel" inputMode="tel" autoComplete="tel" pattern={String.raw`(?:[+]?91[ \-]?)?[6-9](?:[ \-]?[0-9]){9}`} title="10-digit Indian mobile number, optionally with +91"
+          type="tel" inputMode="tel" autoComplete="tel" pattern={String.raw`(?:[+]?91[ \-]?)?[6-9](?:[ \-]?[0-9]){9}`} title={translateText("10-digit Indian mobile number, optionally with +91")}
           required
           value={form.mobile}
           onChange={(e) => set("mobile", e.target.value)}
           data-testid="company-input-mobile"
         />
       </Field>
-      <Field label="Company Location *">
+      <Field label={translateText("Company Location *")}>
         <Input
           required
           value={form.company_location}
@@ -128,16 +126,16 @@ export default function CompanyForm() {
           data-testid="company-input-location"
         />
       </Field>
-      <Field label="Required Job Role *">
+      <Field label={translateText("Required Job Role *")}>
         <Input
           required
-          placeholder="e.g. Machine Operator"
+          placeholder={translateText("e.g. Machine Operator")}
           value={form.job_role}
           onChange={(e) => set("job_role", e.target.value)}
           data-testid="company-input-job-role"
         />
       </Field>
-      <Field label="Number of Workers Required *">
+      <Field label={translateText("Number of Workers Required *")}>
         <Input
           type="number" inputMode="numeric" min="1" max="100000" step="1"
           required
@@ -147,36 +145,36 @@ export default function CompanyForm() {
         />
       </Field>
       <details className="sm:col-span-2 rounded-lg border border-slate-200 bg-white p-4">
-        <summary className="cursor-pointer font-semibold text-[#0F2444]">Add optional details</summary>
-        <p className="mt-2 text-sm text-slate-500">You can also discuss these with our team after we receive your request.</p>
+        <summary className="cursor-pointer font-semibold text-[#0F2444]">{translateText("Add optional details")}</summary>
+        <p className="mt-2 text-sm text-slate-500">{translateText("You can also discuss these with our team after we receive your request.")}</p>
         <div className="mt-4 grid gap-5 sm:grid-cols-2">
-          <Field label="Designation">
+          <Field label={translateText("Designation")}>
             <Input value={form.designation ?? ""} onChange={(e) => set("designation", e.target.value)} data-testid="company-input-designation" />
           </Field>
-          <Field label="Email">
+          <Field label={translateText("Email")}>
             <Input type="email" value={form.email ?? ""} onChange={(e) => set("email", e.target.value)} data-testid="company-input-email" />
           </Field>
-          <Field label="Industry">
+          <Field label={translateText("Industry")}>
             <Select value={form.industry ?? ""} onValueChange={(v: string) => set("industry", v)}>
-              <SelectTrigger data-testid="company-select-industry"><SelectValue placeholder="Select industry" /></SelectTrigger>
-              <SelectContent>{INDUSTRIES.map((i) => <SelectItem key={i} value={i}>{i}</SelectItem>)}</SelectContent>
+              <SelectTrigger data-testid="company-select-industry"><SelectValue placeholder={translateText("Select industry")} /></SelectTrigger>
+              <SelectContent>{INDUSTRIES.map((i) => <SelectItem key={i} value={i}>{translateText(i)}</SelectItem>)}</SelectContent>
             </Select>
           </Field>
-          <Field label="Workforce Type">
+          <Field label={translateText("Workforce Type")}>
             <Select value={form.workforce_type ?? ""} onValueChange={(v: string) => set("workforce_type", v)}>
-              <SelectTrigger data-testid="company-select-workforce-type"><SelectValue placeholder="Select type" /></SelectTrigger>
-              <SelectContent>{WORKFORCE_TYPES.map((w) => <SelectItem key={w} value={w}>{w}</SelectItem>)}</SelectContent>
+              <SelectTrigger data-testid="company-select-workforce-type"><SelectValue placeholder={translateText("Select type")} /></SelectTrigger>
+              <SelectContent>{WORKFORCE_TYPES.map((w) => <SelectItem key={w} value={w}>{translateText(w)}</SelectItem>)}</SelectContent>
             </Select>
           </Field>
-          <Field label="Shift Details">
+          <Field label={translateText("Shift Details")}>
             <Input
-              placeholder="Day / Night / Rotational"
+              placeholder={translateText("Day / Night / Rotational")}
               value={form.shift_details ?? ""}
               onChange={(e) => set("shift_details", e.target.value)}
               data-testid="company-input-shift"
             />
           </Field>
-          <Field label="Expected Joining Date">
+          <Field label={translateText("Expected Joining Date")}>
             <Input
               type="date"
               value={form.joining_date ?? ""}
@@ -184,14 +182,14 @@ export default function CompanyForm() {
               data-testid="company-input-joining-date"
             />
           </Field>
-          <Field label="Work Location" full>
+          <Field label={translateText("Work Location")} full>
             <Input
               value={form.work_location ?? ""}
               onChange={(e) => set("work_location", e.target.value)}
               data-testid="company-input-work-location"
             />
           </Field>
-          <Field label="Requirement Description" full>
+          <Field label={translateText("Requirement Description")} full>
             <Textarea
               rows={4}
               value={form.description ?? ""}
@@ -209,11 +207,8 @@ export default function CompanyForm() {
           className="bws-btn-3d w-full bg-[#C2410C] py-6 text-base font-semibold text-white hover:bg-[#9A3412] sm:w-auto sm:px-10"
           data-testid="manpower-request-submit"
         >
-          {mutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          Request Manpower
-        </Button>
-        <p className="mt-3 text-xs leading-relaxed text-slate-600">
-          We use your details to respond to this request. Read our <Link to="/privacy" className="text-[#0F2444] underline">Privacy Notice</Link>.
+          {mutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{translateText("Request Manpower")}</Button>
+        <p className="mt-3 text-xs leading-relaxed text-slate-600">{translateText("We use your details to respond to this request. Read our ")}<Link to="/privacy" className="text-[#0F2444] underline">{translateText("Privacy Notice")}</Link>.
         </p>
       </div>
     </form>
@@ -221,11 +216,12 @@ export default function CompanyForm() {
 }
 
 function Field({ label, children, full }: { label: string; children: React.ReactNode; full?: boolean }) {
+  useSiteLanguage();
   const id = useId();
   return (
     <div className={`bws-form-field ${full ? "sm:col-span-2" : ""}`}>
-      <Label htmlFor={id} className="mb-2 block text-sm font-medium text-slate-700">{label}</Label>
-      <div id={id + "-field"}>{React.isValidElement(children) ? React.cloneElement(children as React.ReactElement<{ id?: string }>, { id }) : children}</div>
+      <Label htmlFor={id} className="mb-2 block text-sm font-medium text-slate-700">{translateText(label)}</Label>
+      <div id={id + "-field"}>{translateText(React.isValidElement(children) ? React.cloneElement(children as React.ReactElement<{ id?: string }>, { id }) : children)}</div>
     </div>
   );
 }

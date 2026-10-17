@@ -1,9 +1,11 @@
-export const rupees = (amount: string) => new Intl.NumberFormat("en-IN", {
+import { siteLocale } from "@/lib/language";
+
+export const rupees = (amount: string) => new Intl.NumberFormat(siteLocale(), {
   style: "currency", currency: "INR", minimumFractionDigits: 2, maximumFractionDigits: 2,
 }).format(Number(amount));
 
 export const indiaToday = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
-export const monthLabel = (month: string) => new Date(`${month}-01T12:00:00`).toLocaleDateString("en-IN", { month: "long", year: "numeric" });
+export const monthLabel = (month: string, locale = siteLocale()) => new Date(`${month}-01T12:00:00`).toLocaleDateString(locale, { month: "long", year: "numeric" });
 export const monthDate = (month: string) => indiaToday().startsWith(month) ? indiaToday() : `${month}-01`;
 export const previousMonth = (date: string) => {
   const [year, month] = date.slice(0, 7).split("-").map(Number);

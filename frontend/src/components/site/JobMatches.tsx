@@ -1,3 +1,4 @@
+import { translateText, useSiteLanguage } from "@/lib/language";
 import { useQuery } from "@tanstack/react-query";
 import { BellRing, MessageSquare, Users } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -6,6 +7,7 @@ import { jobAlertMessage, waLink } from "@/lib/wa";
 import type { Job, Worker } from "@/types";
 
 export default function JobMatches({ pin, job }: { pin: string; job: Job }) {
+  useSiteLanguage();
   const q = "";
   const matches = useQuery({
     queryKey: ["job-matches", pin, job.id],
@@ -22,18 +24,15 @@ export default function JobMatches({ pin, job }: { pin: string; job: Job }) {
     <div className="mt-3 rounded-md border border-slate-200 bg-[#F8FAFC] p-3 sm:p-4" data-testid={`job-matches-${job.id}`}>
       <p className="flex items-center gap-2 text-sm font-semibold text-[#0F2444]">
         <BellRing className="h-4 w-4 text-[#C2410C]" />
-        {matches.isLoading
+        {translateText(matches.isLoading
           ? "Finding matching candidates…"
-          : `${rows.length} matching candidate${rows.length === 1 ? "" : "s"} for ${job.title}`}
+          : `${rows.length} matching candidate${rows.length === 1 ? "" : "s"} for ${job.title}`)}
       </p>
-      <p className="mt-1 text-xs text-slate-500">
-        Matched on skill category, nearest location first. Tap WhatsApp to send the job details.
-      </p>
+      <p className="mt-1 text-xs text-slate-500">{translateText("Matched on skill category, nearest location first. Tap WhatsApp to send the job details.")}</p>
 
       {!matches.isLoading && rows.length === 0 && (
         <p className="mt-3 flex items-center gap-2 text-sm text-slate-500" data-testid={`job-matches-empty-${job.id}`}>
-          <Users className="h-4 w-4" /> No registered candidates in this skill category yet.
-        </p>
+          <Users className="h-4 w-4" />{translateText(" No registered candidates in this skill category yet.")}</p>
       )}
 
       {rows.length > 0 && (
@@ -46,11 +45,11 @@ export default function JobMatches({ pin, job }: { pin: string; job: Job }) {
             >
               <span className="font-medium text-[#0F2444]">{w.full_name}</span>
               <span className="text-slate-500">{w.mobile}</span>
-              <span className="text-slate-500">{w.current_location}</span>
-              {isLocal(w) && <Badge className="bg-green-600 text-[10px] text-white">Nearby</Badge>}
+              <span className="text-slate-500">{translateText(w.current_location)}</span>
+              {isLocal(w) && <Badge className="bg-green-600 text-[10px] text-white">{translateText("Nearby")}</Badge>}
               {w.availability && (
                 <Badge variant="secondary" className="text-[10px]">
-                  {w.availability}
+                  {translateText(w.availability)}
                 </Badge>
               )}
               <a
@@ -60,12 +59,11 @@ export default function JobMatches({ pin, job }: { pin: string; job: Job }) {
                 className="ml-0 inline-flex w-full items-center justify-center gap-1.5 rounded-md bg-[#16A34A] px-2.5 py-1.5 text-xs font-semibold text-white transition-transform duration-150 hover:bg-[#15803D] active:scale-98 sm:ml-auto sm:w-auto"
                 data-testid={`job-match-wa-${job.id}-${w.id}`}
               >
-                <MessageSquare className="h-3.5 w-3.5" /> Send Alert
-              </a>
+                <MessageSquare className="h-3.5 w-3.5" />{translateText(" Send Alert")}</a>
             </div>
           ))}
           {rows.length > 20 && (
-            <p className="text-xs text-slate-500">Showing the closest 20 of {rows.length} matches.</p>
+            <p className="text-xs text-slate-500">{translateText("Showing the closest 20 of ")}{translateText(rows.length)}{translateText(" matches.")}</p>
           )}
         </div>
       )}

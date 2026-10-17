@@ -1,3 +1,4 @@
+import { translateText, useSiteLanguage } from "@/lib/language";
 import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { KeyRound, Loader2, ShieldCheck, TriangleAlert } from "lucide-react";
@@ -18,6 +19,7 @@ function apiMessage(err: unknown, fallback: string): string {
 }
 
 export default function Security({ pin, onPinChanged }: { pin: string; onPinChanged: () => void }) {
+  useSiteLanguage();
   const q = "";
   const key = ["admin-security", pin];
 
@@ -31,9 +33,9 @@ export default function Security({ pin, onPinChanged }: { pin: string; onPinChan
       setNewPin("");
       setConfirmPin("");
       onPinChanged();
-      toast.success("PIN changed. Sign in again with the new PIN.");
+      toast.success(translateText("PIN changed. Sign in again with the new PIN."));
     },
-    onError: (e) => toast.error(apiMessage(e, "Could not change the PIN")),
+    onError: (e) => toast.error(translateText(apiMessage(e, "Could not change the PIN"))),
   });
 
   const s = info.data;
@@ -43,16 +45,10 @@ export default function Security({ pin, onPinChanged }: { pin: string; onPinChan
       <Card className="border-slate-200 bg-white">
         <CardContent className="p-4 sm:p-6">
           <h3 className="flex items-center gap-2 text-lg font-semibold text-[#0F2444]">
-            <KeyRound className="h-5 w-5 text-[#C2410C]" /> Your Security PIN
-          </h3>
-          <p className="mt-1 text-sm text-slate-500">
-            This is the PIN that unlocks the dashboard. Keep it private — anyone with it can see every
-            applicant's phone number and resume.
-          </p>
+            <KeyRound className="h-5 w-5 text-[#C2410C]" />{translateText(" Your Security PIN")}</h3>
+          <p className="mt-1 text-sm text-slate-500">{translateText("This is the PIN that unlocks the dashboard. Keep it private — anyone with it can see every applicant's phone number and resume.")}</p>
 
-          <p className="mt-5 rounded-md border border-slate-200 bg-[#F8FAFC] p-4 text-sm text-slate-700">
-            Your PIN is never displayed or sent in website URLs. Changing it signs out all admin sessions.
-          </p>
+          <p className="mt-5 rounded-md border border-slate-200 bg-[#F8FAFC] p-4 text-sm text-slate-700">{translateText("Your PIN is never displayed or sent in website URLs. Changing it signs out all admin sessions.")}</p>
 
           {s?.is_default && (
             <div
@@ -61,9 +57,7 @@ export default function Security({ pin, onPinChanged }: { pin: string; onPinChan
             >
               <TriangleAlert className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
               <div>
-                <strong>This is still the PIN we set up for you.</strong> Change it to something only your
-                team knows before sharing the site publicly.
-              </div>
+                <strong>{translateText("This is still the PIN we set up for you.")}</strong>{translateText(" Change it to something only your team knows before sharing the site publicly.")}</div>
             </div>
           )}
         </CardContent>
@@ -72,27 +66,26 @@ export default function Security({ pin, onPinChanged }: { pin: string; onPinChan
       <Card className="border-slate-200 bg-white">
         <CardContent className="p-4 sm:p-6">
           <h3 className="flex items-center gap-2 text-lg font-semibold text-[#0F2444]">
-            <ShieldCheck className="h-5 w-5 text-[#C2410C]" /> Change PIN
-          </h3>
-          <p className="mt-1 text-sm text-slate-500">8 to 12 digits. Takes effect immediately.</p>
+            <ShieldCheck className="h-5 w-5 text-[#C2410C]" />{translateText(" Change PIN")}</h3>
+          <p className="mt-1 text-sm text-slate-500">{translateText("8 to 12 digits. Takes effect immediately.")}</p>
           <form
             className="mt-5 space-y-4"
             data-testid="security-change-form"
             onSubmit={(e) => {
               e.preventDefault();
               if (newPin !== confirmPin) {
-                toast.error("The two PINs do not match");
+                toast.error(translateText("The two PINs do not match"));
                 return;
               }
               if (!/^\d{8,12}$/.test(newPin)) {
-                toast.error("PIN must be 8 to 12 digits");
+                toast.error(translateText("PIN must be 8 to 12 digits"));
                 return;
               }
               change.mutate(newPin);
             }}
           >
             <div>
-              <Label className="mb-2 block text-sm">New PIN</Label>
+              <Label className="mb-2 block text-sm">{translateText("New PIN")}</Label>
               <Input
                 type="password"
                 inputMode="numeric"
@@ -103,7 +96,7 @@ export default function Security({ pin, onPinChanged }: { pin: string; onPinChan
               />
             </div>
             <div>
-              <Label className="mb-2 block text-sm">Confirm New PIN</Label>
+              <Label className="mb-2 block text-sm">{translateText("Confirm New PIN")}</Label>
               <Input
                 type="password"
                 inputMode="numeric"
@@ -119,9 +112,7 @@ export default function Security({ pin, onPinChanged }: { pin: string; onPinChan
               className="bg-[#C2410C] text-white hover:bg-[#9A3412]"
               data-testid="security-change-submit"
             >
-              {change.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Update PIN
-            </Button>
+              {change.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}{translateText("Update PIN")}</Button>
           </form>
         </CardContent>
       </Card>
