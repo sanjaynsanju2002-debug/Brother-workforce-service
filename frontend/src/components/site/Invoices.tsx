@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ApiError, apiDelete, apiGet, apiPatch, apiPost, apiPut } from "@/lib/api";
 import { BRAND } from "@/lib/brand";
 import { monthLabel, previousMonth } from "@/lib/finance";
+import { refreshCompanyQueries } from "@/lib/companyQueries";
 
 type Profile = { name: string; address: string; phone: string; email: string; website: string; gstin: string; payment_details: string };
 type CompanyInput = { name: string; address: string; gstin: string };
@@ -99,6 +100,11 @@ export default function Invoices() {
     }
   }, [profile.data]);
   useEffect(() => {
+    if (companyId && companies.data && !companies.isFetching && !companies.data.some((company) => company.id === companyId)) {
+      setCompanyId("");
+    }
+  }, [companyId, companies.data, companies.isFetching]);
+  useEffect(() => {
     const timer = window.setTimeout(() => setPreviewInput(formData(form)), 250);
     return () => window.clearTimeout(timer);
   }, [form]);
@@ -145,7 +151,7 @@ export default function Invoices() {
     mutationFn: () => apiPost<Company>("/admin/invoices/companies", companyForm),
     onSuccess: (company) => {
       qc.setQueryData<Company[]>(["invoice-companies"], (current) => [...(current || []), company].sort((a, b) => a.name.localeCompare(b.name)));
-      qc.invalidateQueries({ queryKey: ["invoice-companies"] });
+      refreshCompanyQueries(qc);
       startForCompany(company);
       setShowCompanyForm(false);
       setCompanyForm({ name: "", address: "", gstin: "" });
@@ -230,7 +236,7 @@ export default function Invoices() {
           <div className="min-w-0 flex-1 basis-64"><Label htmlFor="invoice-company" className="mb-2 flex items-center gap-2 font-semibold text-[#0F2444]"><Building2 className="h-4 w-4 text-[#C2410C]" /> Company</Label><select id="invoice-company" className={selectStyle} value={companyId} disabled={busy} data-testid="invoice-company" onChange={(event) => { if (discardChanges()) startForCompany(companies.data?.find((company) => company.id === event.target.value)); }}><option value="">Select a company</option>{companies.data.map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}</select></div>
           <Button type="button" variant="outline" disabled={busy} onClick={() => { setShowCompanyForm(!showCompanyForm); setCompanyProblem(""); }} data-testid="invoice-add-company"><Plus className="mr-2 h-4 w-4" /> Add company</Button>
         </div>
-        <p className="mt-2 text-xs text-slate-500">Add each customer once. Selecting a company fills its billing details and shows its saved invoices below.</p>
+        <p className="mt-2 text-xs text-slate-500">Companies are shared with Company Workforce and Payroll. Selecting a company fills its billing details and shows its saved invoices below.</p>
         {showCompanyForm && <form className="mt-5 space-y-4 border-t border-slate-200 pt-5" onSubmit={(event) => { event.preventDefault(); if (discardChanges()) addCompany.mutate(); }} data-testid="invoice-company-form">
           <fieldset disabled={busy} className="grid min-w-0 gap-4 sm:grid-cols-2">
             <div><Label htmlFor="invoice-company-name" className="mb-2 block">Company name *</Label><Input id="invoice-company-name" required maxLength={150} value={companyForm.name} onChange={(event) => setCompanyForm({ ...companyForm, name: event.target.value })} /></div>

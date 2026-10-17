@@ -11,8 +11,10 @@ from pymongo.errors import DuplicateKeyError
 from starlette.concurrency import run_in_threadpool
 
 from lib.auth import require_admin
+from lib.companies import company_name_key, company_name_query, invoice_company
 from lib.db import db
 from lib.invoices import Invoice, InvoiceCompany, InvoiceCompanyInput, InvoiceInput, InvoiceModel, InvoiceNumber, InvoiceProfile, calculate_invoice
+from models.clients import Client
 
 router = APIRouter(prefix="/admin/invoices", dependencies=[Depends(require_admin)])
 
@@ -57,29 +59,54 @@ async def require_available_number(number: str, invoice_id: str | None = None) -
 
 
 async def find_company(company_id: UUID) -> InvoiceCompany:
-    doc = await db.invoice_companies.find_one({"id": str(company_id)}, {"_id": 0})
-    if not doc:
+    company_id = str(company_id)
+    billing = await db.invoice_companies.find_one({"id": company_id}, {"_id": 0})
+    client = await db.clients.find_one({"id": company_id}, {"_id": 0})
+    if not client and billing:
+        client = await db.clients.find_one(company_name_query(billing["name"]), {"_id": 0})
+    if not client and (not billing or billing.get("archived")):
         raise HTTPException(404, "Company not found. Add the company before creating an invoice.")
-    doc.pop("_id", None)
-    return InvoiceCompany(**doc)
+    return invoice_company(client, billing)
 
 
 @router.get("/companies", response_model=list[InvoiceCompany])
 async def list_companies():
-    docs = await db.invoice_companies.find({}, {"_id": 0}).sort("name", 1).to_list(None)
-    return [InvoiceCompany(**doc) for doc in docs]
+    clients = await db.clients.find({}, {"_id": 0}).to_list(None)
+    billing = await db.invoice_companies.find({}, {"_id": 0}).to_list(None)
+    active_billing = [doc for doc in billing if not doc.get("archived")]
+    by_id = {doc["id"]: doc for doc in active_billing}
+    by_name = {company_name_key(doc["name"]): doc for doc in active_billing}
+    # Keep old invoice company IDs so saved invoices retain their original links.
+    companies = {doc["id"]: invoice_company(None, doc) for doc in active_billing}
+    for client in clients:
+        saved = by_id.get(client["id"]) or by_name.get(company_name_key(client["name"]))
+        company = invoice_company(client, saved)
+        companies[company.id] = company
+    return sorted(companies.values(), key=lambda company: company.name.casefold())
 
 
 @router.post("/companies", response_model=InvoiceCompany)
 async def create_company(payload: InvoiceCompanyInput):
     # The primary key prevents duplicate names even before secondary indexes build.
     name_key = " ".join(payload.name.casefold().split())
-    company_id = str(uuid5(NAMESPACE_URL, f"bws:invoice-company:{name_key}"))
+    existing = await db.invoice_companies.find_one(company_name_query(payload.name))
+    company_id = existing["id"] if existing else str(uuid5(NAMESPACE_URL, f"bws:invoice-company:{name_key}"))
+    if await db.clients.find_one(company_name_query(payload.name)) or (existing and not existing.get("archived")):
+        raise HTTPException(409, "This company is already saved. Select it from the company list.")
     company = InvoiceCompany(**payload.model_dump(), id=company_id, created_at=datetime.now(timezone.utc))
+    client = Client(id=company_id, name=company.name, location=company.address or None, visible=False)
     try:
-        await db.invoice_companies.insert_one({"_id": company_id, **company.model_dump(mode="json")})
+        await db.clients.insert_one({"_id": company_id, **client.model_dump()})
     except DuplicateKeyError:
         raise HTTPException(409, "This company is already saved. Select it from the company list.")
+    try:
+        if existing:
+            await db.invoice_companies.update_one({"id": company_id}, {"$set": {**company.model_dump(mode="json"), "archived": False}})
+        else:
+            await db.invoice_companies.insert_one({"_id": company_id, **company.model_dump(mode="json")})
+    except Exception:
+        await db.clients.delete_one({"id": company_id})
+        raise
     return company
 
 
@@ -187,7 +214,7 @@ async def delete_invoice(invoice_id: str, revision: int = Query(ge=1)):
 async def update_invoice(invoice_id: str, payload: InvoiceUpdate):
     validate_save(payload)
     old = await find_invoice(invoice_id)
-    if payload.company_id is not None:
+    if payload.company_id is not None and payload.company_id != old.company_id:
         await find_company(payload.company_id)
     if old.company_id is not None and payload.company_id != old.company_id:
         raise HTTPException(422, "A saved invoice stays with its company. Create a new invoice for another company.")

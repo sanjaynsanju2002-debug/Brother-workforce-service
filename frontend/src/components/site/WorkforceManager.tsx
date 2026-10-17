@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { ApiError, apiDelete, apiGet, apiPatch, apiPost } from "@/lib/api";
 import type { Client, Worker } from "@/types";
 import { rupees } from "@/lib/finance";
+import { refreshCompanyQueries } from "@/lib/companyQueries";
 
 type Assignment = {
   id: string;
@@ -51,21 +52,32 @@ export default function WorkforceManager({ pin }: { pin: string }) {
   const [salary, setSalary] = useState("");
   const [salaryBasis, setSalaryBasis] = useState<"Monthly" | "Daily">("Monthly");
   const clients = useQuery({ queryKey: ["admin-clients", pin], queryFn: () => apiGet<Client[]>(`/admin/clients${q}`) });
-  const workers = useQuery({ queryKey: ["assignment-workers", pin], queryFn: () => apiGet<Worker[]>(`/admin/workers${q}`) });
+  const workers = useQuery({ queryKey: ["admin-talents", pin], queryFn: () => apiGet<Worker[]>(`/admin/talents${q}`) });
   const assignments = useQuery({ queryKey: key, queryFn: () => apiGet<Assignment[]>(`/admin/assignments${q}`) });
   const refresh = () => {
     void qc.invalidateQueries({ queryKey: key });
+    void qc.invalidateQueries({ queryKey: ["admin-talents", pin] });
     void qc.invalidateQueries({ queryKey: ["payroll-draft"] });
     void qc.invalidateQueries({ queryKey: ["payroll-companies"] });
   };
   const createCompany = useMutation({
     mutationFn: (name: string) => apiPost<Client>(`/admin/clients${q}`, { name: name.trim(), visible: false }),
     onSuccess: (client) => {
-      qc.invalidateQueries({ queryKey: ["admin-clients", pin] });
-      qc.invalidateQueries({ queryKey: ["payroll-companies"] });
+      refreshCompanyQueries(qc);
       setForm((current) => ({ ...current, client_id: client.id }));
       setNewCompany("");
       toast.success("Private company added");
+    },
+    onError: (e) => toast.error(errorMessage(e)),
+  });
+  const removeCompany = useMutation({
+    mutationFn: (id: string) => apiDelete<{ ok: boolean }>(`/admin/clients/${id}${q}`),
+    onSuccess: (_, id) => {
+      refreshCompanyQueries(qc);
+      setForm((current) => current.client_id === id ? { ...current, client_id: "" } : current);
+      setCompanyFilter((current) => current === id ? "" : current);
+      setEditingId(null);
+      toast.success("Company removed from Workforce, Payroll and Invoice company lists");
     },
     onError: (e) => toast.error(errorMessage(e)),
   });
@@ -74,7 +86,7 @@ export default function WorkforceManager({ pin }: { pin: string }) {
     mutationFn: (value: Form) => apiPost<Assignment>(`/admin/assignments${q}`, {
       ...value, worker_id: value.worker_id || null, full_name: value.full_name.trim(), salary: value.salary || null,
     }),
-    onSuccess: () => { setForm(EMPTY); refresh(); toast.success("Worker added to company"); },
+    onSuccess: () => { setForm(EMPTY); refresh(); toast.success("Employee added to Workforce and Talent Bank"); },
     onError: (e) => toast.error(errorMessage(e)),
   });
   const changeStatus = useMutation({
@@ -115,15 +127,15 @@ export default function WorkforceManager({ pin }: { pin: string }) {
 
       <Card className="border-slate-200 bg-white"><CardContent className="p-5 sm:p-6">
         <h3 className="text-lg font-semibold text-[#0F2444]">Add a person working at a company</h3>
-        <p className="mt-1 text-sm text-slate-500">Select an existing applicant or enter someone manually. This roster is visible only in the admin dashboard.</p>
+        <p className="mt-1 text-sm text-slate-500">Select an existing applicant or talent, or enter someone manually. New employees are also saved in Talent Bank. This roster is visible only in the admin dashboard.</p>
         <div className="mt-5 flex flex-wrap items-end gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
           <div className="min-w-[220px] flex-1"><Label className="mb-2 block">New company (private)</Label>
-            <Input value={newCompany} onChange={(e) => setNewCompany(e.target.value)} placeholder="Company name" data-testid="assignment-new-company" />
+            <Input value={newCompany} maxLength={150} onChange={(e) => setNewCompany(e.target.value)} placeholder="Company name" data-testid="assignment-new-company" />
           </div>
           <Button type="button" variant="outline" disabled={createCompany.isPending || !newCompany.trim()} onClick={() => createCompany.mutate(newCompany)}>
             Add private company
           </Button>
-          <p className="w-full text-xs text-slate-500">Private companies will not appear in Businesses We Support on the public website.</p>
+          <p className="w-full text-xs text-slate-500">Companies added here also appear in Payroll and Invoice. Private companies will not appear in Businesses We Support on the public website.</p>
         </div>
         <form className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3" onSubmit={(e) => {
           e.preventDefault();
@@ -135,7 +147,7 @@ export default function WorkforceManager({ pin }: { pin: string }) {
               <option value="">Select company</option>{(clients.data ?? []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </div>
-          <div><Label className="mb-2 block">Existing applicant</Label>
+          <div><Label className="mb-2 block">Existing applicant / talent</Label>
             <select className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm" value={form.worker_id} onChange={(e) => {
               const worker = (workers.data ?? []).find((w) => w.id === e.target.value);
               setForm({ ...form, worker_id: e.target.value, full_name: worker?.full_name ?? "", mobile: worker?.mobile ?? "" });
@@ -156,6 +168,19 @@ export default function WorkforceManager({ pin }: { pin: string }) {
           </Button></div>
         </form>
         {!clients.isLoading && !clients.data?.length && <p className="mt-3 text-sm text-amber-700">Add a company in the Clients tab first.</p>}
+      </CardContent></Card>
+
+      <Card className="border-slate-200 bg-white"><CardContent className="p-5 sm:p-6">
+        <details>
+          <summary className="cursor-pointer text-lg font-semibold text-[#0F2444]">Manage companies ({clients.data?.length ?? 0})</summary>
+          <p className="mt-2 text-sm text-slate-500">Removing a company updates the Workforce, Payroll and Invoice company lists. Saved invoices, payroll records and Talent Bank profiles are kept.</p>
+          <div className="mt-4 space-y-2">{(clients.data ?? []).map((company) => <div key={company.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 p-3">
+            <div><p className="font-medium text-[#0F2444]">{company.name}</p><p className="text-xs text-slate-500">{all.filter((person) => person.client_id === company.id).length} workforce assignments</p></div>
+            <Button type="button" size="sm" variant="outline" className="border-red-200 text-red-700 hover:bg-red-50" disabled={removeCompany.isPending || add.isPending || createCompany.isPending || saveEmployeeId.isPending || changeStatus.isPending || remove.isPending} data-testid={`workforce-delete-company-${company.id}`} onClick={() => {
+              if (window.confirm(`Remove ${company.name} and its workforce assignments? It will be removed from the active Payroll and Invoice company lists. Saved invoices, payroll records and Talent Bank profiles will be kept.`)) removeCompany.mutate(company.id);
+            }}><Trash2 className="mr-2 h-4 w-4" />Remove company</Button>
+          </div>)}</div>
+        </details>
       </CardContent></Card>
 
       <Card className="border-slate-200 bg-white"><CardContent className="p-5 sm:p-6">

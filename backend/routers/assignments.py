@@ -1,5 +1,6 @@
-"""Private company workforce roster, independent of public client cards."""
+"""Private company workforce roster, linked to Talent Bank profiles."""
 
+import re
 from datetime import datetime, timezone
 from typing import Literal
 from uuid import uuid4
@@ -10,6 +11,7 @@ from pydantic import BaseModel, Field, field_validator
 from lib.auth import require_admin
 from lib.db import db
 from lib.invoices import Money
+from models.bws import Worker
 
 router = APIRouter(prefix="/admin", dependencies=[Depends(require_admin)])
 
@@ -64,19 +66,48 @@ async def create_assignment(payload: AssignmentCreate) -> Assignment:
     data["full_name"] = data["full_name"].strip()
     if not data["full_name"]:
         raise HTTPException(status_code=400, detail="Worker name is required")
+    worker = None
     if payload.worker_id:
         worker = await db.workers.find_one({"id": payload.worker_id})
         if not worker:
             raise HTTPException(status_code=404, detail="Worker application not found")
+    else:
+        # Match both name and phone: relatives can share a phone, and names alone
+        # are not a reliable identity when an employee has no mobile number.
+        mobile = re.sub(r"\D", "", data.get("mobile") or "")
+        if len(mobile) == 12 and mobile.startswith("91"):
+            mobile = mobile[2:]
+        if len(mobile) == 10:
+            name_pattern = r"^\s*" + r"\s+".join(re.escape(part) for part in data["full_name"].split()) + r"\s*$"
+            mobile_pattern = r"^\D*(?:91\D*)?" + r"\D*".join(mobile) + r"\D*$"
+            worker = await db.workers.find_one({
+                "full_name": {"$regex": name_pattern, "$options": "i"},
+                "mobile": {"$regex": mobile_pattern},
+            })
+
+    new_talent = None
+    if worker:
+        data["worker_id"] = worker["id"]
         existing = await db.assignments.find_one({
             "client_id": payload.client_id,
-            "worker_id": payload.worker_id,
+            "worker_id": worker["id"],
             "status": "Active",
         })
         if existing:
             raise HTTPException(status_code=409, detail="This worker is already active at that company")
         data["full_name"] = worker["full_name"]
         data["mobile"] = worker.get("mobile")
+    else:
+        new_talent = Worker(
+            full_name=data["full_name"],
+            mobile=(data.get("mobile") or "").strip(),
+            current_location="Not provided",
+            skill_category="Not provided",
+            skills=(data.get("role") or "").strip() or None,
+            source="Talent Bank",
+            status="Deployed",
+        )
+        data["worker_id"] = new_talent.id
 
     assignment = Assignment(
         **data,
@@ -87,7 +118,15 @@ async def create_assignment(payload: AssignmentCreate) -> Assignment:
     record = assignment.model_dump()
     if assignment.salary is not None:
         record["salary"] = str(assignment.salary)
-    await db.assignments.insert_one(record)
+    if new_talent:
+        await db.workers.insert_one(new_talent.model_dump())
+    try:
+        await db.assignments.insert_one(record)
+    except Exception:
+        # A failed workforce save must not leave a second, unlinked profile.
+        if new_talent:
+            await db.workers.delete_one({"id": new_talent.id})
+        raise
     return assignment
 
 

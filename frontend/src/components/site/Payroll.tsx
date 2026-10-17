@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Building2, Download, FileSpreadsheet, Loader2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
@@ -24,6 +24,11 @@ export default function Payroll() {
   const companies = useQuery({ queryKey: ["payroll-companies"], queryFn: () => apiGet<PayrollCompany[]>("/admin/payroll/companies") });
   const draft = useQuery({ queryKey: ["payroll-draft", companyId, month], queryFn: () => apiGet<PayrollDraft>(`/admin/payroll/draft?company_id=${encodeURIComponent(companyId)}&month=${month}`), enabled: !!companyId, refetchOnWindowFocus: false });
   const history = useQuery({ queryKey: ["payroll-history", companyId, page], queryFn: () => apiGet<PayrollPage>(`/admin/payroll?page=${page}${companyId ? `&company_id=${encodeURIComponent(companyId)}` : ""}`) });
+  useEffect(() => {
+    if (companyId && companies.data && !companies.isFetching && !companies.data.some((company) => company.id === companyId)) {
+      setCompanyId(""); setDirty(false); setPage(1);
+    }
+  }, [companyId, companies.data, companies.isFetching]);
   const remove = useMutation({
     mutationFn: (record: PayrollSummary) => apiDelete<void>(`/admin/payroll/${record.id}?${new URLSearchParams({ revision: String(record.revision), updated_at: record.updated_at })}`),
     onSuccess: async (_, record) => {
@@ -67,7 +72,7 @@ export default function Payroll() {
       <div><Label htmlFor="payroll-company" className="mb-2 flex items-center gap-2"><Building2 className="h-4 w-4" /> Company</Label><select id="payroll-company" className={selectStyle} disabled={working || companies.isPending} value={companyId} onChange={(event) => {
         if (!discard()) return;
         setDirty(false); setCompanyId(event.target.value); setPage(1); setEditorVersion((value) => value + 1);
-      }} data-testid="payroll-company"><option value="">Select a company</option>{companies.data?.map((company) => <option key={company.id} value={company.id}>{company.name}{company.saved_only ? " (saved payroll)" : ""}</option>)}</select></div>
+      }} data-testid="payroll-company"><option value="">Select a company</option>{companies.data?.filter((company) => !company.saved_only || company.id === companyId).map((company) => <option key={company.id} value={company.id}>{company.name}{company.saved_only ? " (saved payroll)" : ""}</option>)}</select></div>
       <div><Label htmlFor="payroll-month" className="mb-2 block">Payroll month</Label><Input id="payroll-month" type="month" value={month} disabled={working} onChange={(event) => {
         if (!event.target.value || !discard()) return;
         setDirty(false); setMonth(event.target.value); setEditorVersion((value) => value + 1);

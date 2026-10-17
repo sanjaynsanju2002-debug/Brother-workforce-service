@@ -8,7 +8,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 def _now() -> datetime:
@@ -20,13 +20,20 @@ def _uid() -> str:
 
 
 class ClientCreate(BaseModel):
-    name: str
+    name: str = Field(min_length=1, max_length=150)
     industry: Optional[str] = None
     location: Optional[str] = None
     headcount: Optional[str] = None
     service_summary: Optional[str] = None
     outcome: Optional[str] = None
     visible: bool = True
+
+    @field_validator("name")
+    @classmethod
+    def clean_name(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Enter a company name")
+        return value.strip()
 
 
 class Client(ClientCreate):
@@ -37,7 +44,7 @@ class Client(ClientCreate):
 
 
 class ClientUpdate(BaseModel):
-    name: Optional[str] = None
+    name: Optional[str] = Field(default=None, min_length=1, max_length=150)
     industry: Optional[str] = None
     location: Optional[str] = None
     headcount: Optional[str] = None
@@ -45,3 +52,10 @@ class ClientUpdate(BaseModel):
     outcome: Optional[str] = None
     visible: Optional[bool] = None
     sort_order: Optional[int] = None
+
+    @field_validator("name")
+    @classmethod
+    def clean_name(cls, value: Optional[str]) -> Optional[str]:
+        if value is not None and not value.strip():
+            raise ValueError("Enter a company name")
+        return value.strip() if value is not None else None

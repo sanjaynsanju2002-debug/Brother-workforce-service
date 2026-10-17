@@ -42,7 +42,7 @@ def payload():
     return {
         "request_id": str(uuid4()), "invoice_number": f"INV-{uuid4().hex[:12]}", "client_name": "Example Manufacturing Pvt Ltd",
         "client_address": "Hebbal Industrial Area\nMysore, Karnataka", "client_gstin": "",
-        "invoice_date": "2026-10-16", "due_date": "2026-11-15", "billing_period": "October 2026",
+        "invoice_date": "2026-10-16", "due_date": "2026-11-15", "service_month": "2026-10", "billing_period": "October 2026",
         "lines": lines, "service_percentage": "10", "cgst_percentage": "0", "sgst_percentage": "0",
         "notes": "Payment within 30 days.",
     }
@@ -280,6 +280,7 @@ async def test_private_create_retry_update_conflict_and_downloads(monkeypatch):
     fake.invoices = InvoiceCollection()
     fake.invoice_counters = InvoiceCollection()
     fake.invoice_companies = InvoiceCollection()
+    fake.clients = InvoiceCollection()
     monkeypatch.setattr(auth, "db", fake)
     monkeypatch.setattr(invoices, "db", fake)
     transport = httpx.ASGITransport(app=app)
@@ -340,6 +341,7 @@ async def test_companies_are_private_unique_and_invoice_lists_are_isolated(monke
     fake.invoices = InvoiceCollection()
     fake.invoice_counters = InvoiceCollection()
     fake.invoice_companies = InvoiceCollection()
+    fake.clients = InvoiceCollection()
     monkeypatch.setattr(auth, "db", fake)
     monkeypatch.setattr(invoices, "db", fake)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="https://brothersworkforcesolutions.in") as client:
@@ -375,6 +377,7 @@ async def test_status_persists_without_altering_amounts_and_rejects_stale_update
     fake = FakeDB()
     fake.invoices = InvoiceCollection()
     fake.invoice_companies = InvoiceCollection()
+    fake.clients = InvoiceCollection()
     monkeypatch.setattr(auth, "db", fake)
     monkeypatch.setattr(invoices, "db", fake)
     original = saved_invoice().model_dump(mode="json")
@@ -420,6 +423,7 @@ async def test_delete_is_private_checks_revision_and_preserves_other_records_and
     fake.invoices = InvoiceCollection()
     fake.invoice_counters = InvoiceCollection()
     fake.invoice_companies = InvoiceCollection()
+    fake.clients = InvoiceCollection()
     monkeypatch.setattr(auth, "db", fake)
     monkeypatch.setattr(invoices, "db", fake)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="https://brothersworkforcesolutions.in") as client:
@@ -464,6 +468,7 @@ async def test_manual_number_required_unique_editable_and_used_in_downloads(monk
     fake = FakeDB()
     fake.invoices = InvoiceCollection()
     fake.invoice_companies = InvoiceCollection()
+    fake.clients = InvoiceCollection()
     monkeypatch.setattr(auth, "db", fake)
     monkeypatch.setattr(invoices, "db", fake)
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="https://brothersworkforcesolutions.in") as client:
@@ -515,6 +520,7 @@ async def test_number_conflicts_with_old_invoices_and_database_races_are_clear(m
     fake = FakeDB()
     fake.invoices = InvoiceCollection()
     fake.invoice_companies = InvoiceCollection()
+    fake.clients = InvoiceCollection()
     monkeypatch.setattr(auth, "db", fake)
     monkeypatch.setattr(invoices, "db", fake)
     old = saved_invoice().model_dump(mode="json")

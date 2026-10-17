@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/table";
 import { ApiError, apiDelete, apiGet, apiPatch, apiPost } from "@/lib/api";
 import type { Client } from "@/types";
+import { refreshCompanyQueries } from "@/lib/companyQueries";
 
 function apiMessage(err: unknown, fallback: string): string {
   if (err instanceof ApiError) {
@@ -39,8 +40,7 @@ export default function ClientsManager({ pin }: { pin: string }) {
   const [editingClientId, setEditingClientId] = useState<string | null>(null);
 
   const refresh = () => {
-    qc.invalidateQueries({ queryKey: key });
-    qc.invalidateQueries({ queryKey: ["clients"] });
+    refreshCompanyQueries(qc);
   };
 
   const create = useMutation({
@@ -267,7 +267,9 @@ export default function ClientsManager({ pin }: { pin: string }) {
                       <Button
                         size="icon-xs"
                         variant="destructive"
-                        onClick={() => remove.mutate(c.id)}
+                        onClick={() => {
+                          if (window.confirm(`Remove ${c.name} and its workforce assignments from Workforce, Payroll and Invoice company lists? Saved invoices, payroll records and Talent Bank profiles will be kept.`)) remove.mutate(c.id);
+                        }}
                         data-testid={`client-delete-${c.id}`}
                       >
                         <Trash2 className="h-3 w-3" />

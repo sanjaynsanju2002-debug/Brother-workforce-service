@@ -95,6 +95,7 @@ def db(monkeypatch):
     fake.invoices = Collection()
     fake.invoice_counters = Collection()
     fake.invoice_companies = Collection()
+    fake.clients = Collection()
     for module in (auth, expenses, finance, invoices):
         monkeypatch.setattr(module, "db", fake)
     return fake
