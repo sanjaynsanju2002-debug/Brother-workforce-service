@@ -17,7 +17,28 @@ function mentions(question: string, ...terms: string[]) {
 
 /** Answers use only approved website facts. No visitor message is sent to a server. */
 export function getBusinessAnswer(rawQuestion: string, jobs: Job[] | null, clients: Client[] | null = null): ChatAnswer {
-  const q = rawQuestion.toLowerCase().replace(/[^a-z0-9₹]+/g, " ").trim();
+  const input = rawQuestion.toLowerCase().trim();
+  // Keep the rule-based assistant useful for questions typed in Kannada too.
+  const kannadaIntents: Array<[RegExp, string]> = [
+    [/ಪಿನ್|ಪಾಸ್‌ವರ್ಡ್|ಆಡಳಿತ/, "admin"],
+    [/ಶುಲ್ಕ|ಬೆಲೆ|ದರ ಎಷ್ಟು/, /ಉದ್ಯೋಗ|ಅರ್ಜಿ|ಅಭ್ಯರ್ಥಿ/.test(input) ? "job application fee" : "pricing"],
+    [/ಸಂಬಳ|ವೇತನ/, "salary"],
+    [/ಸ್ವವಿವರ|ರೆಸ್ಯೂಮ್|ಅಪ್‌ಲೋಡ್/, "resume"],
+    [/ಕೆಲಸಗಾರ|ಕಾರ್ಮಿಕ|ಸಿಬ್ಬಂದಿ ಬೇಕು/, "need workers"],
+    [/ಅರ್ಜಿ|ನೋಂದ/, "apply"],
+    [/ಉದ್ಯೋಗ|ಹುದ್ದೆ|ಕೆಲಸ ಬೇಕು/, "jobs"],
+    [/ಪರವಾನಗಿ/, "labour licence"],
+    [/ನಿಯಮ|ನೋಂದಣಿ|ಭವಿಷ್ಯ ನಿಧಿ/, "compliance"],
+    [/ಕೈಗಾರಿಕ|ಕ್ಷೇತ್ರ/, "industries"],
+    [/ಸೇವೆ/, "services"],
+    [/ವಿಳಾಸ|ಎಲ್ಲಿದೆ|ಸ್ಥಳ|ಮೈಸೂರು/, "address"],
+    [/ಸಮಯ/, "office hours"],
+    [/ಸಂಪರ್ಕ|ಕರೆ|ಫೋನ್|ಮೊಬೈಲ್|ಇಮೇಲ್/, "contact details"],
+    [/ನಮಸ್ಕಾರ/, "hello"],
+    [/ನಿಮ್ಮ ಬಗ್ಗೆ|ಸಂಸ್ಥೆ/, "about"],
+  ];
+  const intent = /[\u0c80-\u0cff]/.test(input) ? kannadaIntents.find(([pattern]) => pattern.test(input))?.[1] : undefined;
+  const q = (intent ?? input).replace(/[^a-z0-9₹]+/g, " ").trim();
 
   if (mentions(q, "pin", "password", "admin", "login", "log in")) {
     return {

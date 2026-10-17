@@ -1,3 +1,4 @@
+import { translateText, useSiteLanguage, siteLocale } from "@/lib/language";
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
@@ -39,6 +40,7 @@ import { BRAND, IMAGES } from "@/lib/brand";
 import { candidateCopy, useCandidateLanguage } from "@/lib/candidateLanguage";
 import { trackVisit } from "@/lib/track";
 import type { Client, Job } from "@/types";
+import { usePageTitle } from "@/lib/language";
 
 const TRUST = [
   { icon: FileBadge, title: "Licensed Labour Contractor", desc: "Contract labour staffing services" },
@@ -107,10 +109,11 @@ function scrollTo(id: string) {
 }
 
 export default function Home() {
+  useSiteLanguage();
   const [candidateLang, setCandidateLang] = useCandidateLanguage();
   const copy = candidateCopy[candidateLang];
+  usePageTitle("Brothers Workforce Solutions | Manpower Services in Mysuru, Karnataka");
   useEffect(() => {
-    document.title = "Brothers Workforce Solutions | Manpower Services in Mysuru, Karnataka";
     trackVisit("/");
     const anchor = window.location.hash.slice(1);
     if (anchor) document.getElementById(anchor)?.scrollIntoView({ behavior: "instant" });
@@ -163,32 +166,23 @@ export default function Home() {
         <div className="relative mx-auto max-w-7xl px-6 py-20 lg:py-28">
           <div className="grid items-center gap-12 lg:grid-cols-[1.08fr_.92fr]">
           <div className="max-w-3xl bws-rise">
-            <p className="bws-overline text-orange-400">Manpower Supply Partner · Mysuru (Mysore), Karnataka</p>
-            <h1 className="mt-4 text-4xl font-bold leading-[1.08] tracking-tight text-white sm:text-5xl lg:text-6xl">
-              Reliable Manpower Services.
-              <br />
-              <span className="text-[#FB923C]">Stronger Businesses.</span>
+            <p className="bws-overline text-orange-400">{translateText("Manpower Supply Partner · Mysuru (Mysore), Karnataka")}</p>
+            <h1 className="mt-4 text-4xl font-bold leading-[1.08] tracking-tight text-white sm:text-5xl lg:text-6xl">{translateText("Reliable Manpower Services.")}<br />
+              <span className="text-[#FB923C]">{translateText("Stronger Businesses.")}</span>
             </h1>
-            <p className="mt-6 max-w-2xl text-base leading-relaxed text-slate-200 sm:text-lg">
-              Brothers Workforce Solutions provides dependable skilled, semi-skilled and general manpower supply,
-              contract staffing and workforce solutions for factories, warehouses and industrial operations across Karnataka.
-            </p>
+            <p className="mt-6 max-w-2xl text-base leading-relaxed text-slate-200 sm:text-lg">{translateText("Brothers Workforce Solutions provides dependable skilled, semi-skilled and general manpower supply, contract staffing and workforce solutions for factories, warehouses and industrial operations across Karnataka.")}</p>
             <div className="mt-8 flex flex-wrap gap-3">
               <Button
                 onClick={() => scrollTo("#manpower-request")}
                 className="bws-btn-3d bg-[#C2410C] px-7 py-6 text-base font-semibold text-white hover:bg-[#9A3412]"
                 data-testid="hero-btn-request-manpower"
-              >
-                Request Manpower
-              </Button>
+              >{translateText("Request Manpower")}</Button>
               <Button
                 onClick={() => scrollTo("#jobs")}
                 variant="outline"
                 className="bws-btn-glass border-white/40 bg-white/10 px-7 py-6 text-base font-semibold text-white backdrop-blur hover:bg-white hover:text-[#0F2444]"
                 data-testid="hero-btn-apply-jobs"
-              >
-                Apply for Jobs
-              </Button>
+              >{translateText("Apply for Jobs")}</Button>
             </div>
           </div>
 
@@ -196,7 +190,7 @@ export default function Home() {
             <div className="bws-image-shell bws-image-shell-dark">
               <img
                 src={IMAGES.heroTeam}
-                alt="Industrial workforce in a factory, representing our staffing services"
+                alt={translateText("Industrial workforce in a factory, representing our staffing services")}
                 loading="eager"
                 decoding="async"
                 className="aspect-[4/5] w-full object-cover"
@@ -212,8 +206,8 @@ export default function Home() {
                 className="bws-glass-card rounded-xl border border-white/20 bg-white/10 p-4 backdrop-blur-md hover:border-orange-400/60"
               >
                 <t.icon className="mb-2 h-5 w-5 text-[#FB923C]" />
-                <p className="text-sm font-semibold text-white">{t.title}</p>
-                <p className="mt-0.5 text-xs text-slate-300">{t.desc}</p>
+                <p className="text-sm font-semibold text-white">{translateText(t.title)}</p>
+                <p className="mt-0.5 text-xs text-slate-300">{translateText(t.desc)}</p>
               </div>
             ))}
           </div>
@@ -227,7 +221,7 @@ export default function Home() {
             <div className="bws-brochure-photo">
               <img
                 src="/brochure-team-oct2026.webp"
-                alt="Uniformed workers in a modern industrial processing facility"
+                alt={translateText("Uniformed workers in a modern industrial processing facility")}
                 loading="lazy"
                 decoding="async"
                 onError={(event) => {
@@ -237,18 +231,14 @@ export default function Home() {
                 className="h-[430px] w-full object-cover"
               />
             </div>
-            <div className="bws-brochure-ribbon">Skilled People · Better Tomorrow</div>
+            <div className="bws-brochure-ribbon">{translateText("Skilled People · Better Tomorrow")}</div>
           </div>
 
           <div data-reveal>
-            <p className="bws-overline">Our Brochure Vision</p>
-            <h2 className="mt-3 text-3xl font-bold tracking-tight text-[#0F2444] lg:text-5xl">
-              People. Productivity. Partnership. <span className="text-[#C2410C]">Progress.</span>
+            <p className="bws-overline">{translateText("Our Brochure Vision")}</p>
+            <h2 className="mt-3 text-3xl font-bold tracking-tight text-[#0F2444] lg:text-5xl">{translateText("People. Productivity. Partnership. ")}<span className="text-[#C2410C]">{translateText("Progress.")}</span>
             </h2>
-            <p className="mt-5 max-w-2xl text-base leading-relaxed text-slate-600 sm:text-lg">
-              Reliable workforce support designed around people, process and performance — helping factories,
-              warehouses and industrial teams build stronger operations.
-            </p>
+            <p className="mt-5 max-w-2xl text-base leading-relaxed text-slate-600 sm:text-lg">{translateText("Reliable workforce support designed around people, process and performance — helping factories, warehouses and industrial teams build stronger operations.")}</p>
             <div className="mt-7 grid gap-3 sm:grid-cols-3">
               {[
                 ["Reliable", "Dependable workforce support"],
@@ -256,8 +246,8 @@ export default function Home() {
                 ["People Focused", "Long-term workforce relationships"],
               ].map(([title, desc]) => (
                 <div key={title} className="bws-mini-stat">
-                  <p className="font-semibold text-[#0F2444]">{title}</p>
-                  <p className="mt-1 text-xs text-slate-500">{desc}</p>
+                  <p className="font-semibold text-[#0F2444]">{translateText(title)}</p>
+                  <p className="mt-1 text-xs text-slate-500">{translateText(desc)}</p>
                 </div>
               ))}
             </div>
@@ -269,29 +259,19 @@ export default function Home() {
       <Section id="about" bg="bg-white">
         <div className="grid items-center gap-12 lg:grid-cols-2">
           <div data-reveal>
-            <p className="bws-overline">About Us</p>
-            <h2 className="mt-3 text-3xl font-bold tracking-tight text-[#0F2444] lg:text-4xl">
-              Manpower & Workforce Partner in Mysuru, Karnataka
-            </h2>
+            <p className="bws-overline">{translateText("About Us")}</p>
+            <h2 className="mt-3 text-3xl font-bold tracking-tight text-[#0F2444] lg:text-4xl">{translateText("Manpower & Workforce Partner in Mysuru, Karnataka")}</h2>
             <div className="mt-6 space-y-4 text-base leading-relaxed text-slate-600">
-              <p>
-                Brothers Workforce Solutions is a manpower and contract staffing partner providing skilled, semi-skilled
-                and general workforce solutions to factories, warehouses, manufacturing units and businesses across Karnataka.
-              </p>
-              <p>
-                We focus on connecting businesses with reliable employees while supporting workforce availability,
-                compliance and operational continuity.
-              </p>
-              <p className="border-l-4 border-[#EA580C] pl-4 font-medium text-[#0F2444]">
-                Our objective is to create long-term partnerships between businesses and employees.
-              </p>
+              <p>{translateText("Brothers Workforce Solutions is a manpower and contract staffing partner providing skilled, semi-skilled and general workforce solutions to factories, warehouses, manufacturing units and businesses across Karnataka.")}</p>
+              <p>{translateText("We focus on connecting businesses with reliable employees while supporting workforce availability, compliance and operational continuity.")}</p>
+              <p className="border-l-4 border-[#EA580C] pl-4 font-medium text-[#0F2444]">{translateText("Our objective is to create long-term partnerships between businesses and employees.")}</p>
             </div>
           </div>
           <div className="bws-about-visual relative" data-reveal>
             <div className="bws-image-shell">
               <img
                 src={IMAGES.safety}
-                alt="Factory worker in uniform working on a production floor"
+                alt={translateText("Factory worker in uniform working on a production floor")}
                 loading="lazy"
                 decoding="async"
                 className="h-[380px] w-full object-cover"
@@ -299,7 +279,7 @@ export default function Home() {
             </div>
             <div className="bws-floating-tag absolute -bottom-6 left-6 hidden rounded-xl bg-[#0F2444] px-6 py-4 text-white shadow-2xl sm:block">
               <p className="font-[family-name:var(--font-heading)] text-sm font-bold uppercase tracking-[0.18em] text-[#FB923C]">
-                {BRAND.tagline}
+                {translateText(BRAND.tagline)}
               </p>
             </div>
           </div>
@@ -308,7 +288,7 @@ export default function Home() {
 
       {/* SERVICES */}
       <Section id="services" bg="bg-[#F1F5F9]">
-        <Heading overline="Our Services" title="Manpower & Contract Staffing Services" subtitle="Skilled, semi-skilled and general workforce staffing for factories, manufacturing units, warehouses and logistics operations." />
+        <Heading overline="Our Services" title={translateText("Manpower & Contract Staffing Services")} subtitle="Skilled, semi-skilled and general workforce staffing for factories, manufacturing units, warehouses and logistics operations." />
         <div className="mt-12 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {SERVICES.map((s) => (
             <Card
@@ -322,14 +302,14 @@ export default function Home() {
                   <s.icon className="h-5 w-5 text-[#FB923C]" />
                 </div>
                 <Badge variant="secondary" className="mb-2 text-[10px] uppercase tracking-widest">
-                  {s.tag}
+                  {translateText(s.tag)}
                 </Badge>
-                <h3 className="text-xl font-semibold text-[#0F2444]">{s.title}</h3>
+                <h3 className="text-xl font-semibold text-[#0F2444]">{translateText(s.title)}</h3>
                 <ul className="mt-4 space-y-1.5 text-sm text-slate-600">
                   {s.items.map((i) => (
                     <li key={i} className="flex gap-2">
                       <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[#C2410C]" />
-                      {i}
+                      {translateText(i)}
                     </li>
                   ))}
                 </ul>
@@ -341,7 +321,7 @@ export default function Home() {
 
       {/* INDUSTRIES */}
       <Section id="industries" bg="bg-white">
-        <Heading overline="Sectors" title="Industries We Serve" subtitle="Supporting production units and supply chains across Mysore and Karnataka industrial belts." />
+        <Heading overline="Sectors" title={translateText("Industries We Serve")} subtitle="Supporting production units and supply chains across Mysore and Karnataka industrial belts." />
         <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {INDUSTRY_CARDS.map((i) => (
             <div
@@ -351,7 +331,7 @@ export default function Home() {
               data-testid={`industry-card-${i.name.toLowerCase().replace(/[^a-z]+/g, "-")}`}
             >
               <i.icon className="h-6 w-6 shrink-0 text-[#C2410C]" />
-              <span className="font-medium text-[#0F2444]">{i.name}</span>
+              <span className="font-medium text-[#0F2444]">{translateText(i.name)}</span>
             </div>
           ))}
         </div>
@@ -360,14 +340,9 @@ export default function Home() {
       {/* COMPLIANCE */}
       <Section id="compliance" bg="bg-[#0F2444]">
         <div className="text-center">
-          <p className="bws-overline text-[#FB923C]">Trust & Governance</p>
-          <h2 className="mt-3 text-3xl font-bold tracking-tight text-white lg:text-4xl">
-            Our Compliance Commitment
-          </h2>
-          <p className="mx-auto mt-4 max-w-2xl text-slate-300">
-            Statutory compliance and documented workforce governance so companies can engage manpower with
-            confidence.
-          </p>
+          <p className="bws-overline text-[#FB923C]">{translateText("Trust & Governance")}</p>
+          <h2 className="mt-3 text-3xl font-bold tracking-tight text-white lg:text-4xl">{translateText("Our Compliance Commitment")}</h2>
+          <p className="mx-auto mt-4 max-w-2xl text-slate-300">{translateText("Statutory compliance and documented workforce governance so companies can engage manpower with confidence.")}</p>
         </div>
         <div className="mt-12 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {COMPLIANCE.map((c) => (
@@ -378,8 +353,8 @@ export default function Home() {
               data-testid={`compliance-card-${c.title.toLowerCase().replace(/[^a-z]+/g, "-")}`}
             >
               <c.icon className="mb-4 h-7 w-7 text-[#FB923C]" />
-              <h3 className="text-lg font-semibold text-white">{c.title}</h3>
-              <p className="mt-2 text-sm leading-relaxed text-slate-300">{c.desc}</p>
+              <h3 className="text-lg font-semibold text-white">{translateText(c.title)}</h3>
+              <p className="mt-2 text-sm leading-relaxed text-slate-300">{translateText(c.desc)}</p>
             </div>
           ))}
         </div>
@@ -388,7 +363,7 @@ export default function Home() {
       {/* JOBS */}
       <Section id="jobs" bg="bg-[#F1F5F9]">
         <div className="flex flex-wrap items-start justify-between gap-4">
-          <Heading overline={copy.recruitment} title={copy.jobs} subtitle={copy.jobsIntro} />
+          <Heading overline={copy.recruitment} title={translateText(copy.jobs)} subtitle={copy.jobsIntro} />
           <CandidateLanguageToggle language={candidateLang} onChange={setCandidateLang} />
         </div>
         <div className="mt-8 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm backdrop-blur" data-reveal>
@@ -398,27 +373,27 @@ export default function Home() {
             </div>
             <div>
               <p className="text-sm font-semibold text-[#0F2444]">
-                {jobs.length > 0 ? candidateLang === "kn" ? `${jobs.length} ${copy.activeOpenings}` : `${jobs.length} active opening${jobs.length === 1 ? "" : "s"}` : copy.registerFuture}
+                {translateText(jobs.length > 0 ? candidateLang === "kn" ? `${jobs.length} ${copy.activeOpenings}` : `${jobs.length} active opening${jobs.length === 1 ? "" : "s"}` : copy.registerFuture)}
               </p>
-              <p className="text-xs text-slate-500">{candidateLang === "kn" ? "ಒಮ್ಮೆ ನೋಂದಾಯಿಸಿ. ನಮ್ಮ ನೇಮಕಾತಿ ತಂಡ ನಿಮ್ಮ ವಿವರಗಳನ್ನು ಪರಿಶೀಲಿಸುತ್ತದೆ." : "Apply once and stay visible to our recruitment team."}</p>
+              <p className="text-xs text-slate-500">{translateText(candidateLang === "kn" ? "ಒಮ್ಮೆ ನೋಂದಾಯಿಸಿ. ನಮ್ಮ ನೇಮಕಾತಿ ತಂಡ ನಿಮ್ಮ ವಿವರಗಳನ್ನು ಪರಿಶೀಲಿಸುತ್ತದೆ." : "Apply once and stay visible to our recruitment team.")}</p>
             </div>
           </div>
           <Button
             className="bws-btn-3d bg-[#C2410C] text-white hover:bg-[#9A3412]"
             onClick={() => scrollTo("#worker-registration")}
           >
-            {copy.quickApply}
+            {translateText(copy.quickApply)}
           </Button>
         </div>
         <div className="mt-6" data-testid="job-listings">
           {jobsQuery.isPending ? (
             <div className="rounded-lg border border-dashed border-slate-300 bg-white p-12 text-center text-slate-600" role="status">
-              {copy.loading}
+              {translateText(copy.loading)}
             </div>
           ) : jobsQuery.isError ? (
             <div className="rounded-lg border border-dashed border-slate-300 bg-white p-12 text-center">
-              <p className="text-lg font-semibold text-[#0F2444]">{copy.loadError}</p>
-              <Button variant="outline" className="mt-5" onClick={() => jobsQuery.refetch()}>{copy.retry}</Button>
+              <p className="text-lg font-semibold text-[#0F2444]">{translateText(copy.loadError)}</p>
+              <Button variant="outline" className="mt-5" onClick={() => jobsQuery.refetch()}>{translateText(copy.retry)}</Button>
             </div>
           ) : jobs.length === 0 ? (
             <div
@@ -427,17 +402,17 @@ export default function Home() {
             >
               <Briefcase className="mx-auto mb-4 h-10 w-10 text-slate-400" />
               <p className="text-lg font-semibold text-[#0F2444]">
-                {copy.noJobs}
+                {translateText(copy.noJobs)}
               </p>
               <p className="mx-auto mt-2 max-w-xl text-sm text-slate-500">
-                {copy.noJobsHelp}
+                {translateText(copy.noJobsHelp)}
               </p>
               <Button
                 className="mt-6 bg-[#C2410C] text-white hover:bg-[#9A3412]"
                 onClick={() => scrollTo("#worker-registration")}
                 data-testid="jobs-empty-cta"
               >
-                {copy.registerFuture}
+                {translateText(copy.registerFuture)}
               </Button>
             </div>
           ) : (
@@ -449,27 +424,27 @@ export default function Home() {
                   data-testid={`job-card-${j.id}`}
                 >
                   <CardContent className="p-6">
-                    <Badge className="mb-3 bg-[#0F2444] text-white">{j.skill_category}</Badge>
+                    <Badge className="mb-3 bg-[#0F2444] text-white">{translateText(j.skill_category)}</Badge>
                     <h3 className="text-lg font-semibold text-[#0F2444]" data-testid={`job-title-${j.id}`}>
-                      {j.title}
+                      {translateText(j.title)}
                     </h3>
                     <p className="mt-1 flex items-center gap-1.5 text-sm text-slate-500">
-                      <MapPin className="h-3.5 w-3.5" /> {j.location}
+                      <MapPin className="h-3.5 w-3.5" /> {translateText(j.location)}
                     </p>
                     <dl className="mt-4 space-y-1.5 text-sm text-slate-600">
                       {j.experience && <Row k={copy.experience} v={j.experience} />}
-                      <Row k={copy.salary} v={j.salary ? (/^\d+$/.test(j.salary.trim()) ? `₹${Number(j.salary).toLocaleString("en-IN")}` : j.salary) : copy.discuss} />
+                      <Row k={copy.salary} v={j.salary ? (/^\d+$/.test(j.salary.trim()) ? `₹${Number(j.salary).toLocaleString(siteLocale())}` : j.salary) : copy.discuss} />
                       {j.shift && <Row k={copy.shift} v={j.shift} />}
                       <Row k={copy.openings} v={String(j.openings)} />
                       <Row k={copy.posted} v={new Date(j.created_at).toLocaleDateString(candidateLang === "kn" ? "kn-IN" : "en-IN", { day: "numeric", month: "short", year: "numeric" })} />
                       {j.closing_date && <Row k={copy.closingDate} v={new Date(`${j.closing_date}T12:00:00`).toLocaleDateString(candidateLang === "kn" ? "kn-IN" : "en-IN", { day: "numeric", month: "short", year: "numeric" })} />}
                     </dl>
-                    {(candidateLang === "kn" ? j.description_kn || j.description : j.description) && <p className="mt-3 line-clamp-3 whitespace-pre-line text-sm text-slate-500">{candidateLang === "kn" ? j.description_kn || j.description : j.description}</p>}
+                    {(candidateLang === "kn" ? j.description_kn || j.description : j.description) && <p className="mt-3 line-clamp-3 whitespace-pre-line text-sm text-slate-500">{translateText(candidateLang === "kn" ? j.description_kn || j.description : j.description)}</p>}
                     <Link
                       to={`/jobs/${j.id}`}
                       className="mt-5 inline-flex w-full items-center justify-center rounded-md bg-[#C2410C] px-4 py-2 font-semibold text-white hover:bg-[#9A3412]"
                       data-testid={`job-apply-${j.id}`}
-                    >{copy.viewApply}</Link>
+                    >{translateText(copy.viewApply)}</Link>
                   </CardContent>
                 </Card>
               ))}
@@ -481,12 +456,12 @@ export default function Home() {
       {/* HOW IT WORKS */}
       <Section id="how-it-works" bg="bg-[#0B1B33]">
         <div className="text-center" data-reveal>
-          <p className="bws-overline text-[#FB923C]">{candidateLang === "kn" ? "ಇದು ಹೇಗೆ ಕಾರ್ಯನಿರ್ವಹಿಸುತ್ತದೆ" : "How It Works"}</p>
+          <p className="bws-overline text-[#FB923C]">{translateText(candidateLang === "kn" ? "ಇದು ಹೇಗೆ ಕಾರ್ಯನಿರ್ವಹಿಸುತ್ತದೆ" : "How It Works")}</p>
           <h2 className="mt-3 text-3xl font-bold tracking-tight text-white lg:text-5xl">
-            {candidateLang === "kn" ? "ಅಭ್ಯರ್ಥಿಗಳಿಗೆ ಸರಳ ಪ್ರಕ್ರಿಯೆ. ಕಂಪನಿಗಳಿಗೆ ವ್ಯವಸ್ಥಿತ ಸೇವೆ." : "Simple for Workers. Structured for Companies."}
+            {translateText(candidateLang === "kn" ? "ಅಭ್ಯರ್ಥಿಗಳಿಗೆ ಸರಳ ಪ್ರಕ್ರಿಯೆ. ಕಂಪನಿಗಳಿಗೆ ವ್ಯವಸ್ಥಿತ ಸೇವೆ." : "Simple for Workers. Structured for Companies.")}
           </h2>
           <p className="mx-auto mt-4 max-w-2xl text-slate-300">
-            {candidateLang === "kn" ? "ಉದ್ಯೋಗಾರ್ಥಿಗಳಿಗೆ ಸ್ಪಷ್ಟ ಪ್ರಕ್ರಿಯೆ ಮತ್ತು ಉದ್ಯೋಗದಾತರಿಗೆ ವಿಶ್ವಾಸಾರ್ಹ ಮಾನವ ಸಂಪನ್ಮೂಲ ಸೇವೆ." : "One clear process for job seekers and one reliable process for employers looking for manpower."}
+            {translateText(candidateLang === "kn" ? "ಉದ್ಯೋಗಾರ್ಥಿಗಳಿಗೆ ಸ್ಪಷ್ಟ ಪ್ರಕ್ರಿಯೆ ಮತ್ತು ಉದ್ಯೋಗದಾತರಿಗೆ ವಿಶ್ವಾಸಾರ್ಹ ಮಾನವ ಸಂಪನ್ಮೂಲ ಸೇವೆ." : "One clear process for job seekers and one reliable process for employers looking for manpower.")}
           </p>
         </div>
 
@@ -495,8 +470,8 @@ export default function Home() {
             <div className="bws-flow-heading">
               <Users className="h-6 w-6" />
               <div>
-                <p className="text-xs font-bold uppercase tracking-[0.18em] text-orange-300">{candidateLang === "kn" ? "ಉದ್ಯೋಗಾರ್ಥಿಗಳಿಗಾಗಿ" : "For Job Seekers"}</p>
-                <h3 className="mt-1 text-2xl font-semibold text-white">{candidateLang === "kn" ? "ನೋಂದಣಿಯಿಂದ ಉದ್ಯೋಗಾವಕಾಶದವರೆಗೆ" : "From profile to opportunity"}</h3>
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-orange-300">{translateText(candidateLang === "kn" ? "ಉದ್ಯೋಗಾರ್ಥಿಗಳಿಗಾಗಿ" : "For Job Seekers")}</p>
+                <h3 className="mt-1 text-2xl font-semibold text-white">{translateText(candidateLang === "kn" ? "ನೋಂದಣಿಯಿಂದ ಉದ್ಯೋಗಾವಕಾಶದವರೆಗೆ" : "From profile to opportunity")}</h3>
               </div>
             </div>
             <div className="mt-7 space-y-4">
@@ -510,10 +485,10 @@ export default function Home() {
                 ["03", "Get matched", "We connect suitable candidates with current and upcoming workforce requirements."],
               ]).map(([step, title, desc]) => (
                 <div key={step} className="bws-flow-step">
-                  <span>{step}</span>
+                  <span>{translateText(step)}</span>
                   <div>
-                    <h4>{title}</h4>
-                    <p>{desc}</p>
+                    <h4>{translateText(title)}</h4>
+                    <p>{translateText(desc)}</p>
                   </div>
                 </div>
               ))}
@@ -522,7 +497,7 @@ export default function Home() {
               onClick={() => scrollTo("#worker-registration")}
               className="bws-btn-3d mt-7 bg-[#C2410C] text-white hover:bg-[#9A3412]"
             >
-              {copy.registerFuture}
+              {translateText(copy.registerFuture)}
             </Button>
           </div>
 
@@ -530,8 +505,8 @@ export default function Home() {
             <div className="bws-flow-heading">
               <Factory className="h-6 w-6" />
               <div>
-                <p className="text-xs font-bold uppercase tracking-[0.18em] text-orange-300">For Employers</p>
-                <h3 className="mt-1 text-2xl font-semibold text-white">From requirement to deployment</h3>
+                <p className="text-xs font-bold uppercase tracking-[0.18em] text-orange-300">{translateText("For Employers")}</p>
+                <h3 className="mt-1 text-2xl font-semibold text-white">{translateText("From requirement to deployment")}</h3>
               </div>
             </div>
             <div className="mt-7 space-y-4">
@@ -541,10 +516,10 @@ export default function Home() {
                 ["03", "Workforce deployment", "Selected candidates are coordinated for joining based on your requirement."],
               ].map(([step, title, desc]) => (
                 <div key={step} className="bws-flow-step">
-                  <span>{step}</span>
+                  <span>{translateText(step)}</span>
                   <div>
-                    <h4>{title}</h4>
-                    <p>{desc}</p>
+                    <h4>{translateText(title)}</h4>
+                    <p>{translateText(desc)}</p>
                   </div>
                 </div>
               ))}
@@ -552,9 +527,7 @@ export default function Home() {
             <Button
               onClick={() => scrollTo("#manpower-request")}
               className="bws-btn-3d mt-7 bg-[#C2410C] text-white hover:bg-[#9A3412]"
-            >
-              Request Manpower
-            </Button>
+            >{translateText("Request Manpower")}</Button>
           </div>
         </div>
       </Section>
@@ -564,13 +537,13 @@ export default function Home() {
         <div className="grid gap-10 lg:grid-cols-[1fr_1.5fr]">
           <div>
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <p className="bws-overline">{candidateLang === "kn" ? "ಅಭ್ಯರ್ಥಿಗಳಿಗಾಗಿ" : "For Workers"}</p>
+              <p className="bws-overline">{translateText(candidateLang === "kn" ? "ಅಭ್ಯರ್ಥಿಗಳಿಗಾಗಿ" : "For Workers")}</p>
               <CandidateLanguageToggle language={candidateLang} onChange={setCandidateLang} />
             </div>
             <h2 className="mt-3 text-3xl font-bold tracking-tight text-[#0F2444] lg:text-4xl">
-              {copy.workerTitle}
+              {translateText(copy.workerTitle)}
             </h2>
-            <p className="mt-4 text-slate-600">{copy.workerIntro}</p>
+            <p className="mt-4 text-slate-600">{translateText(copy.workerIntro)}</p>
             <div className="mt-6 grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
               {(candidateLang === "kn" ? [
                 ["01", "ವಿವರಗಳನ್ನು ನೀಡಿ"],
@@ -582,14 +555,14 @@ export default function Home() {
                 ["03", "Get Matched"],
               ]).map(([step, title]) => (
                 <div key={step} className="bws-process-step">
-                  <span>{step}</span>
-                  <strong>{title}</strong>
+                  <span>{translateText(step)}</span>
+                  <strong>{translateText(title)}</strong>
                 </div>
               ))}
             </div>
             <img
               src={IMAGES.assembly}
-              alt="Technicians collaborating at a precision assembly workstation"
+              alt={translateText("Technicians collaborating at a precision assembly workstation")}
               loading="lazy"
               decoding="async"
               className="bws-image-soft mt-8 hidden h-64 w-full rounded-2xl object-cover lg:block"
@@ -605,13 +578,9 @@ export default function Home() {
       <Section id="manpower-request" bg="bg-[#F1F5F9]">
         <div className="grid gap-10 lg:grid-cols-[1fr_1.5fr]">
           <div>
-            <p className="bws-overline">For Companies</p>
-            <h2 className="mt-3 text-3xl font-bold tracking-tight text-[#0F2444] lg:text-4xl">
-              Need Reliable Workforce?
-            </h2>
-            <p className="mt-4 text-slate-600">
-              Share your requirement and our workforce team will respond with a deployment plan for your facility.
-            </p>
+            <p className="bws-overline">{translateText("For Companies")}</p>
+            <h2 className="mt-3 text-3xl font-bold tracking-tight text-[#0F2444] lg:text-4xl">{translateText("Need Reliable Workforce?")}</h2>
+            <p className="mt-4 text-slate-600">{translateText("Share your requirement and our workforce team will respond with a deployment plan for your facility.")}</p>
             <div className="mt-6 grid gap-3 sm:grid-cols-3 lg:grid-cols-1">
               {[
                 ["01", "Share Requirement"],
@@ -619,8 +588,8 @@ export default function Home() {
                 ["03", "Workforce Deployment"],
               ].map(([step, title]) => (
                 <div key={step} className="bws-process-step bws-process-step-company">
-                  <span>{step}</span>
-                  <strong>{title}</strong>
+                  <span>{translateText(step)}</span>
+                  <strong>{translateText(title)}</strong>
                 </div>
               ))}
             </div>
@@ -629,7 +598,7 @@ export default function Home() {
                 (p) => (
                   <div key={p} className="flex items-center gap-3 rounded-md bg-white p-3 text-sm text-slate-700">
                     <ShieldCheck className="h-4 w-4 text-[#C2410C]" />
-                    {p}
+                    {translateText(p)}
                   </div>
                 ),
               )}
@@ -643,10 +612,10 @@ export default function Home() {
 
       {/* CLIENTS */}
       <Section id="clients" bg="bg-white">
-        <Heading overline="Our Clients" title="Businesses We Support" subtitle="Serving production units and supply chains across Mysore industrial belts." />
+        <Heading overline="Our Clients" title={translateText("Businesses We Support")} subtitle="Serving production units and supply chains across Mysore industrial belts." />
         <div className="mx-auto mt-12 grid max-w-5xl gap-6 sm:grid-cols-2" data-testid="clients-grid">
           {clientsQuery.isPending ? (
-            <p className="sm:col-span-2 text-center text-sm text-slate-500" role="status">Loading client profiles…</p>
+            <p className="sm:col-span-2 text-center text-sm text-slate-500" role="status">{translateText("Loading client profiles…")}</p>
           ) : clients.length > 0
             ? clients.map((c) => (
                   <div
@@ -655,19 +624,19 @@ export default function Home() {
                     data-testid={`client-card-${c.id}`}
                   >
                     <ClientLogo client={c} />
-                    <p className="text-sm font-semibold text-[#0F2444]">{c.name}</p>
-                    {c.industry && <p className="text-xs text-slate-500">{c.industry}</p>}
+                    <p className="text-sm font-semibold text-[#0F2444]">{translateText(c.name)}</p>
+                    {c.industry && <p className="text-xs text-slate-500">{translateText(c.industry)}</p>}
                     {c.location && (
                       <p className="flex items-center gap-1 text-xs text-slate-500">
-                        <MapPin className="h-3 w-3" /> {c.location}
+                        <MapPin className="h-3 w-3" /> {translateText(c.location)}
                       </p>
                     )}
-                    {c.service_summary && <p className="mt-2 text-sm text-slate-700">{c.service_summary}</p>}
-                    {c.outcome && <p className="rounded-lg bg-white px-3 py-2 text-sm font-medium text-[#0F2444]">{c.outcome}</p>}
-                    {c.headcount && <p className="text-xs text-slate-500"><span className="font-semibold">Workforce deployed:</span> {c.headcount}</p>}
+                    {c.service_summary && <p className="mt-2 text-sm text-slate-700">{translateText(c.service_summary)}</p>}
+                    {c.outcome && <p className="rounded-lg bg-white px-3 py-2 text-sm font-medium text-[#0F2444]">{translateText(c.outcome)}</p>}
+                    {c.headcount && <p className="text-xs text-slate-500"><span className="font-semibold">{translateText("Workforce deployed:")}</span> {translateText(c.headcount)}</p>}
                   </div>
               ))
-            : <div className="sm:col-span-2 rounded-xl border border-dashed border-slate-200 bg-[#F8FAFC] p-8 text-center text-slate-600">Contact our team to discuss workforce support for your business.</div>}
+            : <div className="sm:col-span-2 rounded-xl border border-dashed border-slate-200 bg-[#F8FAFC] p-8 text-center text-slate-600">{translateText("Contact our team to discuss workforce support for your business.")}</div>}
         </div>
       </Section>
 
@@ -675,16 +644,14 @@ export default function Home() {
       <Section id="contact" bg="bg-[#F1F5F9]">
         <div className="grid gap-10 lg:grid-cols-2">
           <div>
-            <p className="bws-overline">Contact</p>
-            <h2 className="mt-3 text-3xl font-bold tracking-tight text-[#0F2444] lg:text-4xl">
-              Get in Touch With Our Workforce Desk
-            </h2>
+            <p className="bws-overline">{translateText("Contact")}</p>
+            <h2 className="mt-3 text-3xl font-bold tracking-tight text-[#0F2444] lg:text-4xl">{translateText("Get in Touch With Our Workforce Desk")}</h2>
             <ul className="mt-8 space-y-4 text-slate-700">
               <li className="flex gap-3">
                 <MapPin className="mt-1 h-5 w-5 shrink-0 text-[#C2410C]" />
                 <span>
-                  <strong className="block text-[#0F2444]">{BRAND.name}</strong>
-                  {BRAND.officeAddress || BRAND.location}
+                  <strong className="block text-[#0F2444]">{translateText(BRAND.name)}</strong>
+                  {translateText(BRAND.officeAddress || BRAND.location)}
                 </span>
               </li>
               <li className="flex gap-3">
@@ -701,17 +668,16 @@ export default function Home() {
           </div>
           <div className="bws-contact-panel bws-panel-3d grid content-start gap-4 rounded-2xl border border-slate-200 bg-white p-8">
             <div className="mb-2">
-              <p className="bws-overline">Fast Contact</p>
-              <h3 className="mt-2 text-2xl font-semibold text-[#0F2444]">Choose how you want to reach us</h3>
-              <p className="mt-2 text-sm text-slate-500">Our workforce desk will help with jobs, manpower requirements and general enquiries.</p>
+              <p className="bws-overline">{translateText("Fast Contact")}</p>
+              <h3 className="mt-2 text-2xl font-semibold text-[#0F2444]">{translateText("Choose how you want to reach us")}</h3>
+              <p className="mt-2 text-sm text-slate-500">{translateText("Our workforce desk will help with jobs, manpower requirements and general enquiries.")}</p>
             </div>
             <a
               href={`tel:${BRAND.phoneRaw}`}
               className="bws-contact-action flex items-center justify-center gap-2 rounded-xl bg-[#0F2444] px-6 py-4 font-semibold text-white hover:bg-[#0A172C]"
               data-testid="contact-btn-call"
             >
-              <PhoneCall className="h-4 w-4" /> Call Now
-            </a>
+              <PhoneCall className="h-4 w-4" />{translateText(" Call Now")}</a>
             <a
               href={BRAND.whatsapp}
               target="_blank"
@@ -719,15 +685,13 @@ export default function Home() {
               className="bws-contact-action flex items-center justify-center gap-2 rounded-xl bg-[#16A34A] px-6 py-4 font-semibold text-white hover:bg-[#15803D]"
               data-testid="contact-btn-whatsapp"
             >
-              <MessageSquare className="h-4 w-4" /> WhatsApp
-            </a>
+              <MessageSquare className="h-4 w-4" />{translateText(" WhatsApp")}</a>
             <a
               href={`mailto:${BRAND.email}`}
               className="bws-contact-action flex items-center justify-center gap-2 rounded-xl bg-[#C2410C] px-6 py-4 font-semibold text-white hover:bg-[#9A3412]"
               data-testid="contact-btn-email"
             >
-              <Mail className="h-4 w-4" /> Email
-            </a>
+              <Mail className="h-4 w-4" />{translateText(" Email")}</a>
           </div>
         </div>
       </Section>
@@ -739,28 +703,31 @@ export default function Home() {
 }
 
 function Section({ id, bg, children }: { id: string; bg: string; children: React.ReactNode }) {
+  useSiteLanguage();
   return (
     <section id={id} className={`bws-section ${bg} py-20`}>
-      <div className="relative mx-auto max-w-7xl px-6">{children}</div>
+      <div className="relative mx-auto max-w-7xl px-6">{translateText(children)}</div>
     </section>
   );
 }
 
 function Heading({ overline, title, subtitle }: { overline: string; title: string; subtitle: string }) {
+  useSiteLanguage();
   return (
     <div className="max-w-2xl" data-reveal>
-      <p className="bws-overline">{overline}</p>
-      <h2 className="mt-3 text-3xl font-bold tracking-tight text-[#0F2444] lg:text-4xl">{title}</h2>
-      <p className="mt-4 text-slate-600">{subtitle}</p>
+      <p className="bws-overline">{translateText(overline)}</p>
+      <h2 className="mt-3 text-3xl font-bold tracking-tight text-[#0F2444] lg:text-4xl">{translateText(title)}</h2>
+      <p className="mt-4 text-slate-600">{translateText(subtitle)}</p>
     </div>
   );
 }
 
 function Row({ k, v }: { k: string; v: string }) {
+  useSiteLanguage();
   return (
     <div className="flex justify-between border-b border-slate-100 pb-1">
-      <dt className="text-slate-500">{k}</dt>
-      <dd className="font-medium text-[#0F2444]">{v}</dd>
+      <dt className="text-slate-500">{translateText(k)}</dt>
+      <dd className="font-medium text-[#0F2444]">{translateText(v)}</dd>
     </div>
   );
 }
@@ -771,6 +738,7 @@ const CLIENT_LOGO_FALLBACKS: Record<string, string> = {
 };
 
 function ClientLogo({ client }: { client: Client }) {
+  useSiteLanguage();
   const [step, setStep] = useState(0);
   const suppliedLogo = CLIENT_LOGO_FALLBACKS[client.name];
   const source = step === 0 && client.logo_filename
@@ -783,7 +751,7 @@ function ClientLogo({ client }: { client: Client }) {
   return (
     <img
       src={source}
-      alt={client.name}
+      alt={translateText(client.name)}
       className="h-20 w-full max-w-[180px] object-contain"
       onError={() => setStep(step === 0 && client.logo_filename ? 1 : 2)}
     />

@@ -1,3 +1,4 @@
+import { translateText, useSiteLanguage } from "@/lib/language";
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Building2, Download, FileSpreadsheet, Loader2, Trash2 } from "lucide-react";
@@ -14,6 +15,7 @@ import "./Payroll.css";
 const selectStyle = "h-9 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm disabled:opacity-50";
 
 export default function Payroll() {
+  useSiteLanguage();
   const qc = useQueryClient();
   const [companyId, setCompanyId] = useState("");
   const [month, setMonth] = useState(() => indiaToday().slice(0, 7));
@@ -40,17 +42,17 @@ export default function Payroll() {
       qc.removeQueries({ queryKey: key, exact: true });
       void qc.invalidateQueries({ queryKey: ["payroll-history"] });
       void qc.invalidateQueries({ queryKey: ["payroll-companies"] });
-      toast.success(`Payroll for ${record.company_name} · ${monthLabel(record.month)} deleted`);
+      toast.success(translateText(`Payroll for ${record.company_name} · ${monthLabel(record.month)} deleted`));
     },
-    onError: (error) => { void qc.invalidateQueries({ queryKey: ["payroll-history"] }); toast.error(payrollError(error)); },
+    onError: (error) => { void qc.invalidateQueries({ queryKey: ["payroll-history"] }); toast.error(translateText(payrollError(error))); },
   });
   const working = busy || remove.isPending;
   const confirmDelete = (record: PayrollSummary) => {
     if (working) return;
     const unsaved = dirty && companyId === record.company_id && month === record.month ? " Unsaved changes to this payroll will also be discarded." : "";
-    if (window.confirm(`Permanently delete saved payroll for ${record.company_name} — ${monthLabel(record.month)}? This cannot be undone.${unsaved}`)) remove.mutate(record);
+    if (window.confirm(translateText(`Permanently delete saved payroll for ${record.company_name} — ${monthLabel(record.month)}? This cannot be undone.${unsaved}`))) remove.mutate(record);
   };
-  const discard = () => !dirty || window.confirm("Discard the unsaved payroll changes?");
+  const discard = () => !dirty || window.confirm(translateText("Discard the unsaved payroll changes?"));
   const reload = async () => {
     if (working || !discard()) return;
     const response = await draft.refetch();
@@ -63,37 +65,37 @@ export default function Payroll() {
     else { setCompanyId(company); setMonth(period); setEditorVersion((value) => value + 1); }
   };
   const download = async (record: { id: string; month: string }, format: "pdf" | "xlsx") => {
-    try { await downloadPayroll(record, format); } catch (error) { toast.error(payrollError(error)); }
+    try { await downloadPayroll(record, format); } catch (error) { toast.error(translateText(payrollError(error))); }
   };
 
   return <section className="payroll-layout space-y-6 text-[#0F2444]" data-testid="payroll-panel">
-    <div><h1 className="text-2xl font-bold">Payroll</h1><p className="mt-1 text-sm text-slate-600">Manage company payroll, review employee details and download your monthly register.</p></div>
+    <div><h1 className="text-2xl font-bold">{translateText("Payroll")}</h1><p className="mt-1 text-sm text-slate-600">{translateText("Manage company payroll, review employee details and download your monthly register.")}</p></div>
     <div className="grid gap-4 rounded-xl border border-slate-200 bg-white p-5 sm:grid-cols-[minmax(0,1fr)_14rem]">
-      <div><Label htmlFor="payroll-company" className="mb-2 flex items-center gap-2"><Building2 className="h-4 w-4" /> Company</Label><select id="payroll-company" className={selectStyle} disabled={working || companies.isPending} value={companyId} onChange={(event) => {
+      <div><Label htmlFor="payroll-company" className="mb-2 flex items-center gap-2"><Building2 className="h-4 w-4" />{translateText(" Company")}</Label><select id="payroll-company" className={selectStyle} disabled={working || companies.isPending} value={companyId} onChange={(event) => {
         if (!discard()) return;
         setDirty(false); setCompanyId(event.target.value); setPage(1); setEditorVersion((value) => value + 1);
-      }} data-testid="payroll-company"><option value="">Select a company</option>{companies.data?.filter((company) => !company.saved_only || company.id === companyId).map((company) => <option key={company.id} value={company.id}>{company.name}{company.saved_only ? " (saved payroll)" : ""}</option>)}</select></div>
-      <div><Label htmlFor="payroll-month" className="mb-2 block">Payroll month</Label><Input id="payroll-month" type="month" value={month} disabled={working} onChange={(event) => {
+      }} data-testid="payroll-company"><option value="">{translateText("Select a company")}</option>{translateText(companies.data?.filter((company) => !company.saved_only || company.id === companyId).map((company) => <option key={company.id} value={company.id}>{translateText(company.name)}{translateText(company.saved_only ? " (saved payroll)" : "")}</option>))}</select></div>
+      <div><Label htmlFor="payroll-month" className="mb-2 block">{translateText("Payroll month")}</Label><Input id="payroll-month" type="month" value={month} disabled={working} onChange={(event) => {
         if (!event.target.value || !discard()) return;
         setDirty(false); setMonth(event.target.value); setEditorVersion((value) => value + 1);
       }} data-testid="payroll-month" /></div>
-      {companies.isError && <div className="text-sm text-red-700 sm:col-span-2" role="alert">Could not load companies. <Button type="button" variant="outline" size="sm" onClick={() => companies.refetch()}>Try again</Button></div>}
-      {!companies.isPending && !companies.isError && !companies.data?.length && <p className="text-sm text-slate-600 sm:col-span-2">Add a company and its employees in Company Workforce first.</p>}
+      {companies.isError && <div className="text-sm text-red-700 sm:col-span-2" role="alert">{translateText("Could not load companies. ")}<Button type="button" variant="outline" size="sm" onClick={() => companies.refetch()}>{translateText("Try again")}</Button></div>}
+      {!companies.isPending && !companies.isError && !companies.data?.length && <p className="text-sm text-slate-600 sm:col-span-2">{translateText("Add a company and its employees in Company Workforce first.")}</p>}
     </div>
-    {!companyId ? <div className="rounded-xl border border-dashed border-slate-300 bg-white p-6 text-center text-sm text-slate-600">Select a company to load its employees and payroll.</div>
-      : draft.isPending ? <p role="status" className="flex items-center gap-2 p-6"><Loader2 className="h-4 w-4 animate-spin" />Loading payroll…</p>
-      : draft.isError ? <div role="alert" className="rounded-xl border border-red-200 bg-white p-5"><p>{payrollError(draft.error)}</p><Button type="button" variant="outline" className="mt-3" onClick={() => draft.refetch()}>Try again</Button></div>
+    {!companyId ? <div className="rounded-xl border border-dashed border-slate-300 bg-white p-6 text-center text-sm text-slate-600">{translateText("Select a company to load its employees and payroll.")}</div>
+      : draft.isPending ? <p role="status" className="flex items-center gap-2 p-6"><Loader2 className="h-4 w-4 animate-spin" />{translateText("Loading payroll…")}</p>
+      : draft.isError ? <div role="alert" className="rounded-xl border border-red-200 bg-white p-5"><p>{translateText(payrollError(draft.error))}</p><Button type="button" variant="outline" className="mt-3" onClick={() => draft.refetch()}>{translateText("Try again")}</Button></div>
       : draft.data && <PayrollEditor key={`${companyId}-${month}-${editorVersion}`} draft={draft.data} month={month} deleting={remove.isPending} onDirty={setDirty} onBusy={setBusy} onReload={reload} />}
     <div className="overflow-hidden rounded-xl border border-slate-200 bg-white">
-      <h2 className="border-b px-5 py-4 text-lg font-semibold">Saved payroll</h2>
-      {history.isPending ? <p className="p-5" role="status">Loading saved payroll…</p>
-        : history.isError ? <div role="alert" className="p-5"><p>Saved payroll could not be loaded.</p><Button type="button" variant="outline" className="mt-3" onClick={() => history.refetch()}>Try again</Button></div>
-        : !history.data?.items.length ? <p className="p-5 text-sm text-slate-600">No saved payroll for {companyId ? "this company" : "your companies"} yet.</p>
+      <h2 className="border-b px-5 py-4 text-lg font-semibold">{translateText("Saved payroll")}</h2>
+      {history.isPending ? <p className="p-5" role="status">{translateText("Loading saved payroll…")}</p>
+        : history.isError ? <div role="alert" className="p-5"><p>{translateText("Saved payroll could not be loaded.")}</p><Button type="button" variant="outline" className="mt-3" onClick={() => history.refetch()}>{translateText("Try again")}</Button></div>
+        : !history.data?.items.length ? <p className="p-5 text-sm text-slate-600">{translateText("No saved payroll for ")}{translateText(companyId ? "this company" : "your companies")}{translateText(" yet.")}</p>
         : <div className="divide-y">{history.data.items.map((record) => <div key={record.id} className="flex flex-wrap items-center justify-between gap-4 p-5">
-          <div><p className="font-semibold">{record.company_name}</p><p className="mt-1 text-sm text-slate-600">{monthLabel(record.month)} · {record.totals.employee_count} employees · Payable {rupees(record.totals.payable)}</p></div>
-          <div className="flex flex-wrap gap-2"><Button type="button" variant="outline" size="sm" disabled={working} onClick={() => void open(record.company_id, record.month)}>Open</Button><Button type="button" variant="outline" size="sm" disabled={working} onClick={() => void download(record, "pdf")}><Download className="h-4 w-4" />PDF</Button><Button type="button" variant="outline" size="sm" disabled={working} onClick={() => void download(record, "xlsx")}><FileSpreadsheet className="h-4 w-4" />Excel</Button><Button type="button" variant="outline" size="sm" className="border-red-200 text-red-700 hover:bg-red-50" disabled={working} onClick={() => confirmDelete(record)} aria-label={`Delete payroll for ${record.company_name}, ${monthLabel(record.month)}`} data-testid={`payroll-delete-${record.id}`}>{remove.isPending && remove.variables?.id === record.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}Delete</Button></div>
+          <div><p className="font-semibold">{record.company_name}</p><p className="mt-1 text-sm text-slate-600">{translateText(monthLabel(record.month))} · {translateText(record.totals.employee_count)}{translateText(" employees · Payable ")}{translateText(rupees(record.totals.payable))}</p></div>
+          <div className="flex flex-wrap gap-2"><Button type="button" variant="outline" size="sm" disabled={working} onClick={() => void open(record.company_id, record.month)}>{translateText("Open")}</Button><Button type="button" variant="outline" size="sm" disabled={working} onClick={() => void download(record, "pdf")}><Download className="h-4 w-4" />{translateText("PDF")}</Button><Button type="button" variant="outline" size="sm" disabled={working} onClick={() => void download(record, "xlsx")}><FileSpreadsheet className="h-4 w-4" />{translateText("Excel")}</Button><Button type="button" variant="outline" size="sm" className="border-red-200 text-red-700 hover:bg-red-50" disabled={working} onClick={() => confirmDelete(record)} aria-label={translateText(`Delete payroll for ${record.company_name}, ${monthLabel(record.month)}`)} data-testid={`payroll-delete-${record.id}`}>{remove.isPending && remove.variables?.id === record.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}{translateText("Delete")}</Button></div>
         </div>)}</div>}
-      {history.data && history.data.total > history.data.page_size && <div className="flex items-center justify-between border-t p-4"><Button type="button" variant="outline" disabled={working || page === 1} onClick={() => setPage((value) => value - 1)}>Previous</Button><span className="text-sm">Page {page} of {Math.ceil(history.data.total / history.data.page_size)}</span><Button type="button" variant="outline" disabled={working || page * history.data.page_size >= history.data.total} onClick={() => setPage((value) => value + 1)}>Next</Button></div>}
+      {history.data && history.data.total > history.data.page_size && <div className="flex items-center justify-between border-t p-4"><Button type="button" variant="outline" disabled={working || page === 1} onClick={() => setPage((value) => value - 1)}>{translateText("Previous")}</Button><span className="text-sm">{translateText("Page ")}{translateText(page)}{translateText(" of ")}{translateText(Math.ceil(history.data.total / history.data.page_size))}</span><Button type="button" variant="outline" disabled={working || page * history.data.page_size >= history.data.total} onClick={() => setPage((value) => value + 1)}>{translateText("Next")}</Button></div>}
     </div>
   </section>;
 }

@@ -1,6 +1,6 @@
-const CACHE = 'bws-public-v3';
+const CACHE = 'bws-public-v4';
 const PUBLIC_FILES = [
-  '/app.html', '/offline.html', '/install.js',
+  '/app.html', '/offline.html', '/install.js', '/language.js',
   '/app-icons/icon-192.png', '/app-icons/icon-512.png', '/app-icons/maskable-512.png'
 ];
 self.addEventListener('install', (event) => {

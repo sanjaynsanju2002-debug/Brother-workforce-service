@@ -1,3 +1,4 @@
+import { translateText, useSiteLanguage } from "@/lib/language";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { ArrowUp, MessageCircle, X } from "lucide-react";
 import { BRAND } from "@/lib/brand";
@@ -14,6 +15,7 @@ type ChatMessage = {
 const STARTERS = ["What services do you offer?", "How do I apply for a job?", "I need workers", "Contact details"];
 
 export default function BusinessChat({ jobs, clients }: { jobs: Job[] | null; clients: Client[] | null }) {
+  useSiteLanguage();
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([
@@ -65,7 +67,7 @@ export default function BusinessChat({ jobs, clients }: { jobs: Job[] | null; cl
         <section
           id="business-chat-panel"
           role="dialog"
-          aria-label="Brothers Workforce Solutions chat"
+          aria-label={translateText("Brothers Workforce Solutions chat")}
           onKeyDown={(event) => {
             if (event.key === "Escape") close();
           }}
@@ -76,19 +78,19 @@ export default function BusinessChat({ jobs, clients }: { jobs: Job[] | null; cl
               <MessageCircle className="h-5 w-5" aria-hidden="true" />
             </span>
             <div className="min-w-0 flex-1">
-              <h2 className="text-sm font-semibold">Ask Brothers Workforce</h2>
-              <p className="text-xs text-slate-300">Website information and helpful links</p>
+              <h2 className="text-sm font-semibold">{translateText("Ask Brothers Workforce")}</h2>
+              <p className="text-xs text-slate-300">{translateText("Website information and helpful links")}</p>
             </div>
-            <button type="button" onClick={close} aria-label="Close chat" className="rounded-lg p-2 hover:bg-white/15 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">
+            <button type="button" onClick={close} aria-label={translateText("Close chat")} className="rounded-lg p-2 hover:bg-white/15 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">
               <X className="h-5 w-5" aria-hidden="true" />
             </button>
           </div>
 
-          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto bg-[#F8FAFC] p-4" role="log" aria-live="polite" aria-label="Chat messages">
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto bg-[#F8FAFC] p-4" role="log" aria-live="polite" aria-label={translateText("Chat messages")}>
             {messages.map((message) => (
               <div key={message.id} className={`flex ${message.from === "visitor" ? "justify-end" : "justify-start"}`}>
                 <div className={`max-w-[90%] rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-sm ${message.from === "visitor" ? "rounded-br-sm bg-[#0F2444] text-white" : "rounded-bl-sm border border-slate-200 bg-white text-slate-700"}`}>
-                  <p className="whitespace-pre-line">{message.text}</p>
+                  <p className="whitespace-pre-line">{message.from === "assistant" ? translateText(message.text) : message.text}</p>
                   {message.actions && message.actions.length > 0 && (
                     <div className="mt-3 flex flex-wrap gap-2">
                       {message.actions.map((action) => (
@@ -102,7 +104,7 @@ export default function BusinessChat({ jobs, clients }: { jobs: Job[] | null; cl
                           rel={action.href.startsWith("https://") ? "noopener noreferrer" : undefined}
                           className="rounded-lg border border-orange-200 bg-orange-50 px-3 py-1.5 text-xs font-semibold text-[#9A3412] transition-colors hover:bg-orange-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#EA580C]"
                         >
-                          {action.label}
+                          {translateText(action.label)}
                         </a>
                       ))}
                     </div>
@@ -111,10 +113,10 @@ export default function BusinessChat({ jobs, clients }: { jobs: Job[] | null; cl
               </div>
             ))}
             {messages.length === 1 && (
-              <div className="flex flex-wrap gap-2" aria-label="Suggested questions">
+              <div className="flex flex-wrap gap-2" aria-label={translateText("Suggested questions")}>
                 {STARTERS.map((question) => (
                   <button key={question} type="button" onClick={() => ask(question)} className="rounded-full border border-slate-200 bg-white px-3 py-2 text-left text-xs font-medium text-[#0F2444] shadow-sm hover:border-[#EA580C] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#EA580C]">
-                    {question}
+                    {translateText(question)}
                   </button>
                 ))}
               </div>
@@ -123,7 +125,7 @@ export default function BusinessChat({ jobs, clients }: { jobs: Job[] | null; cl
           </div>
 
           <form onSubmit={submit} className="border-t border-slate-200 bg-white p-3">
-            <label htmlFor="business-chat-input" className="sr-only">Ask a business question</label>
+            <label htmlFor="business-chat-input" className="sr-only">{translateText("Ask a business question")}</label>
             <div className="flex items-center gap-2">
               <input
                 ref={inputRef}
@@ -131,29 +133,27 @@ export default function BusinessChat({ jobs, clients }: { jobs: Job[] | null; cl
                 value={draft}
                 onChange={(event) => setDraft(event.target.value)}
                 maxLength={300}
-                placeholder="Ask about jobs, staffing, services..."
+                placeholder={translateText("Ask about jobs, staffing, services...")}
                 className="min-w-0 flex-1 rounded-xl border border-slate-300 px-3 py-2.5 text-sm text-[#0F2444] outline-none focus:border-[#EA580C] focus:ring-2 focus:ring-orange-100"
               />
-              <button type="submit" disabled={!draft.trim()} aria-label="Send message" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#C2410C] text-white hover:bg-[#9A3412] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#EA580C] disabled:cursor-not-allowed disabled:opacity-50">
+              <button type="submit" disabled={!draft.trim()} aria-label={translateText("Send message")} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#C2410C] text-white hover:bg-[#9A3412] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#EA580C] disabled:cursor-not-allowed disabled:opacity-50">
                 <ArrowUp className="h-5 w-5" aria-hidden="true" />
               </button>
             </div>
-            <p className="mt-2 text-center text-[11px] text-slate-500">Questions stay in this browser tab. Please use the application form for personal details.</p>
+            <p className="mt-2 text-center text-[11px] text-slate-500">{translateText("Questions stay in this browser tab. Please use the application form for personal details.")}</p>
           </form>
         </section>
       ) : (
         <button
           ref={launcherRef}
           type="button"
-          aria-label="Open business chat"
+          aria-label={translateText("Open business chat")}
           aria-expanded={false}
           aria-controls="business-chat-panel"
           onClick={() => setOpen(true)}
           className="flex items-center gap-2 rounded-full bg-[#C2410C] px-4 py-3 text-sm font-semibold text-white shadow-[0_12px_32px_rgba(15,36,68,0.28)] transition-transform hover:-translate-y-0.5 hover:bg-[#9A3412] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#EA580C]"
         >
-          <MessageCircle className="h-5 w-5" aria-hidden="true" />
-          Ask us
-        </button>
+          <MessageCircle className="h-5 w-5" aria-hidden="true" />{translateText("Ask us")}</button>
       )}
     </div>
   );

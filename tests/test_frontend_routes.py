@@ -46,7 +46,7 @@ class FrontendRoutes(unittest.TestCase):
             response = self.client.get(icon["src"])
             self.assertEqual(response.status_code, 200)
             self.assertEqual(response.headers["content-type"], "image/png")
-        for path in ["/sw.js", "/manifest.webmanifest", "/install.js", "/app", "/offline.html"]:
+        for path in ["/sw.js", "/manifest.webmanifest", "/install.js", "/language.js", "/app", "/offline.html"]:
             self.assertEqual(self.client.get(path).headers["cache-control"], "no-cache", path)
         self.assertEqual(self.client.get("/admin").headers["cache-control"], "no-store")
 

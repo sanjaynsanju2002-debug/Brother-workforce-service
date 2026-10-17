@@ -8,6 +8,21 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Kannada glyphs need more vertical room than the Latin heading fonts. */
+html:lang(kn) {
+    --font-heading: 'Noto Sans Kannada', 'Nirmala UI', Tunga, sans-serif;
+    --font-sans: 'Noto Sans Kannada', 'Nirmala UI', Tunga, sans-serif;
+}
+html:lang(kn) :is(h1, h2, h3, h4, button, label, .bws-overline) {
+    line-height: 1.5;
+    letter-spacing: normal;
+}
+html:lang(kn) [data-slot="button"] {
+    height: auto;
+    min-height: 2rem;
+    white-space: normal;
+}
+
 @theme inline {
     --font-heading: 'Space Grotesk Variable', sans-serif;
     --font-sans: 'IBM Plex Sans', sans-serif;
