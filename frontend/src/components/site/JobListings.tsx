@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { searchJobs } from "@/lib/jobSearch";
 import { jobText, salaryText } from "@/lib/jobContent";
 import type { CandidateLanguage } from "@/lib/candidateLanguage";
 import type { Job } from "@/types";
@@ -19,13 +20,13 @@ export default function JobListings({ jobs, language }: { jobs: Job[]; language:
   const [qualification, setQualification] = useState("");
   const [shift, setShift] = useState("");
   const options = (key: "location" | "qualification" | "shift") => [...new Set(jobs.map((j) => j[key]?.trim()).filter((v): v is string => !!v))].sort();
-  const filtered = jobs.filter((j) => (!location || j.location === location) && (!qualification || j.qualification === qualification) && (!shift || j.shift === shift) && `${j.title} ${j.title_kn || ""} ${j.location} ${j.location_kn || ""} ${j.skill_category} ${j.qualification || ""} ${j.description || ""} ${j.description_kn || ""}`.toLocaleLowerCase().includes(search.trim().toLocaleLowerCase()));
+  const filtered = searchJobs(jobs, { search, location, qualification, shift });
   return <div lang={language}>
     <div className="my-5 grid gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-2 lg:grid-cols-4" role="search" aria-label={kn ? "ಉದ್ಯೋಗ ಹುಡುಕಿ" : "Find jobs"}>
       <div><label htmlFor="job-search" className="mb-1 block text-sm font-medium">{kn ? "ಉದ್ಯೋಗ ಹುಡುಕಿ" : "Search jobs"}</label><Input id="job-search" placeholder={kn ? "ಹುದ್ದೆ ಅಥವಾ ಸ್ಥಳ" : "Role, skill or location"} value={search} onChange={(e) => setSearch(e.target.value)} /></div>
       {([['location', location, setLocation, kn ? 'ಸ್ಥಳ' : 'Location'], ['qualification', qualification, setQualification, kn ? 'ವಿದ್ಯಾರ್ಹತೆ' : 'Qualification'], ['shift', shift, setShift, kn ? 'ಪಾಳಿ' : 'Shift']] as const).map(([key, value, setter, label]) => <div key={key}><label htmlFor={`job-filter-${key}`} className="mb-1 block text-sm font-medium">{label}</label><select id={`job-filter-${key}`} className="min-h-11 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm" value={value} onChange={(e) => setter(e.target.value)}><option value="">{kn ? "ಎಲ್ಲಾ ಆಯ್ಕೆಗಳು" : "All options"}</option>{options(key).map((v) => <option key={v} value={v}>{jobText(v, language)}</option>)}</select></div>)}
     </div>
-    <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><p className="text-sm text-slate-600" role="status">{kn ? `${jobs.length} ಉದ್ಯೋಗ ಪ್ರಕಾರಗಳು · ${jobs.reduce((n, j) => n + j.openings, 0)} ಖಾಲಿ ಹುದ್ದೆಗಳು · ${filtered.length} ಫಲಿತಾಂಶಗಳು` : `${jobs.length} job roles · ${jobs.reduce((n, j) => n + j.openings, 0)} vacancies · ${filtered.length} results`}</p>{(search || location || qualification || shift) && <Button type="button" variant="outline" onClick={() => { setSearch(""); setLocation(""); setQualification(""); setShift(""); }}>{kn ? "ಫಿಲ್ಟರ್ ತೆರವುಗೊಳಿಸಿ" : "Clear filters"}</Button>}</div>
+    <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><p className="text-sm text-slate-600" role="status">{kn ? `${jobs.length} ಉದ್ಯೋಗ ಪ್ರಕಾರಗಳು · ${jobs.reduce((n, j) => n + j.openings, 0)} ಖಾಲಿ ಹುದ್ದೆಗಳು · ${filtered.length} ಫಲಿತಾಂಶಗಳು` : `${jobs.length} job roles · ${jobs.reduce((n, j) => n + j.openings, 0)} vacancies · ${filtered.length} result${filtered.length === 1 ? "" : "s"}`}</p>{(search || location || qualification || shift) && <Button type="button" variant="outline" onClick={() => { setSearch(""); setLocation(""); setQualification(""); setShift(""); }}>{kn ? "ಫಿಲ್ಟರ್ ತೆರವುಗೊಳಿಸಿ" : "Clear filters"}</Button>}</div>
     {!filtered.length && <p className="rounded-xl border border-dashed bg-white p-8 text-center text-slate-600">{kn ? "ಈ ಆಯ್ಕೆಗಳಿಗೆ ಉದ್ಯೋಗಗಳು ಸಿಗಲಿಲ್ಲ. ಫಿಲ್ಟರ್‌ಗಳನ್ನು ಬದಲಾಯಿಸಿ ಅಥವಾ ಮುಂದಿನ ಉದ್ಯೋಗಗಳಿಗಾಗಿ ನೋಂದಾಯಿಸಿ." : "No jobs match these filters. Try another search or register for future opportunities below."}</p>}
     <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-3">{filtered.map((j) => <article key={j.id} className="flex min-w-0 flex-col rounded-xl border border-slate-200 bg-white p-6 shadow-sm" data-testid={`job-card-${j.id}`}>
       <p className="text-xs font-semibold uppercase tracking-wide text-[#C2410C]">{jobText(j.skill_category, language)}</p>
