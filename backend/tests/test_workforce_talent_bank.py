@@ -93,7 +93,7 @@ async def test_existing_profiles_are_reused_without_overwriting_candidate_detail
         response = await client.post("/api/admin/assignments", json=data)
         assert response.status_code == 200, response.text
         assert response.json()["worker_id"] == original["id"]
-        assert workforce_db.workers.records == [original]
+        assert workforce_db.workers.records == [{**original, "status": "Deployed"}]
         assert len((await client.get("/api/admin/talents")).json()) == 1
 
 
@@ -101,7 +101,7 @@ async def test_existing_profiles_are_reused_without_overwriting_candidate_detail
 async def test_shared_phones_and_missing_mobile_do_not_merge_different_people(workforce_db):
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="https://test.invalid") as client:
         await client.post("/api/admin/login", json={"pin": "123456"})
-        for data in [employee(), employee(full_name="Another Employee"), employee(mobile=None), employee(mobile="")]:
+        for data in [employee(), employee(full_name="Another Employee", employee_id="BWS-002"), employee(mobile=None, employee_id=None), employee(mobile="", employee_id=None)]:
             response = await client.post("/api/admin/assignments", json=data)
             assert response.status_code == 200, response.text
         assert len(workforce_db.workers.records) == 4

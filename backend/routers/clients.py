@@ -9,9 +9,10 @@ from fastapi.responses import FileResponse, Response
 from bson.binary import Binary
 
 from lib.auth import require_admin
-from lib.companies import company_name_query
+from lib.companies import company_name_key, company_name_query, invoice_company
 from lib.db import db
-from models.clients import Client, ClientCreate, ClientUpdate
+from lib.workforce import archive_company, rename_roster_company
+from models.clients import Client, ClientCreate, ClientUpdate, PublicClient
 from models.bws import Ok
 
 router = APIRouter()
@@ -25,10 +26,10 @@ MAX_LOGO_BYTES = 2 * 1024 * 1024
 
 
 # ---------- public ----------
-@router.get("/clients", response_model=list[Client])
-async def list_public_clients() -> list[Client]:
-    docs = await db.clients.find({"visible": True}, {"_id": 0}).sort("sort_order", 1).to_list(200)
-    return [Client(**d) for d in docs]
+@router.get("/clients", response_model=list[PublicClient])
+async def list_public_clients() -> list[PublicClient]:
+    docs = await db.clients.find({"visible": True, "archived": {"$ne": True}}, {"_id": 0}).sort("sort_order", 1).to_list(200)
+    return [PublicClient(**d) for d in docs]
 
 
 @router.get("/clients/{client_id}/logo")
@@ -52,14 +53,25 @@ async def get_logo(client_id: str) -> Response:
 
 # ---------- admin ----------
 @router.get("/admin/clients", response_model=list[Client], dependencies=[Depends(require_admin)])
-async def list_all_clients() -> list[Client]:
-    docs = await db.clients.find({}, {"_id": 0}).sort("sort_order", 1).to_list(200)
-    return [Client(**d) for d in docs]
+async def list_all_clients(archived: bool = False) -> list[Client]:
+    docs = await db.clients.find({"archived": True} if archived else {"archived": {"$ne": True}}, {"_id": 0}).sort("sort_order", 1).to_list(200)
+    billing = await db.invoice_companies.find({}).to_list(None)
+    by_id = {row["id"]: row for row in billing}
+    by_name = {company_name_key(row["name"]): row for row in billing}
+    result = []
+    for doc in docs:
+        saved = by_id.get(doc["id"]) or by_name.get(company_name_key(doc["name"]))
+        view = invoice_company(doc, saved)
+        result.append(Client(**{**doc, "billing_address": view.address, "gstin": view.gstin}))
+    return result
 
 
 @router.post("/admin/clients", response_model=Client, dependencies=[Depends(require_admin)])
 async def create_client(payload: ClientCreate) -> Client:
-    if await db.clients.find_one(company_name_query(payload.name)):
+    existing = await db.clients.find_one(company_name_query(payload.name))
+    if existing:
+        if existing.get("archived"):
+            raise HTTPException(409, "This company is archived. Restore it from Archived companies.")
         raise HTTPException(409, "This company is already saved. Select it from the company list.")
     billing = await db.invoice_companies.find_one(company_name_query(payload.name))
     count = await db.clients.count_documents({})
@@ -72,7 +84,7 @@ async def create_client(payload: ClientCreate) -> Client:
 
 @router.patch("/admin/clients/{client_id}", response_model=Client, dependencies=[Depends(require_admin)])
 async def update_client(client_id: str, payload: ClientUpdate) -> Client:
-    changes = {k: v for k, v in payload.model_dump().items() if v is not None}
+    changes = {k: v for k, v in payload.model_dump(exclude_unset=True).items() if v is not None}
     if not changes:
         raise HTTPException(status_code=400, detail="Nothing to update")
     before = await db.clients.find_one({"id": client_id})
@@ -88,6 +100,7 @@ async def update_client(client_id: str, payload: ClientUpdate) -> Client:
     if not doc:
         raise HTTPException(status_code=404, detail="Client not found")
     if "name" in changes:
+        await rename_roster_company(db, client_id, changes["name"])
         billing = await db.invoice_companies.find(company_name_query(before["name"])).to_list(None)
         for record in billing:
             await db.invoice_companies.update_one({"id": record["id"]}, {"$set": {"name": changes["name"]}})
@@ -124,16 +137,14 @@ async def delete_client(client_id: str) -> Ok:
     client = await db.clients.find_one({"id": client_id})
     if not client:
         raise HTTPException(status_code=404, detail="Client not found")
-    res = await db.clients.delete_one({"id": client_id})
-    if res.deleted_count == 0:
-        raise HTTPException(status_code=404, detail="Client not found")
-    billing = await db.invoice_companies.find({"$or": [{"id": client_id}, company_name_query(client["name"])]}).to_list(None)
-    for record in billing:
-        await db.invoice_companies.update_one({"id": record["id"]}, {"$set": {"archived": True}})
-    # Saved payroll and invoices hold their own snapshots; Talent Bank keeps the
-    # employees' profiles when their company and roster are removed.
-    await db.assignments.delete_many({"client_id": client_id})
-    await db.client_logos.delete_one({"client_id": client_id})
-    for f in LOGO_DIR.glob(f"{client_id}__*"):
-        f.unlink(missing_ok=True)
+    await archive_company(db, client, True)
     return Ok(ok=True)
+
+
+@router.post("/admin/clients/{client_id}/restore", response_model=Client, dependencies=[Depends(require_admin)])
+async def restore_client(client_id: str) -> Client:
+    client = await db.clients.find_one({"id": client_id})
+    if not client:
+        raise HTTPException(404, "Company not found")
+    await archive_company(db, client, False)
+    return Client(**{**client, "archived": False})

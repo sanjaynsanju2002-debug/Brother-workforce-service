@@ -1,6 +1,6 @@
 import React from "react";
-import { useId, useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useId, useRef, useState } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { CheckCircle2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -14,8 +14,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ApiError, apiPost } from "@/lib/api";
-import { INDUSTRIES, WORKFORCE_TYPES } from "@/lib/brand";
+import { ApiError, apiGet, apiPost } from "@/lib/api";
+import { BRAND, INDUSTRIES, WORKFORCE_TYPES } from "@/lib/brand";
 import type { CompanyRequest, CompanyRequestCreate } from "@/types";
 import { Link } from "react-router-dom";
 
@@ -38,21 +38,23 @@ const EMPTY: CompanyRequestCreate = {
 
 export default function CompanyForm() {
   const [form, setForm] = useState<CompanyRequestCreate>(EMPTY);
-  const [done, setDone] = useState(false);
+  const [receipt, setReceipt] = useState<CompanyRequest | null>(null);
+  const requestId = useRef(crypto.randomUUID());
+  const service = useQuery({ queryKey: ["service-info"], queryFn: () => apiGet<{ enquiry_response_target: string }>("/service-info") });
 
   const set = (k: keyof CompanyRequestCreate, v: string) => setForm((f) => ({ ...f, [k]: v }));
 
   const mutation = useMutation({
-    mutationFn: (payload: CompanyRequestCreate) => apiPost<CompanyRequest>("/company-requests", payload),
-    onSuccess: () => {
-      setDone(true);
+    mutationFn: (payload: CompanyRequestCreate) => apiPost<CompanyRequest>("/company-requests", { ...payload, request_id: requestId.current }),
+    onSuccess: (saved) => {
+      setReceipt(saved);
       setForm(EMPTY);
       toast.success("Manpower request submitted");
     },
     onError: (error) => { const detail = error instanceof ApiError ? (error.body as { detail?: unknown })?.detail : null; toast.error(typeof detail === "string" ? detail : "Could not submit your request. Please try again."); },
   });
 
-  if (done) {
+  if (receipt) {
     return (
       <div
         className="rounded-lg border border-green-200 bg-green-50 p-8 text-center"
@@ -62,10 +64,13 @@ export default function CompanyForm() {
         <p className="text-lg font-semibold text-[#0F2444]">
           Thank you. Our workforce team will review your requirement and contact you to confirm the details.
         </p>
+        {service.data?.enquiry_response_target && <p className="mt-3 text-sm text-slate-700">Response target: {service.data.enquiry_response_target}</p>}
+        <p className="mt-4 text-sm text-slate-700">Your reference: <strong className="break-all">{receipt.reference || receipt.id}</strong></p>
+        <p className="mt-2 text-sm text-slate-600">Keep this reference when following up. For urgent hiring, <a className="font-semibold text-[#C2410C] underline" href={`tel:${BRAND.phoneRaw}`}>call {BRAND.phone}</a>.</p>
         <Button
           variant="outline"
           className="mt-5"
-          onClick={() => setDone(false)}
+          onClick={() => { setReceipt(null); requestId.current = crypto.randomUUID(); }}
           data-testid="manpower-request-another"
         >
           Submit another request

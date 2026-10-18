@@ -90,7 +90,7 @@ async def test_deleting_company_removes_active_choices_and_roster_but_keeps_hist
         edited = await client.put(f"/api/admin/invoices/{bill['id']}", json={**update, "notes": "Updated historical bill"})
         assert edited.status_code == 200, edited.text
         assert edited.json()["totals"] == bill["totals"]
-        restored = await client.post("/api/admin/clients", json={"name": "Factory A", "visible": False})
+        restored = await client.post(f"/api/admin/clients/{company['id']}/restore")
         assert restored.status_code == 200, restored.text
         assert restored.json()["id"] == company["id"]
         assert (await client.get("/api/admin/invoices/companies")).json()[0]["gstin"] == "29EXAMPLE"

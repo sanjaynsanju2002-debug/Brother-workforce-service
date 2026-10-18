@@ -1,3 +1,4 @@
+import CompanyDirectory from "./CompanyDirectory";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Building2, Loader2, Plus, Trash2, Users } from "lucide-react";
@@ -47,6 +48,8 @@ export default function WorkforceManager({ pin }: { pin: string }) {
   const [form, setForm] = useState<Form>(EMPTY);
   const [companyFilter, setCompanyFilter] = useState("");
   const [newCompany, setNewCompany] = useState("");
+  const [companyAddress, setCompanyAddress] = useState("");
+  const [companyGstin, setCompanyGstin] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [employeeId, setEmployeeId] = useState("");
   const [salary, setSalary] = useState("");
@@ -61,11 +64,13 @@ export default function WorkforceManager({ pin }: { pin: string }) {
     void qc.invalidateQueries({ queryKey: ["payroll-companies"] });
   };
   const createCompany = useMutation({
-    mutationFn: (name: string) => apiPost<Client>(`/admin/clients${q}`, { name: name.trim(), visible: false }),
+    mutationFn: (name: string) => apiPost<Client>(`/admin/clients${q}`, { name: name.trim(), billing_address: companyAddress.trim(), gstin: companyGstin.trim(), visible: false }),
     onSuccess: (client) => {
       refreshCompanyQueries(qc);
       setForm((current) => ({ ...current, client_id: client.id }));
       setNewCompany("");
+      setCompanyAddress("");
+      setCompanyGstin("");
       toast.success("Private company added");
     },
     onError: (e) => toast.error(errorMessage(e)),
@@ -132,6 +137,8 @@ export default function WorkforceManager({ pin }: { pin: string }) {
           <div className="min-w-[220px] flex-1"><Label className="mb-2 block">New company (private)</Label>
             <Input value={newCompany} maxLength={150} onChange={(e) => setNewCompany(e.target.value)} placeholder="Company name" data-testid="assignment-new-company" />
           </div>
+          <div className="min-w-0 flex-1 basis-52"><Label htmlFor="workforce-billing-address" className="mb-2 block">Billing address</Label><Input id="workforce-billing-address" maxLength={2000} value={companyAddress} onChange={(e) => setCompanyAddress(e.target.value)} placeholder="Optional" /></div>
+          <div className="min-w-0 flex-1 basis-40"><Label htmlFor="workforce-gstin" className="mb-2 block">GSTIN</Label><Input id="workforce-gstin" maxLength={30} value={companyGstin} onChange={(e) => setCompanyGstin(e.target.value.toUpperCase())} placeholder="Optional" /></div>
           <Button type="button" variant="outline" disabled={createCompany.isPending || !newCompany.trim()} onClick={() => createCompany.mutate(newCompany)}>
             Add private company
           </Button>
@@ -152,7 +159,7 @@ export default function WorkforceManager({ pin }: { pin: string }) {
               const worker = (workers.data ?? []).find((w) => w.id === e.target.value);
               setForm({ ...form, worker_id: e.target.value, full_name: worker?.full_name ?? "", mobile: worker?.mobile ?? "" });
             }} data-testid="assignment-worker">
-              <option value="">Enter manually</option>{(workers.data ?? []).map((w) => <option key={w.id} value={w.id}>{w.full_name} · {w.mobile}</option>)}
+              <option value="">Enter manually</option>{(workers.data ?? []).filter((w) => w.status !== "Archived").map((w) => <option key={w.id} value={w.id}>{w.full_name} · {w.mobile}</option>)}
             </select>
           </div>
           <div><Label className="mb-2 block">Person's name *</Label><Input value={form.full_name} disabled={!!form.worker_id} onChange={(e) => setForm({ ...form, full_name: e.target.value })} data-testid="assignment-name" /></div>
@@ -170,14 +177,15 @@ export default function WorkforceManager({ pin }: { pin: string }) {
         {!clients.isLoading && !clients.data?.length && <p className="mt-3 text-sm text-amber-700">Add a company in the Clients tab first.</p>}
       </CardContent></Card>
 
+      <CompanyDirectory />
       <Card className="border-slate-200 bg-white"><CardContent className="p-5 sm:p-6">
         <details>
           <summary className="cursor-pointer text-lg font-semibold text-[#0F2444]">Manage companies ({clients.data?.length ?? 0})</summary>
-          <p className="mt-2 text-sm text-slate-500">Removing a company updates the Workforce, Payroll and Invoice company lists. Saved invoices, payroll records and Talent Bank profiles are kept.</p>
+          <p className="mt-2 text-sm text-slate-500">Removing a company updates the Workforce, Payroll and Invoice company lists. All records are kept and the company can be restored below.</p>
           <div className="mt-4 space-y-2">{(clients.data ?? []).map((company) => <div key={company.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 p-3">
             <div><p className="font-medium text-[#0F2444]">{company.name}</p><p className="text-xs text-slate-500">{all.filter((person) => person.client_id === company.id).length} workforce assignments</p></div>
             <Button type="button" size="sm" variant="outline" className="border-red-200 text-red-700 hover:bg-red-50" disabled={removeCompany.isPending || add.isPending || createCompany.isPending || saveEmployeeId.isPending || changeStatus.isPending || remove.isPending} data-testid={`workforce-delete-company-${company.id}`} onClick={() => {
-              if (window.confirm(`Remove ${company.name} and its workforce assignments? It will be removed from the active Payroll and Invoice company lists. Saved invoices, payroll records and Talent Bank profiles will be kept.`)) removeCompany.mutate(company.id);
+              if (window.confirm(`Archive ${company.name} and its workforce assignments? It will be removed from the active Payroll and Invoice company lists. All records will be kept. Restore the company using Archived companies.`)) removeCompany.mutate(company.id);
             }}><Trash2 className="mr-2 h-4 w-4" />Remove company</Button>
           </div>)}</div>
         </details>

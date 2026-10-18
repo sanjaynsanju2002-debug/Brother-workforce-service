@@ -68,15 +68,22 @@ async def set_pin(new_pin: str) -> None:
     await db.admin_sessions.delete_many({})
 
 
-async def login_with_pin(pin: str, request: Request, response: Response) -> None:
+async def login_with_pin(pin: str, request: Request, response: Response, username: str | None = None) -> None:
     now = datetime.now(timezone.utc)
     ip = request.client.host if request.client else "unknown"
     await db.admin_login_attempts.delete_many({"id": ip, "expires_at": {"$lte": now}})
     attempt = await db.admin_login_attempts.find_one({"id": ip, "expires_at": {"$gt": now}})
     if attempt and attempt.get("count", 0) >= MAX_LOGIN_ATTEMPTS:
         raise HTTPException(status_code=429, detail="Too many attempts. Try again in 15 minutes.")
+    principal = {"user_id": None, "name": "Owner", "role": "owner"}
     try:
-        await verify_pin(pin)
+        if username:
+            staff = await db.admin_users.find_one({"username": username.strip().lower(), "disabled": False})
+            if not staff or not hmac.compare_digest(_hash_pin(pin, staff["pin_salt"]), staff["pin_hash"]):
+                raise HTTPException(401, "Invalid account or PIN")
+            principal = {"user_id": staff["id"], "name": staff["name"], "role": staff["role"]}
+        else:
+            await verify_pin(pin)
     except HTTPException:
         await db.admin_login_attempts.update_one(
             {"id": ip},
@@ -88,6 +95,7 @@ async def login_with_pin(pin: str, request: Request, response: Response) -> None
     token = secrets.token_urlsafe(32)
     await db.admin_sessions.insert_one({
         "token_hash": _session_hash(token),
+        **principal,
         "created_at": now,
         "expires_at": now + timedelta(seconds=SESSION_SECONDS),
     })
@@ -107,7 +115,17 @@ async def require_admin(request: Request) -> None:
     })
     if not session:
         raise HTTPException(status_code=401, detail="Session expired. Please sign in again")
+    if session.get("user_id"):
+        staff = await db.admin_users.find_one({"id": session["user_id"], "disabled": False})
+        if not staff:
+            raise HTTPException(401, "Account disabled. Contact the owner.")
+        principal = {"user_id": staff["id"], "name": staff["name"], "role": staff["role"]}
+    else:
+        principal = {"user_id": None, "name": "Owner", "role": "owner"}
+    request.state.admin = principal
     if request.method not in {"GET", "HEAD", "OPTIONS"}:
+        if principal["role"] == "viewer":
+            raise HTTPException(403, "This account has view-only access")
         origin = request.headers.get("origin")
         host = request.headers.get("host", "")
         if origin and origin not in {f"https://{host}", f"http://{host}"}:
@@ -121,3 +139,9 @@ async def logout(request: Request, response: Response) -> None:
     if token:
         await db.admin_sessions.delete_one({"token_hash": _session_hash(token)})
     response.delete_cookie(COOKIE_NAME, path="/api")
+
+
+async def require_owner(request: Request) -> None:
+    await require_admin(request)
+    if request.state.admin["role"] != "owner":
+        raise HTTPException(403, "Only the owner can manage security, staff and backups")

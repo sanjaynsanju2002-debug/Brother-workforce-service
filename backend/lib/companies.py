@@ -19,7 +19,7 @@ def invoice_company(client: dict | None, billing: dict | None = None) -> Invoice
     company = client or billing
     return InvoiceCompany(
         id=(billing or company)["id"], name=company["name"],
-        address=(billing or {}).get("address") or (client or {}).get("location") or "",
-        gstin=(billing or {}).get("gstin") or "",
+        address=(client or {}).get("billing_address") if (client or {}).get("billing_address") is not None else ((billing or {}).get("address") or (client or {}).get("location") or ""),
+        gstin=(client or {}).get("gstin") if (client or {}).get("gstin") is not None else ((billing or {}).get("gstin") or ""),
         created_at=company.get("created_at") or datetime.now(timezone.utc),
     )

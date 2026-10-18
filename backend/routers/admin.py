@@ -16,7 +16,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, Response
 from fastapi.responses import StreamingResponse
 
-from lib.auth import set_pin, uses_setup_pin, require_admin
+from lib.auth import require_owner, set_pin, uses_setup_pin, require_admin
 from lib.db import db
 from lib.notify import email_configured
 from models.bws import (
@@ -112,12 +112,12 @@ async def enquiry_aging() -> EnquiryAging:
     )
 
 
-@router.get("/security", response_model=SecurityInfo)
+@router.get("/security", response_model=SecurityInfo, dependencies=[Depends(require_owner)])
 async def security_info() -> SecurityInfo:
     return SecurityInfo(is_default=await uses_setup_pin())
 
 
-@router.post("/security/pin", response_model=SecurityInfo)
+@router.post("/security/pin", response_model=SecurityInfo, dependencies=[Depends(require_owner)])
 async def change_pin(payload: PinChange, response: Response) -> SecurityInfo:
     new_pin = payload.new_pin.strip()
     if not new_pin.isdigit() or not (8 <= len(new_pin) <= 12):
@@ -178,6 +178,9 @@ async def worker_filters() -> WorkerFilters:
 
 @router.patch("/workers/{worker_id}", response_model=Worker)
 async def update_worker(worker_id: str, payload: StatusUpdate) -> Worker:
+    active = await db.assignments.find_one({"worker_id": worker_id, "status": "Active", "company_archived": {"$ne": True}})
+    if active and payload.status != "Deployed":
+        raise HTTPException(409, "This employee has an active assignment. Complete it in Company Workforce first.")
     doc = await db.workers.find_one_and_update(
         {"id": worker_id}, {"$set": {"status": payload.status}}, return_document=True
     )
@@ -193,6 +196,9 @@ async def delete_worker_application(worker_id: str) -> Ok:
     doc = await db.workers.find_one({"id": worker_id, "source": {"$ne": "Talent Bank"}})
     if not doc:
         raise HTTPException(status_code=404, detail="Worker application not found")
+
+    if await db.assignments.find_one({"worker_id": worker_id}):
+        raise HTTPException(409, "This profile is linked to workforce history. Use Archived status after completing active assignments.")
 
     object_key = doc.get("resume_object_key")
     client = _r2_client()
@@ -427,6 +433,9 @@ async def delete_talent(worker_id: str) -> Ok:
     doc = await db.workers.find_one({"id": worker_id})
     if not doc:
         raise HTTPException(status_code=404, detail="Talent not found")
+
+    if await db.assignments.find_one({"worker_id": worker_id}):
+        raise HTTPException(409, "This profile is linked to workforce history. Use Archived status after completing active assignments.")
 
     object_key = doc.get("resume_object_key")
     client = _r2_client()

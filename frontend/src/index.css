@@ -991,3 +991,9 @@
     font-family: var(--font-heading);
     }
 }
+
+/* Comfortable touch controls without widening financial tables. */
+@media (max-width: 767px) {
+  button:not([role="checkbox"]), select, [data-slot="select-trigger"], summary { min-height: 44px; }
+  input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]), select, textarea { font-size: 16px; }
+}

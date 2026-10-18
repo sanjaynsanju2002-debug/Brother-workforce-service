@@ -16,11 +16,14 @@ def test_schema_requires_full_description_and_named_employer():
         "description": "Responsibilities: Assemble components and inspect completed units. "
                        "Qualifications: Experience with hand tools and attention to detail. "
                        "Working hours: 9am to 5pm at the facility.",
-        "employer_name": "Example Manufacturing Ltd",
+        "employer_name": "Example Manufacturing Ltd", "schema_ready": True,
+        "qualification": "Experience with hand tools", "working_hours": "9am to 5pm",
     }
     url = "https://brothersworkforcesolutions.in/jobs/example"
     assert '"@type": "JobPosting"' in _job_schema(job, url)
     assert "Example Manufacturing Ltd" in _job_schema(job, url)
+    assert _job_schema({**job, "schema_ready": False}, url) == ""
+    assert _job_schema({**job, "working_hours": ""}, url) == ""
     assert _job_schema({**job, "employer_name": ""}, url) == ""
     assert _job_schema({**job, "description": "Assembler opening"}, url) == ""
 

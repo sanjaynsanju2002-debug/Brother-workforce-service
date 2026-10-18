@@ -17,6 +17,8 @@ load_dotenv(ROOT_DIR / '.env')
 
 # MongoDB connection
 from lib.db import client, db, ensure_indexes
+from lib.workforce import reconcile_companies, reconcile_workforce
+from lib.job_translations import translate_known_job
 
 
 # Startup runs before the yield, shutdown after it. Add your own setup/teardown here.
@@ -55,6 +57,14 @@ async def lifespan(app: FastAPI):
         },
         {"$set": {"visible": False}},
     )
+    # Migration is retryable: deterministic IDs and name+phone matching prevent duplicates.
+    try:
+        await translate_known_job(db)
+        await reconcile_companies(db)
+        result = await reconcile_workforce(db)
+        logging.getLogger(__name__).info("Workforce reconciliation: %s", result)
+    except Exception:
+        logging.getLogger(__name__).exception("Workforce reconciliation will retry on next startup")
     yield
     client.close()
 
@@ -115,6 +125,9 @@ from routers.talent import router as talent_router  # noqa: E402
 from routers.invoices import router as invoices_router  # noqa: E402
 from routers.expenses import router as expenses_router  # noqa: E402
 from routers.finance import router as finance_router  # noqa: E402
+from routers.service_info import router as service_info_router
+from routers.team import router as team_router
+from routers.backups import router as backups_router
 from routers.payroll import router as payroll_router  # noqa: E402
 
 admin_router.include_router(email_router)
@@ -126,6 +139,9 @@ api_router.include_router(invoices_router)
 api_router.include_router(expenses_router)
 api_router.include_router(finance_router)
 api_router.include_router(payroll_router)
+api_router.include_router(service_info_router)
+api_router.include_router(team_router)
+api_router.include_router(backups_router)
 api_router.include_router(clients_router)
 api_router.include_router(assignments_router)
 api_router.include_router(cron_router)

@@ -225,6 +225,9 @@ class InvoiceCollection:
             elif isinstance(value, dict) and "$regex" in value:
                 if not re.search(value["$regex"], row.get(key, ""), re.I if value.get("$options") == "i" else 0):
                     return False
+            elif isinstance(value, dict) and "$ne" in value:
+                if row.get(key) == value["$ne"]:
+                    return False
             elif isinstance(value, dict) and "$in" in value:
                 if row.get(key) not in value["$in"]:
                     return False

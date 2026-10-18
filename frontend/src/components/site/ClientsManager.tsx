@@ -1,3 +1,4 @@
+import CompanyDirectory from "./CompanyDirectory";
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Building2, Eye, EyeOff, ImagePlus, Loader2, Plus, Trash2 } from "lucide-react";
@@ -100,6 +101,7 @@ export default function ClientsManager({ pin }: { pin: string }) {
 
   return (
     <div className="grid gap-6" data-testid="clients-manager">
+      <CompanyDirectory />
       <Card className="border-slate-200 bg-white">
         <CardContent className="p-4 sm:p-6">
           <h3 className="flex items-center gap-2 text-lg font-semibold text-[#0F2444]">
@@ -268,7 +270,7 @@ export default function ClientsManager({ pin }: { pin: string }) {
                         size="icon-xs"
                         variant="destructive"
                         onClick={() => {
-                          if (window.confirm(`Remove ${c.name} and its workforce assignments from Workforce, Payroll and Invoice company lists? Saved invoices, payroll records and Talent Bank profiles will be kept.`)) remove.mutate(c.id);
+                          if (window.confirm(`Remove ${c.name} and its workforce assignments from Workforce, Payroll and Invoice company lists? All records are kept. You can restore this company from Archived companies.`)) remove.mutate(c.id);
                         }}
                         data-testid={`client-delete-${c.id}`}
                       >

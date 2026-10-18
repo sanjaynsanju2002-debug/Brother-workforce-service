@@ -26,6 +26,11 @@ INDEXES: dict[str, list[IndexModel]] = {
         IndexModel([("application_fingerprint", ASCENDING)], name="application_fingerprint", unique=True, sparse=True),
         IndexModel([("submission_hash", ASCENDING)], name="submission_hash", unique=True, sparse=True),
     ],
+    "assignments": [
+        IndexModel([("id", ASCENDING)], name="id", unique=True),
+        IndexModel([("client_id", ASCENDING), ("employee_id_key", ASCENDING)], name="company_employee_id", unique=True, partialFilterExpression={"employee_id_key": {"$type": "string"}}),
+        IndexModel([("worker_id", ASCENDING), ("status", ASCENDING)], name="worker_status"),
+    ],
     "resume_files": [
         IndexModel([("worker_id", ASCENDING)], name="worker_id", unique=True),
     ],
@@ -58,6 +63,10 @@ INDEXES: dict[str, list[IndexModel]] = {
     "payroll": [
         IndexModel([("company_id", ASCENDING), ("month", DESCENDING)], name="company_month"),
         IndexModel([("updated_at", DESCENDING)], name="updated_desc"),
+    ],
+    "admin_users": [
+        IndexModel([("id", ASCENDING)], name="id", unique=True),
+        IndexModel([("username", ASCENDING)], name="username", unique=True),
     ],
     "admin_sessions": [
         IndexModel([("token_hash", ASCENDING)], name="token_hash", unique=True),

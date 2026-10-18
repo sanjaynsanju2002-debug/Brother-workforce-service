@@ -1,3 +1,4 @@
+import CompanyDirectory from "./CompanyDirectory";
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Building2, Download, FileText, Loader2, Plus, Save, Trash2 } from "lucide-react";
@@ -187,7 +188,12 @@ export default function Invoices() {
     },
     onError: (error) => { qc.invalidateQueries({ queryKey: ["invoices"] }); toast.error(errorMessage(error)); },
   });
-  const busy = save.isPending || addCompany.isPending || changeStatus.isPending || remove.isPending;
+  const removeCompany = useMutation({
+    mutationFn: (company: Company) => apiDelete(`/admin/invoices/companies/${company.id}`),
+    onSuccess: () => { startForCompany(); refreshCompanyQueries(qc); toast.success("Company removed from active lists. You can restore it below."); },
+    onError: (e) => toast.error(errorMessage(e)),
+  });
+  const busy = removeCompany.isPending || save.isPending || addCompany.isPending || changeStatus.isPending || remove.isPending;
   const confirmDelete = (invoice: Invoice) => {
     const unsaved = saved?.id === invoice.id && dirty ? " Unsaved changes to this invoice will also be discarded." : "";
     if (window.confirm(`Permanently delete invoice ${invoice.invoice_number} for ${invoice.client_name}? This cannot be undone.${unsaved}`)) remove.mutate(invoice);
@@ -235,6 +241,9 @@ export default function Invoices() {
         <div className="flex flex-wrap items-end gap-3">
           <div className="min-w-0 flex-1 basis-64"><Label htmlFor="invoice-company" className="mb-2 flex items-center gap-2 font-semibold text-[#0F2444]"><Building2 className="h-4 w-4 text-[#C2410C]" /> Company</Label><select id="invoice-company" className={selectStyle} value={companyId} disabled={busy} data-testid="invoice-company" onChange={(event) => { if (discardChanges()) startForCompany(companies.data?.find((company) => company.id === event.target.value)); }}><option value="">Select a company</option>{companies.data.map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}</select></div>
           <Button type="button" variant="outline" disabled={busy} onClick={() => { setShowCompanyForm(!showCompanyForm); setCompanyProblem(""); }} data-testid="invoice-add-company"><Plus className="mr-2 h-4 w-4" /> Add company</Button>
+          <Button type="button" variant="outline" disabled={busy || !selectedCompany} className="border-red-200 text-red-700" data-testid="invoice-delete-company" onClick={() => {
+            if (selectedCompany && discardChanges() && window.confirm(`Delete ${selectedCompany.name} from the active Workforce, Payroll and Invoice company lists? Saved invoices, payroll, employee profiles and assignments are kept. You can restore this company below.`)) removeCompany.mutate(selectedCompany);
+          }}><Trash2 className="mr-2 h-4 w-4" /> Delete company</Button>
         </div>
         <p className="mt-2 text-xs text-slate-500">Companies are shared with Company Workforce and Payroll. Selecting a company fills its billing details and shows its saved invoices below.</p>
         {showCompanyForm && <form className="mt-5 space-y-4 border-t border-slate-200 pt-5" onSubmit={(event) => { event.preventDefault(); if (discardChanges()) addCompany.mutate(); }} data-testid="invoice-company-form">
@@ -247,6 +256,7 @@ export default function Invoices() {
           </fieldset>
         </form>}
       </div>
+      <CompanyDirectory />
       {!selectedCompany && !saved && <div className="rounded-xl border border-dashed border-slate-300 bg-white p-6 text-center text-sm text-slate-500">{companies.data.length ? "Select a company above to open the invoice template." : "Add your first company above, then enter worker quantities, rates and percentages in its invoice template."}</div>}
       {(!!selectedCompany || !!saved) && <form ref={formRef} onSubmit={(event) => { event.preventDefault(); saveAs(); }} className="space-y-6">
         <fieldset disabled={busy} className="min-w-0 space-y-6">

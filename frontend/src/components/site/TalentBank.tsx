@@ -22,7 +22,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { apiDelete, apiGet, apiPatch, apiPost } from "@/lib/api";
+import { ApiError, apiDelete, apiGet, apiPatch, apiPost } from "@/lib/api";
 import { AVAILABILITY, SKILL_CATEGORIES } from "@/lib/brand";
 import { waLink, workerMessage } from "@/lib/wa";
 import type { Ok, Worker, WorkerCreate } from "@/types";
@@ -36,6 +36,7 @@ type TalentImportResult = {
 };
 
 import { MAX_RESUME_SIZE } from "@/lib/uploads";
+const talentError = (e: unknown) => e instanceof ApiError && typeof (e.body as { detail?: string })?.detail === "string" ? (e.body as { detail: string }).detail : "Could not update the talent profile";
 const TALENT_STATUS = ["Available", "Contacted", "Shortlisted", "Deployed", "Archived"];
 
 const EMPTY_TALENT: WorkerCreate = {
@@ -151,7 +152,7 @@ export default function TalentBank({ pin }: { pin: string }) {
       qc.invalidateQueries({ queryKey: ["admin-talents", pin] });
       toast.success("Talent status updated");
     },
-    onError: () => toast.error("Could not update status"),
+    onError: (e) => toast.error(talentError(e)),
   });
 
   const deleteTalent = useMutation({
@@ -160,7 +161,7 @@ export default function TalentBank({ pin }: { pin: string }) {
       qc.invalidateQueries({ queryKey: ["admin-talents", pin] });
       toast.success("Talent removed");
     },
-    onError: () => toast.error("Could not remove talent"),
+    onError: (e) => toast.error(talentError(e)),
   });
 
   const replaceResume = async (workerId: string, file: File | null) => {

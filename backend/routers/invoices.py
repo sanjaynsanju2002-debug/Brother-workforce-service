@@ -13,6 +13,7 @@ from starlette.concurrency import run_in_threadpool
 from lib.auth import require_admin
 from lib.companies import company_name_key, company_name_query, invoice_company
 from lib.db import db
+from lib.workforce import archive_company, rename_roster_company
 from lib.invoices import Invoice, InvoiceCompany, InvoiceCompanyInput, InvoiceInput, InvoiceModel, InvoiceNumber, InvoiceProfile, calculate_invoice
 from models.clients import Client
 
@@ -64,14 +65,14 @@ async def find_company(company_id: UUID) -> InvoiceCompany:
     client = await db.clients.find_one({"id": company_id}, {"_id": 0})
     if not client and billing:
         client = await db.clients.find_one(company_name_query(billing["name"]), {"_id": 0})
-    if not client and (not billing or billing.get("archived")):
+    if (client and client.get("archived")) or (not client and (not billing or billing.get("archived"))):
         raise HTTPException(404, "Company not found. Add the company before creating an invoice.")
     return invoice_company(client, billing)
 
 
 @router.get("/companies", response_model=list[InvoiceCompany])
 async def list_companies():
-    clients = await db.clients.find({}, {"_id": 0}).to_list(None)
+    clients = await db.clients.find({"archived": {"$ne": True}}, {"_id": 0}).to_list(None)
     billing = await db.invoice_companies.find({}, {"_id": 0}).to_list(None)
     active_billing = [doc for doc in billing if not doc.get("archived")]
     by_id = {doc["id"]: doc for doc in active_billing}
@@ -91,10 +92,13 @@ async def create_company(payload: InvoiceCompanyInput):
     name_key = " ".join(payload.name.casefold().split())
     existing = await db.invoice_companies.find_one(company_name_query(payload.name))
     company_id = existing["id"] if existing else str(uuid5(NAMESPACE_URL, f"bws:invoice-company:{name_key}"))
-    if await db.clients.find_one(company_name_query(payload.name)) or (existing and not existing.get("archived")):
+    saved_client = await db.clients.find_one(company_name_query(payload.name))
+    if saved_client and saved_client.get("archived"):
+        raise HTTPException(409, "This company is archived. Restore it from Archived companies below.")
+    if saved_client or (existing and not existing.get("archived")):
         raise HTTPException(409, "This company is already saved. Select it from the company list.")
     company = InvoiceCompany(**payload.model_dump(), id=company_id, created_at=datetime.now(timezone.utc))
-    client = Client(id=company_id, name=company.name, location=company.address or None, visible=False)
+    client = Client(id=company_id, name=company.name, billing_address=company.address, gstin=company.gstin, visible=False)
     try:
         await db.clients.insert_one({"_id": company_id, **client.model_dump()})
     except DuplicateKeyError:
@@ -108,6 +112,50 @@ async def create_company(payload: InvoiceCompanyInput):
         await db.clients.delete_one({"id": company_id})
         raise
     return company
+
+
+async def company_records(company_id: str):
+    billing = await db.invoice_companies.find_one({"id": company_id})
+    client = await db.clients.find_one({"id": company_id})
+    if not client and billing:
+        client = await db.clients.find_one(company_name_query(billing["name"]))
+    if not client and not billing:
+        raise HTTPException(404, "Company not found")
+    return client, billing
+
+
+@router.patch("/companies/{company_id}", response_model=InvoiceCompany)
+async def update_company(company_id: UUID, payload: InvoiceCompanyInput):
+    client, billing = await company_records(str(company_id))
+    if (client or billing).get("archived"):
+        raise HTTPException(409, "Restore the company before editing it")
+    other = await db.clients.find_one(company_name_query(payload.name))
+    other_billing = await db.invoice_companies.find_one(company_name_query(payload.name))
+    if (other and (not client or other["id"] != client["id"])) or (other_billing and (not billing or other_billing["id"] != billing["id"])):
+        raise HTTPException(409, "Another company already has that name")
+    if not client:
+        client = Client(id=str(company_id), name=payload.name, visible=False).model_dump()
+        await db.clients.insert_one(client)
+    changes = {"name": payload.name, "billing_address": payload.address, "gstin": payload.gstin}
+    await db.clients.update_one({"id": client["id"]}, {"$set": changes})
+    await rename_roster_company(db, client["id"], payload.name)
+    if billing:
+        await db.invoice_companies.update_one({"id": billing["id"]}, {"$set": payload.model_dump()})
+    return invoice_company({**client, **changes}, {**(billing or {}), "id": str(company_id)})
+
+
+@router.delete("/companies/{company_id}")
+async def remove_company(company_id: UUID):
+    client, billing = await company_records(str(company_id))
+    if client:
+        await archive_company(db, client, True)
+    else:
+        # Materialise a legacy billing-only customer so it can also be restored.
+        client = Client(id=str(company_id), name=billing["name"], billing_address=billing.get("address"),
+                        gstin=billing.get("gstin"), visible=False).model_dump()
+        await db.clients.insert_one(client)
+        await archive_company(db, client, True)
+    return {"ok": True}
 
 
 @router.get("/profile", response_model=InvoiceProfile)

@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 def _now() -> datetime:
@@ -64,6 +64,7 @@ class CompanyRequestCreate(BaseModel):
 
 
 class CompanyRequest(CompanyRequestCreate):
+    reference: Optional[str] = None
     id: str = Field(default_factory=_uid)
     status: str = "Pending"
     created_at: datetime = Field(default_factory=_now)
@@ -71,6 +72,18 @@ class CompanyRequest(CompanyRequestCreate):
 
 # ---------- Job listings ----------
 class JobCreate(BaseModel):
+    title_kn: Optional[str] = Field(default=None, max_length=4000)
+    location_kn: Optional[str] = Field(default=None, max_length=4000)
+    experience_kn: Optional[str] = Field(default=None, max_length=4000)
+    shift_kn: Optional[str] = Field(default=None, max_length=4000)
+    qualification: Optional[str] = Field(default=None, max_length=4000)
+    qualification_kn: Optional[str] = Field(default=None, max_length=4000)
+    working_hours: Optional[str] = Field(default=None, max_length=4000)
+    working_hours_kn: Optional[str] = Field(default=None, max_length=4000)
+    benefits: Optional[str] = Field(default=None, max_length=4000)
+    benefits_kn: Optional[str] = Field(default=None, max_length=4000)
+    salary_basis: Optional[str] = Field(default=None, max_length=4000)
+    schema_ready: bool = False
     title: str
     location: str
     skill_category: str
@@ -82,6 +95,12 @@ class JobCreate(BaseModel):
     description_kn: Optional[str] = None
     closing_date: Optional[str] = None
     employer_name: Optional[str] = None
+
+    @model_validator(mode="after")
+    def verified_schema_details(self):
+        if self.schema_ready and (len((self.description or "").strip()) < 100 or not all((getattr(self, key) or "").strip() for key in ("employer_name", "qualification", "working_hours", "location", "title"))):
+            raise ValueError("Complete the full description, hiring employer, eligibility and working hours before enabling job search structured data")
+        return self
 
     @field_validator("closing_date")
     @classmethod

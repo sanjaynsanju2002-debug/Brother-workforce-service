@@ -1,3 +1,4 @@
+import { missingJobDetails } from "@/lib/jobContent";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -72,6 +73,7 @@ export default function Admin() {
   }, []);
 
   const [pin, setPin] = useState("");
+  const [username, setUsername] = useState("");
   const [authenticated, setAuthenticated] = useState(false);
   const [loggedOut, setLoggedOut] = useState(false);
   const qc = useQueryClient();
@@ -82,7 +84,7 @@ export default function Admin() {
   });
 
   const login = useMutation({
-    mutationFn: (p: string) => apiPost<Ok>("/admin/login", { pin: p }),
+    mutationFn: (p: string) => apiPost<Ok>("/admin/login", { pin: p, username: username.trim() || null }),
     onSuccess: () => {
       setPin("");
       qc.clear();
@@ -90,7 +92,7 @@ export default function Admin() {
       setAuthenticated(true);
       toast.success("Signed in");
     },
-    onError: (error) => toast.error(error instanceof ApiError && error.status === 429 ? "Too many attempts. Try again in 15 minutes." : "Invalid PIN"),
+    onError: (error) => toast.error(error instanceof ApiError && error.status === 429 ? "Too many attempts. Try again in 15 minutes." : "Invalid account or PIN"),
   });
 
   if (session.isPending && !authenticated) {
@@ -112,6 +114,7 @@ export default function Admin() {
                 login.mutate(pin);
               }}
             >
+              <details><summary className="cursor-pointer text-sm text-slate-600">Staff account sign-in</summary><Label htmlFor="admin-username" className="mt-3 mb-2 block text-sm">Account name (leave blank for owner)</Label><Input id="admin-username" autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} /></details>
               <div>
                 <Label htmlFor="admin-security-pin" className="mb-2 block text-sm">Security PIN</Label>
                 <Input
@@ -170,6 +173,7 @@ function Dashboard({
   onPinChanged: () => void;
 }) {
   const qc = useQueryClient();
+  const account = useQuery({ queryKey: ["admin-me"], queryFn: () => apiGet<{ name: string; role: string }>("/admin/me") });
   const q = "";
   const [filters, setFilters] = useState(EMPTY_FILTERS);
   const [matchJobId, setMatchJobId] = useState<string | null>(null);
@@ -254,7 +258,7 @@ function Dashboard({
       qc.invalidateQueries({ queryKey: ["shortlist-members", pin] });
       toast.success("Application permanently deleted");
     },
-    onError: () => toast.error("Could not delete application"),
+    onError: (e) => toast.error(e instanceof ApiError && typeof (e.body as { detail?: string })?.detail === "string" ? (e.body as { detail: string }).detail : "Could not delete application"),
   });
 
   const requestStatus = useMutation({
@@ -340,7 +344,7 @@ function Dashboard({
             <p className="font-[family-name:var(--font-heading)] text-sm font-bold text-[#0F2444]">
               ADMIN DASHBOARD
             </p>
-            <p className="text-xs text-slate-500">Brothers Workforce Solutions</p>
+            <p className="text-xs text-slate-500">{account.data ? `${account.data.name} · ${account.data.role === "viewer" ? "View only" : account.data.role}` : "Brothers Workforce Solutions"}</p>
           </div>
           <div className="ml-auto flex w-full gap-2 sm:w-auto">
             <Link to="/" className="flex-1 rounded-md border border-slate-200 px-3 py-2 text-center text-sm text-slate-600 hover:text-[#0F2444] sm:flex-none sm:px-4">
@@ -683,7 +687,7 @@ function Dashboard({
                     )}
                     {(requests.data ?? []).map((r) => (
                       <TableRow key={r.id} data-testid={`admin-request-row-${r.id}`}>
-                        <TableCell className="font-medium text-[#0F2444]">{r.company_name}</TableCell>
+                        <TableCell className="font-medium text-[#0F2444]">{r.company_name}<span className="block text-xs text-slate-500">{r.reference || r.id}</span></TableCell>
                         <TableCell>
                           {r.contact_person}
                           <span className="block text-xs text-slate-500">{r.mobile}</span>
@@ -766,7 +770,7 @@ function Dashboard({
                       toast.error("Enter at least 1 opening");
                       return;
                     }
-                    if ((job.description ?? "").trim().length < 40) {
+                    if (!editingJobId && (job.description ?? "").trim().length < 40) {
                       toast.error("Add a full job description with duties, qualifications, skills and working hours");
                       return;
                     }
@@ -899,6 +903,11 @@ function Dashboard({
                       data-testid="admin-job-description-kn"
                     />
                   </div>
+                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">Details to complete: {missingJobDetails(job).join(", ") || "All candidate details entered"}. Enter verified information; use “None” only when confirmed.</div>
+                  <div><Label htmlFor="job-salary-basis">Salary basis</Label><select id="job-salary-basis" className="h-11 w-full rounded-lg border px-3" value={job.salary_basis || ""} onChange={(e) => setJob({ ...job, salary_basis: e.target.value })}><option value="">Not yet confirmed</option>{["Gross monthly", "Take-home monthly", "Daily", "Hourly"].map((v) => <option key={v}>{v}</option>)}</select></div>
+                  {([['qualification', 'Qualification / eligibility'], ['working_hours', 'Working hours / days'], ['benefits', 'Benefits / deductions']] as const).map(([key, label]) => <div key={key}><Label htmlFor={`job-${key}`}>{label}</Label><Textarea id={`job-${key}`} maxLength={4000} value={job[key] || ""} onChange={(e) => setJob({ ...job, [key]: e.target.value })} /></div>)}
+                  <details className="rounded-lg border p-3"><summary className="cursor-pointer font-medium">Kannada role details</summary><div className="mt-3 grid gap-3">{([['title_kn', 'Job title'], ['location_kn', 'Location'], ['experience_kn', 'Experience'], ['shift_kn', 'Shift'], ['qualification_kn', 'Qualification'], ['working_hours_kn', 'Working hours'], ['benefits_kn', 'Benefits']] as const).map(([key, label]) => <div key={key}><Label htmlFor={`job-${key}`}>{label} in Kannada</Label><Textarea id={`job-${key}`} maxLength={4000} value={job[key] || ""} onChange={(e) => setJob({ ...job, [key]: e.target.value })} /></div>)}</div></details>
+                  <label className="flex items-start gap-3 text-sm"><input className="mt-1 h-5 w-5" type="checkbox" checked={job.schema_ready || false} onChange={(e) => setJob({ ...job, schema_ready: e.target.checked })} /><span>I verified the full description, eligibility, hours, hiring employer and location for job search structured data. Incomplete listings stay visible on this website.</span></label>
                   <Button
                     type="submit"
                     disabled={createJob.isPending || editJob.isPending}
@@ -951,7 +960,7 @@ function Dashboard({
                           <div className="flex flex-wrap gap-2">
                             <Button size="xs" variant="outline" onClick={() => {
                               setEditingJobId(j.id);
-                              setJob({ title: j.title, location: j.location, skill_category: j.skill_category, experience: j.experience ?? "", salary: j.salary ?? "", shift: j.shift ?? "", openings: j.openings, description: j.description ?? "", description_kn: j.description_kn ?? "", closing_date: j.closing_date ?? "", employer_name: j.employer_name ?? "" });
+                              setJob({ ...j, title: j.title, location: j.location, skill_category: j.skill_category, experience: j.experience ?? "", salary: j.salary ?? "", shift: j.shift ?? "", openings: j.openings, description: j.description ?? "", description_kn: j.description_kn ?? "", closing_date: j.closing_date ?? "", employer_name: j.employer_name ?? "" });
                             }} data-testid={`admin-job-edit-${j.id}`}>Edit</Button>
                             <Link to={`/jobs/${j.id}`} target="_blank" className="inline-flex items-center rounded-md border border-slate-200 px-2.5 text-xs font-medium">View</Link>
                             <Button
@@ -994,7 +1003,7 @@ function Dashboard({
           </TabsContent>
 
           <TabsContent value="email" className="mt-6">
-            <EmailSettings pin={pin} />
+            {account.data?.role === "owner" ? <EmailSettings pin={pin} /> : <p className="rounded-xl border bg-white p-6">Email settings are managed by the owner.</p>}
           </TabsContent>
 
           <TabsContent value="invoices" className="mt-0">

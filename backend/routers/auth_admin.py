@@ -11,18 +11,19 @@ router = APIRouter(prefix="/admin")
 
 class LoginRequest(BaseModel):
     pin: str
+    username: str | None = None
 
 
 @router.post("/login", response_model=Ok)
 async def login(payload: LoginRequest, request: Request, response: Response) -> Ok:
-    await login_with_pin(payload.pin, request, response)
+    await login_with_pin(payload.pin, request, response, payload.username)
     response.headers["Cache-Control"] = "no-store"
     return Ok(ok=True)
 
 
-@router.get("/me", response_model=Ok, dependencies=[Depends(require_admin)])
-async def me() -> Ok:
-    return Ok(ok=True)
+@router.get("/me", dependencies=[Depends(require_admin)])
+async def me(request: Request):
+    return {"ok": True, **request.state.admin}
 
 
 @router.post("/logout", response_model=Ok)

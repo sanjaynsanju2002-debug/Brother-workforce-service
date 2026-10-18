@@ -1,6 +1,7 @@
 """Public API: worker registrations, company manpower requests, job listings."""
 
 import io
+import json
 import hashlib
 import hmac
 import logging
@@ -261,12 +262,32 @@ async def download_resume(worker_id: str):
     return FileResponse(stored, filename=doc["resume_filename"])
 
 
+class CompanySubmission(CompanyRequestCreate):
+    request_id: UUID | None = None
+
+
 @router.post("/company-requests", response_model=CompanyRequest)
 async def create_company_request(
-    payload: CompanyRequestCreate, background: BackgroundTasks
+    payload: CompanySubmission, background: BackgroundTasks
 ) -> CompanyRequest:
-    req = CompanyRequest(**company_input(payload.model_dump()))
-    await db.company_requests.insert_one(req.model_dump())
+    data = company_input(payload.model_dump(exclude={"request_id"}))
+    fingerprint = hashlib.sha256(json.dumps(data, sort_keys=True).encode()).hexdigest()
+    request_id = str(payload.request_id) if payload.request_id else None
+    if request_id:
+        existing = await db.company_requests.find_one({"id": request_id})
+        if existing:
+            if existing.get("submission_hash") != fingerprint:
+                raise HTTPException(409, "This request was already saved. Use Submit another request for a new requirement.")
+            return CompanyRequest(**existing)
+    req = CompanyRequest(**data, **({"id": request_id} if request_id else {}))
+    req.reference = "BWS-ENQ-" + req.id.replace("-", "").upper()[:12]
+    try:
+        await db.company_requests.insert_one({"_id": req.id, **req.model_dump(), "submission_hash": fingerprint})
+    except DuplicateKeyError:
+        existing = await db.company_requests.find_one({"id": req.id})
+        if not existing or existing.get("submission_hash") != fingerprint:
+            raise HTTPException(409, "This request could not be saved. Please try again.")
+        return CompanyRequest(**existing)
     background.add_task(
         send_notification,
         "New Manpower Requirement",
@@ -313,3 +334,12 @@ async def record_visit(payload: VisitCreate) -> Ok:
     visit = Visit(path=payload.path)
     await db.visits.insert_one(visit.model_dump())
     return Ok(ok=True)
+
+
+@router.get("/company-brochure.pdf")
+async def download_company_brochure():
+    from lib.brochure import company_brochure
+    from fastapi.responses import Response
+    from starlette.concurrency import run_in_threadpool
+    return Response(await run_in_threadpool(company_brochure), media_type="application/pdf",
+                    headers={"Content-Disposition": 'attachment; filename="Brothers-Workforce-Solutions.pdf"', "Cache-Control": "public, max-age=3600"})

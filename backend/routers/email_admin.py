@@ -23,9 +23,9 @@ from models.bws import (
     TestEmail,
     TestEmailResult,
 )
-from lib.auth import require_admin
+from lib.auth import require_owner
 
-router = APIRouter(prefix="/email", dependencies=[Depends(require_admin)])
+router = APIRouter(prefix="/email", dependencies=[Depends(require_owner)])
 logger = logging.getLogger(__name__)
 
 SHARED_SENDERS = {"onboarding@resend.dev", "delivered@resend.dev"}

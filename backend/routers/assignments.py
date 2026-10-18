@@ -7,10 +7,12 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator
+from pymongo.errors import DuplicateKeyError
 
 from lib.auth import require_admin
 from lib.db import db
 from lib.invoices import Money
+from lib.workforce import check_employee_id, sync_worker_status
 from models.bws import Worker
 
 router = APIRouter(prefix="/admin", dependencies=[Depends(require_admin)])
@@ -52,16 +54,17 @@ class Assignment(AssignmentCreate):
 
 @router.get("/assignments", response_model=list[Assignment])
 async def list_assignments() -> list[Assignment]:
-    docs = await db.assignments.find({}, {"_id": 0}).sort("created_at", -1).to_list(2000)
+    docs = await db.assignments.find({"company_archived": {"$ne": True}}, {"_id": 0}).sort("created_at", -1).to_list(2000)
     return [Assignment(**doc) for doc in docs]
 
 
 @router.post("/assignments", response_model=Assignment)
 async def create_assignment(payload: AssignmentCreate) -> Assignment:
     client = await db.clients.find_one({"id": payload.client_id})
-    if not client:
+    if not client or client.get("archived"):
         raise HTTPException(status_code=404, detail="Company not found. Add it in Clients first.")
 
+    await check_employee_id(db, payload.client_id, payload.employee_id)
     data = payload.model_dump()
     data["full_name"] = data["full_name"].strip()
     if not data["full_name"]:
@@ -69,8 +72,8 @@ async def create_assignment(payload: AssignmentCreate) -> Assignment:
     worker = None
     if payload.worker_id:
         worker = await db.workers.find_one({"id": payload.worker_id})
-        if not worker:
-            raise HTTPException(status_code=404, detail="Worker application not found")
+        if not worker or worker.get("status") == "Archived":
+            raise HTTPException(status_code=404, detail="Worker profile not found or archived")
     else:
         # Match both name and phone: relatives can share a phone, and names alone
         # are not a reliable identity when an employee has no mobile number.
@@ -116,17 +119,22 @@ async def create_assignment(payload: AssignmentCreate) -> Assignment:
         created_at=datetime.now(timezone.utc),
     )
     record = assignment.model_dump()
+    if payload.employee_id:
+        record["employee_id_key"] = payload.employee_id.casefold()
     if assignment.salary is not None:
         record["salary"] = str(assignment.salary)
     if new_talent:
         await db.workers.insert_one(new_talent.model_dump())
     try:
         await db.assignments.insert_one(record)
-    except Exception:
+    except Exception as exc:
         # A failed workforce save must not leave a second, unlinked profile.
         if new_talent:
             await db.workers.delete_one({"id": new_talent.id})
+        if isinstance(exc, DuplicateKeyError):
+            raise HTTPException(409, "That employee ID is already used in this company") from exc
         raise
+    await sync_worker_status(db, assignment.worker_id)
     return assignment
 
 
@@ -135,18 +143,39 @@ async def update_assignment(assignment_id: str, payload: AssignmentUpdate) -> As
     changes = payload.model_dump(mode="json", exclude_unset=True)
     if not changes or any(key in changes and changes[key] is None for key in ("status", "salary_basis")):
         raise HTTPException(status_code=422, detail="Enter employee details, salary or a valid assignment status")
-    doc = await db.assignments.find_one_and_update(
-        {"id": assignment_id}, {"$set": changes}, return_document=True,
-    )
+    before = await db.assignments.find_one({"id": assignment_id})
+    if not before:
+        raise HTTPException(404, "Assignment not found")
+    if before.get("company_archived"):
+        raise HTTPException(409, "Restore the company before changing its assignments")
+    if "employee_id" in changes:
+        await check_employee_id(db, before["client_id"], changes["employee_id"], assignment_id)
+    if changes.get("status") == "Active":
+        other = await db.assignments.find_one({"client_id": before["client_id"], "worker_id": before.get("worker_id"), "status": "Active"})
+        if other and other["id"] != assignment_id:
+            raise HTTPException(409, "This worker is already active at that company")
+    update = {"$set": changes}
+    if "employee_id" in changes:
+        if changes["employee_id"]:
+            changes["employee_id_key"] = changes["employee_id"].casefold()
+        else:
+            update["$unset"] = {"employee_id_key": ""}
+    try:
+        doc = await db.assignments.find_one_and_update({"id": assignment_id}, update, return_document=True)
+    except DuplicateKeyError as exc:
+        raise HTTPException(409, "That employee ID is already used in this company") from exc
     if not doc:
         raise HTTPException(status_code=404, detail="Assignment not found")
     doc.pop("_id", None)
+    await sync_worker_status(db, doc.get("worker_id"))
     return Assignment(**doc)
 
 
 @router.delete("/assignments/{assignment_id}")
 async def delete_assignment(assignment_id: str) -> dict[str, bool]:
+    before = await db.assignments.find_one({"id": assignment_id})
     result = await db.assignments.delete_one({"id": assignment_id})
     if not result.deleted_count:
         raise HTTPException(status_code=404, detail="Assignment not found")
+    await sync_worker_status(db, (before or {}).get("worker_id"))
     return {"ok": True}

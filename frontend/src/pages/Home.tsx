@@ -1,6 +1,7 @@
+import RecruitmentFAQ from "@/components/site/RecruitmentFAQ";
+import JobListings from "@/components/site/JobListings";
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
 import {
   Activity,
   Award,
@@ -241,7 +242,7 @@ export default function Home() {
           </div>
 
           <div data-reveal>
-            <p className="bws-overline">Our Brochure Vision</p>
+            <p className="bws-overline">Workforce services</p>
             <h2 className="mt-3 text-3xl font-bold tracking-tight text-[#0F2444] lg:text-5xl">
               People. Productivity. Partnership. <span className="text-[#C2410C]">Progress.</span>
             </h2>
@@ -249,6 +250,7 @@ export default function Home() {
               Reliable workforce support designed around people, process and performance — helping factories,
               warehouses and industrial teams build stronger operations.
             </p>
+            <a href="/api/company-brochure.pdf" className="mt-5 inline-flex min-h-11 items-center rounded-lg border border-[#C2410C] px-5 py-3 font-semibold text-[#C2410C] hover:bg-orange-50">Download company brochure (PDF)</a>
             <div className="mt-7 grid gap-3 sm:grid-cols-3">
               {[
                 ["Reliable", "Dependable workforce support"],
@@ -398,7 +400,7 @@ export default function Home() {
             </div>
             <div>
               <p className="text-sm font-semibold text-[#0F2444]">
-                {jobs.length > 0 ? candidateLang === "kn" ? `${jobs.length} ${copy.activeOpenings}` : `${jobs.length} active opening${jobs.length === 1 ? "" : "s"}` : copy.registerFuture}
+                {jobs.length > 0 ? candidateLang === "kn" ? `${jobs.length} ಉದ್ಯೋಗ ಪ್ರಕಾರಗಳು · ${jobs.reduce((n, j) => n + j.openings, 0)} ಖಾಲಿ ಹುದ್ದೆಗಳು` : `${jobs.length} job roles · ${jobs.reduce((n, j) => n + j.openings, 0)} vacancies` : copy.registerFuture}
               </p>
               <p className="text-xs text-slate-500">{candidateLang === "kn" ? "ಒಮ್ಮೆ ನೋಂದಾಯಿಸಿ. ನಮ್ಮ ನೇಮಕಾತಿ ತಂಡ ನಿಮ್ಮ ವಿವರಗಳನ್ನು ಪರಿಶೀಲಿಸುತ್ತದೆ." : "Apply once and stay visible to our recruitment team."}</p>
             </div>
@@ -441,39 +443,7 @@ export default function Home() {
               </Button>
             </div>
           ) : (
-            <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-              {jobs.map((j) => (
-                <Card
-                  key={j.id}
-                  className="bws-card-3d border-slate-200 bg-white"
-                  data-testid={`job-card-${j.id}`}
-                >
-                  <CardContent className="p-6">
-                    <Badge className="mb-3 bg-[#0F2444] text-white">{j.skill_category}</Badge>
-                    <h3 className="text-lg font-semibold text-[#0F2444]" data-testid={`job-title-${j.id}`}>
-                      {j.title}
-                    </h3>
-                    <p className="mt-1 flex items-center gap-1.5 text-sm text-slate-500">
-                      <MapPin className="h-3.5 w-3.5" /> {j.location}
-                    </p>
-                    <dl className="mt-4 space-y-1.5 text-sm text-slate-600">
-                      {j.experience && <Row k={copy.experience} v={j.experience} />}
-                      <Row k={copy.salary} v={j.salary ? (/^\d+$/.test(j.salary.trim()) ? `₹${Number(j.salary).toLocaleString("en-IN")}` : j.salary) : copy.discuss} />
-                      {j.shift && <Row k={copy.shift} v={j.shift} />}
-                      <Row k={copy.openings} v={String(j.openings)} />
-                      <Row k={copy.posted} v={new Date(j.created_at).toLocaleDateString(candidateLang === "kn" ? "kn-IN" : "en-IN", { day: "numeric", month: "short", year: "numeric" })} />
-                      {j.closing_date && <Row k={copy.closingDate} v={new Date(`${j.closing_date}T12:00:00`).toLocaleDateString(candidateLang === "kn" ? "kn-IN" : "en-IN", { day: "numeric", month: "short", year: "numeric" })} />}
-                    </dl>
-                    {(candidateLang === "kn" ? j.description_kn || j.description : j.description) && <p className="mt-3 line-clamp-3 whitespace-pre-line text-sm text-slate-500">{candidateLang === "kn" ? j.description_kn || j.description : j.description}</p>}
-                    <Link
-                      to={`/jobs/${j.id}`}
-                      className="mt-5 inline-flex w-full items-center justify-center rounded-md bg-[#C2410C] px-4 py-2 font-semibold text-white hover:bg-[#9A3412]"
-                      data-testid={`job-apply-${j.id}`}
-                    >{copy.viewApply}</Link>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
+            <JobListings jobs={jobs} language={candidateLang} />
           )}
         </div>
       </Section>
@@ -671,6 +641,8 @@ export default function Home() {
         </div>
       </Section>
 
+      <RecruitmentFAQ language={candidateLang} />
+
       {/* CONTACT */}
       <Section id="contact" bg="bg-[#F1F5F9]">
         <div className="grid gap-10 lg:grid-cols-2">
@@ -756,19 +728,7 @@ function Heading({ overline, title, subtitle }: { overline: string; title: strin
   );
 }
 
-function Row({ k, v }: { k: string; v: string }) {
-  return (
-    <div className="flex justify-between border-b border-slate-100 pb-1">
-      <dt className="text-slate-500">{k}</dt>
-      <dd className="font-medium text-[#0F2444]">{v}</dd>
-    </div>
-  );
-}
-
-const CLIENT_LOGO_FALLBACKS: Record<string, string> = {
-  "SSB Technologies": "/client-logos/ssbt.png",
-  "Dhatu Organics & Naturals": "/client-logos/dhatu.jpg",
-};
+const CLIENT_LOGO_FALLBACKS: Record<string, string> = { "SSB Technologies": "/client-logos/ssbt.png", "Dhatu Organics & Naturals": "/client-logos/dhatu.jpg" };
 
 function ClientLogo({ client }: { client: Client }) {
   const [step, setStep] = useState(0);

@@ -46,7 +46,7 @@ async def find_payroll(run_id: str) -> Payroll:
 
 @router.get("/companies")
 async def payroll_companies():
-    companies = await db.clients.find({}, {"_id": 0, "id": 1, "name": 1}).sort("name", 1).to_list(2000)
+    companies = await db.clients.find({"archived": {"$ne": True}}, {"_id": 0, "id": 1, "name": 1}).sort("name", 1).to_list(2000)
     by_id = {company["id"]: {"id": company["id"], "name": company["name"], "saved_only": False} for company in companies}
     # Retain access to saved registers after a company is removed from the roster.
     history = await db.payroll.find({}, {"company_id": 1, "company_name": 1}).sort("updated_at", -1).to_list(None)
@@ -59,10 +59,10 @@ async def payroll_companies():
 async def payroll_draft(company_id: str = Query(min_length=1, max_length=80), month: str = Query(pattern=MONTH_PATTERN)):
     doc = await db.payroll.find_one({"_id": register_id(company_id, month)})
     saved = record_model(doc) if doc else None
-    company = await db.clients.find_one({"id": company_id})
+    company = await db.clients.find_one({"id": company_id, "archived": {"$ne": True}})
     if not company and not saved:
         raise HTTPException(404, "Company not found. Add it in Company Workforce first.")
-    employees = await db.assignments.find({"client_id": company_id}, {"_id": 0}).sort("full_name", 1).to_list(MAX_EMPLOYEES + 1)
+    employees = await db.assignments.find({"client_id": company_id, "company_archived": {"$ne": True}}, {"_id": 0}).sort("full_name", 1).to_list(MAX_EMPLOYEES + 1)
     if len(employees) > MAX_EMPLOYEES:
         raise HTTPException(422, f"Payroll supports up to {MAX_EMPLOYEES} employees per company and month")
     people = {row["id"]: employee_model(row) for row in employees}
@@ -111,11 +111,11 @@ async def save_payroll(payload: PayrollSave):
     # a replacement register, including a replacement created during this save.
     if (old and payload.created_at != old.created_at) or (not old and payload.created_at is not None):
         raise HTTPException(409, CONFLICT)
-    company = await db.clients.find_one({"id": payload.company_id})
+    company = await db.clients.find_one({"id": payload.company_id, "archived": {"$ne": True}})
     if not company and not old:
         raise HTTPException(404, "Company not found. Add it in Company Workforce first.")
     ids = [line.assignment_id for line in payload.lines]
-    assignments = await db.assignments.find({"client_id": payload.company_id, "id": {"$in": ids}}, {"_id": 0}).to_list(MAX_EMPLOYEES)
+    assignments = await db.assignments.find({"client_id": payload.company_id, "company_archived": {"$ne": True}, "id": {"$in": ids}}, {"_id": 0}).to_list(MAX_EMPLOYEES)
     people = {row["id"]: employee_model(row) for row in assignments}
     if old:
         # Saved employee details remain a historical snapshot, even after edits

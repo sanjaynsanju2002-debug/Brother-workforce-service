@@ -1,3 +1,4 @@
+import AdminControls from "./AdminControls";
 import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { KeyRound, Loader2, ShieldCheck, TriangleAlert } from "lucide-react";
@@ -21,7 +22,8 @@ export default function Security({ pin, onPinChanged }: { pin: string; onPinChan
   const q = "";
   const key = ["admin-security", pin];
 
-  const info = useQuery({ queryKey: key, queryFn: () => apiGet<SecurityInfo>(`/admin/security${q}`) });
+  const me = useQuery({ queryKey: ["admin-me"], queryFn: () => apiGet<{ role: string; name: string }>("/admin/me") });
+  const info = useQuery({ queryKey: key, queryFn: () => apiGet<SecurityInfo>(`/admin/security${q}`), enabled: me.data?.role === "owner" });
   const [newPin, setNewPin] = useState("");
   const [confirmPin, setConfirmPin] = useState("");
 
@@ -37,6 +39,9 @@ export default function Security({ pin, onPinChanged }: { pin: string; onPinChan
   });
 
   const s = info.data;
+
+  if (me.isPending) return <p>Loading account…</p>;
+  if (me.data?.role !== "owner") return <p className="rounded-xl border bg-white p-6">Signed in as {me.data?.name} ({me.data?.role}). Security settings, staff accounts and backups are managed by the owner.</p>;
 
   return (
     <div className="grid gap-6 lg:grid-cols-2" data-testid="security-panel">
@@ -125,6 +130,7 @@ export default function Security({ pin, onPinChanged }: { pin: string; onPinChan
           </form>
         </CardContent>
       </Card>
+      <AdminControls />
     </div>
   );
 }

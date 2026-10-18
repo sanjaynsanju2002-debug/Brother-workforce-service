@@ -1,3 +1,5 @@
+import { jobText, salaryText } from "@/lib/jobContent";
+import { JobShare } from "@/components/site/JobListings";
 import { useEffect } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -79,17 +81,20 @@ export default function JobDetail() {
           <>
             <div className="rounded-2xl bg-[#0F2444] p-7 text-white sm:p-10">
               <p className="text-xs font-bold uppercase tracking-widest text-orange-300">{copy.currentOpening} · {job.data.skill_category}</p>
-              <h1 className="mt-3 text-3xl font-bold sm:text-4xl">{job.data.title}</h1>
-              <p className="mt-3 flex items-center gap-2 text-slate-200"><MapPin className="h-4 w-4" />{job.data.location}</p>
-              <a href="#apply" className="mt-6 inline-flex rounded-md bg-[#C2410C] px-6 py-3 font-semibold text-white hover:bg-[#9A3412]">{copy.applyForJob}</a>
+              <h1 className="mt-3 text-3xl font-bold sm:text-4xl">{jobText(job.data.title, language, job.data.title_kn)}</h1>
+              <p className="mt-3 flex items-center gap-2 text-slate-200"><MapPin className="h-4 w-4" />{jobText(job.data.location, language, job.data.location_kn)}</p>
+              <a href="#apply" className="mt-6 inline-flex rounded-md bg-[#C2410C] px-6 py-3 font-semibold text-white hover:bg-[#9A3412]">{copy.applyForJob}</a><div className="mt-3 inline-block rounded-lg bg-white p-1"><JobShare job={job.data} language={language} /></div>
             </div>
             <div className="mt-7 grid gap-7 lg:grid-cols-[1fr_1.25fr]">
               <section className="self-start rounded-xl border border-slate-200 bg-white p-6 sm:p-8">
                 <h2 className="flex items-center gap-2 text-xl font-semibold"><Briefcase className="h-5 w-5 text-[#C2410C]" />{copy.jobDetails}</h2>
                 <dl className="mt-5 space-y-4 text-sm">
-                  <Detail label={copy.salary} value={job.data.salary || copy.discuss} />
-                  <Detail label={copy.experience} value={job.data.experience || copy.discuss} />
-                  <Detail label={copy.shift} value={job.data.shift || copy.discuss} />
+                  <Detail label={copy.salary} value={salaryText(job.data, language)} />
+                  <Detail label={copy.experience} value={jobText(job.data.experience, language, job.data.experience_kn) || copy.discuss} />
+                  <Detail label={copy.shift} value={jobText(job.data.shift, language, job.data.shift_kn) || copy.discuss} />
+                  <Detail label={language === "kn" ? "ವಿದ್ಯಾರ್ಹತೆ" : "Qualification"} value={jobText(job.data.qualification, language, job.data.qualification_kn) || copy.discuss} />
+                  <Detail label={language === "kn" ? "ಕೆಲಸದ ಸಮಯ" : "Working hours / days"} value={jobText(job.data.working_hours, language, job.data.working_hours_kn) || copy.discuss} />
+                  <Detail label={language === "kn" ? "ಸೌಲಭ್ಯಗಳು / ಕಡಿತಗಳು" : "Benefits / deductions"} value={jobText(job.data.benefits, language, job.data.benefits_kn) || copy.discuss} />
                   <Detail label={copy.openings} value={String(job.data.openings)} />
                   <Detail label={copy.employer} value={job.data.employer_name || copy.confidentialEmployer} />
                   <Detail label={copy.posted} value={new Date(job.data.created_at).toLocaleDateString(language === "kn" ? "kn-IN" : "en-IN", { day: "numeric", month: "long", year: "numeric" })} />
@@ -101,7 +106,7 @@ export default function JobDetail() {
                 <p className="mt-6 flex items-center gap-2 text-xs text-slate-500"><CalendarDays className="h-4 w-4" />{copy.reviewed}</p>
               </section>
               <section id="apply" className="scroll-mt-24 rounded-xl border border-slate-200 bg-white p-6 sm:p-8">
-                <h2 className="text-xl font-semibold">{copy.applyFor} {job.data.title}</h2>
+                <h2 className="text-xl font-semibold">{copy.applyFor} {jobText(job.data.title, language, job.data.title_kn)}</h2>
                 <p className="mt-2 mb-6 text-sm text-slate-600">{copy.linkedApplication}</p>
                 <WorkerForm job={job.data} language={language} />
               </section>

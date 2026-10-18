@@ -47,12 +47,25 @@ export interface CompanyRequestCreate {
 }
 
 export interface CompanyRequest extends CompanyRequestCreate {
+  reference?: string | null;
   id: string;
   status: string;
   created_at: string;
 }
 
 export interface JobCreate {
+  title_kn?: string | null;
+  location_kn?: string | null;
+  experience_kn?: string | null;
+  shift_kn?: string | null;
+  qualification?: string | null;
+  qualification_kn?: string | null;
+  working_hours?: string | null;
+  working_hours_kn?: string | null;
+  benefits?: string | null;
+  benefits_kn?: string | null;
+  salary_basis?: string | null;
+  schema_ready?: boolean;
   title: string;
   location: string;
   skill_category: string;
@@ -123,6 +136,8 @@ export interface TestEmailResult {
 
 export interface ClientCreate {
   name: string;
+  billing_address?: string | null;
+  gstin?: string | null;
   industry?: string | null;
   location?: string | null;
   headcount?: string | null;
@@ -132,6 +147,7 @@ export interface ClientCreate {
 }
 
 export interface Client extends ClientCreate {
+  archived: boolean;
   id: string;
   logo_filename?: string | null;
   sort_order: number;

@@ -18,10 +18,13 @@ DOMAIN = "https://brothersworkforcesolutions.in"
 def _job_schema(job: dict, url: str) -> str:
     """Only advertise complete, on-page job descriptions as JobPosting data."""
     description = (job.get("description") or "").strip()
-    normalized = description.lower()
     employer = (job.get("employer_name") or "").strip()
-    if not employer or len(description) < 100 or not all(term in normalized for term in ("responsibilit", "qualification", "working hours")):
+    if not job.get("schema_ready") or not employer or len(description) < 100 or not all((job.get(key) or "").strip() for key in ("qualification", "working_hours", "location", "title")):
         return ""
+    description += "\nQualification: " + job["qualification"] + "\nWorking hours: " + job["working_hours"]
+    if job.get("benefits"):
+        description += "\nBenefits: " + job["benefits"]
+    # https://developers.google.com/search/docs/appearance/structured-data/job-posting
     paragraphs = "".join(f"<p>{escape(line.strip())}</p>" for line in description.splitlines() if line.strip())
     posting = {
         "@context": "https://schema.org",
