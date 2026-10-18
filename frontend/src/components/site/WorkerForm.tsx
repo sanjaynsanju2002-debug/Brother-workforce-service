@@ -19,6 +19,7 @@ import { AVAILABILITY, BRAND, SKILL_CATEGORIES } from "@/lib/brand";
 import { candidateCopy, type CandidateLanguage } from "@/lib/candidateLanguage";
 import type { Job, Worker, WorkerCreate } from "@/types";
 import { Link } from "react-router-dom";
+import { QUALIFICATION_SUGGESTIONS } from "@/lib/talentSearch";
 import { MAX_RESUME_SIZE, RESUME_TYPES } from "@/lib/uploads";
 
 type Receipt = Worker & { upload_token: string; application_reference: string };
@@ -53,7 +54,7 @@ export default function WorkerForm({ job, language = "en" }: { job?: Job; langua
   const [resumeFailed, setResumeFailed] = useState(false);
   const requestId = useRef(crypto.randomUUID());
 
-  const dirty = !done && !!(form.full_name || form.mobile || form.current_location || form.skills || resume);
+  const dirty = !done && !!(form.full_name || form.mobile || form.current_location || form.education || form.skills || resume);
   useEffect(() => {
     if (!dirty && !resumeFailed) return;
     const warn = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
@@ -210,6 +211,10 @@ export default function WorkerForm({ job, language = "en" }: { job?: Job; langua
           </SelectContent>
         </Select>
       </Field>
+      <Field id="worker-education" label={copy.education} full>
+        <Input id="worker-education" list="worker-qualification-options" maxLength={500} value={form.education ?? ""} onChange={(e) => set("education", e.target.value)} placeholder={language === "kn" ? "ಉದಾ. SSLC, PUC, ITI - ಫಿಟ್ಟರ್, ಡಿಪ್ಲೊಮಾ" : "e.g. SSLC, PUC, ITI - Fitter, Diploma, B.Com."} data-testid="worker-input-education" />
+        <datalist id="worker-qualification-options">{QUALIFICATION_SUGGESTIONS.map((option) => <option key={option} value={option} />)}</datalist>
+      </Field>
       <Field id="worker-skills" label={copy.skills} full>
         <Input
           id="worker-skills"
@@ -259,9 +264,6 @@ export default function WorkerForm({ job, language = "en" }: { job?: Job; langua
               <SelectTrigger id="worker-gender" data-testid="worker-select-gender"><SelectValue placeholder={copy.select} /></SelectTrigger>
               <SelectContent>{["Male", "Female", "Other"].map((g) => <SelectItem key={g} value={g}>{language === "kn" ? GENDER_KN[g] : g}</SelectItem>)}</SelectContent>
             </Select>
-          </Field>
-          <Field id="worker-education" label={copy.education}>
-            <Input id="worker-education" value={form.education ?? ""} onChange={(e) => set("education", e.target.value)} data-testid="worker-input-education" />
           </Field>
           <Field id="worker-experience" label={copy.experience}>
             <Input id="worker-experience" placeholder={language === "kn" ? "ಉದಾ. 3 ವರ್ಷ" : "e.g. 3 years"} value={form.experience ?? ""} onChange={(e) => set("experience", e.target.value)} data-testid="worker-input-experience" />

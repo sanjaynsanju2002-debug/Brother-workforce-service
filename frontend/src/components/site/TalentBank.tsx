@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/table";
 import { ApiError, apiDelete, apiGet, apiPatch, apiPost } from "@/lib/api";
 import { AVAILABILITY, SKILL_CATEGORIES } from "@/lib/brand";
+import { filterTalents, QUALIFICATION_FILTERS, QUALIFICATION_SUGGESTIONS, type QualificationFilter } from "@/lib/talentSearch";
 import { waLink, workerMessage } from "@/lib/wa";
 import type { Ok, Worker, WorkerCreate } from "@/types";
 
@@ -75,6 +76,9 @@ export default function TalentBank({ pin }: { pin: string }) {
   const [importZip, setImportZip] = useState<File | null>(null);
   const [lastImport, setLastImport] = useState<TalentImportResult | null>(null);
   const [regionQuery, setRegionQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [qualificationFilter, setQualificationFilter] = useState<QualificationFilter>("");
+  const [editingQualification, setEditingQualification] = useState<{ id: string; name: string; education: string } | null>(null);
   const importInputRef = useRef<HTMLInputElement>(null);
 
   const talents = useQuery({
@@ -82,12 +86,16 @@ export default function TalentBank({ pin }: { pin: string }) {
     queryFn: () => apiGet<Worker[]>(`/admin/talents${q}`),
   });
 
-  const normalizedRegion = regionQuery.trim().toLocaleLowerCase();
-  const filteredTalents = (talents.data ?? []).filter((talent) =>
-    `${talent.current_location} ${talent.preferred_location ?? ""}`
-      .toLocaleLowerCase()
-      .includes(normalizedRegion),
-  );
+  const filteredTalents = filterTalents(talents.data ?? [], { search: searchQuery, region: regionQuery, qualification: qualificationFilter });
+  const saveQualification = useMutation({
+    mutationFn: ({ id, education }: { id: string; education: string }) => apiPatch<Worker>(`/admin/talents/${id}/qualification`, { education }),
+    onSuccess: () => {
+      setEditingQualification(null);
+      for (const key of ["admin-talents", "admin-workers", "shortlist-members", "job-matches"]) void qc.invalidateQueries({ queryKey: [key] });
+      toast.success("Candidate qualification saved");
+    },
+    onError: (e) => toast.error(talentError(e)),
+  });
 
   const createTalent = useMutation({
     mutationFn: async () => {
@@ -282,12 +290,18 @@ export default function TalentBank({ pin }: { pin: string }) {
               />
             </div>
             <div>
-              <Label className="mb-2 block text-sm">Education</Label>
+              <Label htmlFor="talent-qualification" className="mb-2 block text-sm">Qualification</Label>
               <Input
+                id="talent-qualification"
+                list="talent-qualification-options"
+                maxLength={500}
                 value={form.education ?? ""}
                 onChange={(e) => setForm({ ...form, education: e.target.value })}
-                placeholder="ITI, Diploma, SSLC..."
+                placeholder="e.g. SSLC, PUC, ITI - Fitter, B.Com."
+                data-testid="talent-qualification-input"
               />
+              <datalist id="talent-qualification-options">{QUALIFICATION_SUGGESTIONS.map((option) => <option key={option} value={option} />)}</datalist>
+              <p className="mt-1 text-xs text-slate-500">Enter the candidate's qualification and trade / specialisation, if known.</p>
             </div>
             <div>
               <Label className="mb-2 block text-sm">Expected salary</Label>
@@ -427,31 +441,27 @@ export default function TalentBank({ pin }: { pin: string }) {
           href={`/api/admin/export/talents.csv${q}`}
           className="inline-flex items-center justify-center gap-2 rounded-md bg-[#0F2444] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0A172C]"
         >
-          <Download className="h-4 w-4" /> Download Spreadsheet
+          <Download className="h-4 w-4" /> Download all candidates
         </a>
       </div>
 
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
-        <Label htmlFor="talent-region" className="text-sm font-medium text-[#0F2444]">Filter by region</Label>
-        <Input
-          id="talent-region"
-          className="w-full sm:max-w-xs"
-          placeholder="City, district or state"
-          value={regionQuery}
-          onChange={(e) => setRegionQuery(e.target.value)}
-        />
-        <span className="text-sm text-slate-500">
-          Showing {filteredTalents.length} of {talents.data?.length ?? 0} candidates
-        </span>
-      </div>
+      <section className="rounded-xl border border-slate-200 bg-white p-4 sm:p-5" aria-label="Source candidates">
+        <div className="grid gap-4 md:grid-cols-3">
+          <div><Label htmlFor="talent-search" className="mb-2 block text-sm font-medium text-[#0F2444]">Search candidates</Label><Input id="talent-search" placeholder="Name, phone, qualification or skills" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} /></div>
+          <div><Label htmlFor="talent-qualification-filter" className="mb-2 block text-sm font-medium text-[#0F2444]">Filter by qualification</Label><select id="talent-qualification-filter" className="h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm" value={qualificationFilter} onChange={(e) => setQualificationFilter(e.target.value as QualificationFilter)} data-testid="talent-qualification-filter"><option value="">All qualifications</option>{QUALIFICATION_FILTERS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></div>
+          <div><Label htmlFor="talent-region" className="mb-2 block text-sm font-medium text-[#0F2444]">Filter by region</Label><Input id="talent-region" placeholder="City, district or state" value={regionQuery} onChange={(e) => setRegionQuery(e.target.value)} /></div>
+        </div>
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-3"><span className="text-sm text-slate-500" role="status">Showing {filteredTalents.length} of {talents.data?.length ?? 0} candidates</span>{(searchQuery || regionQuery || qualificationFilter) && <Button type="button" size="sm" variant="outline" onClick={() => { setSearchQuery(""); setRegionQuery(""); setQualificationFilter(""); }}>Clear filters</Button>}</div>
+      </section>
 
       <Card className="border-slate-200 bg-white">
         <CardContent className="p-0">
-          <Table className="min-w-[900px]">
+          <Table className="min-w-[1000px]" data-testid="talent-bank-table">
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>
                 <TableHead>Contact</TableHead>
+                <TableHead>Qualification</TableHead>
                 <TableHead>Skills</TableHead>
                 <TableHead>Location</TableHead>
                 <TableHead>Resume</TableHead>
@@ -462,25 +472,26 @@ export default function TalentBank({ pin }: { pin: string }) {
             <TableBody>
               {talents.isLoading && (
                 <TableRow>
-                  <TableCell colSpan={7} className="py-10 text-center text-slate-500">
+                  <TableCell colSpan={8} className="py-10 text-center text-slate-500">
                     Loading talents...
                   </TableCell>
                 </TableRow>
               )}
-              {!talents.isLoading && (talents.data ?? []).length === 0 && (
+              {!talents.isLoading && !talents.isError && (talents.data ?? []).length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={7} className="py-10 text-center text-slate-500">
+                  <TableCell colSpan={8} className="py-10 text-center text-slate-500">
                     No talents added yet.
                   </TableCell>
                 </TableRow>
               )}
-              {!talents.isLoading && (talents.data ?? []).length > 0 && filteredTalents.length === 0 && (
+              {!talents.isLoading && !talents.isError && (talents.data ?? []).length > 0 && filteredTalents.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={7} className="py-10 text-center text-slate-500">
-                    No candidates match this region.
+                  <TableCell colSpan={8} className="py-10 text-center text-slate-500">
+                    No candidates match these filters. Try another qualification, search or region.
                   </TableCell>
                 </TableRow>
               )}
+              {talents.isError && <TableRow><TableCell colSpan={8} className="py-10 text-center text-red-700">Could not load candidates. <Button type="button" variant="outline" className="ml-3" onClick={() => void talents.refetch()}>Retry</Button></TableCell></TableRow>}
               {filteredTalents.map((talent) => (
                 <TableRow key={talent.id}>
                   <TableCell className="font-medium text-[#0F2444]">
@@ -497,6 +508,13 @@ export default function TalentBank({ pin }: { pin: string }) {
                     {talent.whatsapp && talent.whatsapp !== talent.mobile && (
                       <span className="block text-xs text-slate-500">WA: {talent.whatsapp}</span>
                     )}
+                  </TableCell>
+                  <TableCell className="max-w-[280px] align-top">
+                    {editingQualification?.id === talent.id ? <form className="space-y-2" onSubmit={(e) => { e.preventDefault(); saveQualification.mutate(editingQualification); }}>
+                      <Label htmlFor={`talent-qualification-${talent.id}`} className="sr-only">Qualification for {talent.full_name}</Label>
+                      <Input id={`talent-qualification-${talent.id}`} list="talent-qualification-options" maxLength={500} className="min-w-48" value={editingQualification.education} onChange={(e) => setEditingQualification({ ...editingQualification, education: e.target.value })} disabled={saveQualification.isPending} autoFocus />
+                      <div className="flex gap-2"><Button type="submit" size="sm" disabled={saveQualification.isPending}>{saveQualification.isPending ? "Saving…" : "Save"}</Button><Button type="button" size="sm" variant="outline" disabled={saveQualification.isPending} onClick={() => setEditingQualification(null)}>Cancel</Button></div>
+                    </form> : <><p className="whitespace-pre-line break-words text-sm" data-testid={`talent-qualification-${talent.id}`}>{talent.education?.trim() || <span className="text-slate-400">Not provided</span>}</p><Button type="button" size="sm" variant="outline" className="mt-2" aria-label={`Edit qualification for ${talent.full_name}`} disabled={saveQualification.isPending} onClick={() => setEditingQualification({ id: talent.id, name: talent.full_name, education: talent.education || "" })}>Edit qualification</Button></>}
                   </TableCell>
                   <TableCell>
                     {talent.skills || talent.skill_category}

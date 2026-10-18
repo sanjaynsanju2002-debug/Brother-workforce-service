@@ -45,6 +45,16 @@ class Worker(WorkerCreate):
     created_at: datetime = Field(default_factory=_now)
 
 
+class QualificationUpdate(BaseModel):
+    model_config = {"extra": "forbid"}
+    education: Optional[str] = Field(..., max_length=500)
+
+    @field_validator("education")
+    @classmethod
+    def clean_qualification(cls, value: Optional[str]) -> Optional[str]:
+        return (value.strip() or None) if value is not None else None
+
+
 # ---------- Company manpower requests ----------
 class CompanyRequestCreate(BaseModel):
     company_name: str

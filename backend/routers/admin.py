@@ -29,6 +29,7 @@ from models.bws import (
     EnquiryAging,
     Ok,
     PinChange,
+    QualificationUpdate,
     SecurityInfo,
     StatusUpdate,
     Worker,
@@ -238,6 +239,18 @@ async def create_talent(payload: WorkerCreate) -> Worker:
     return talent
 
 
+@router.patch("/talents/{worker_id}/qualification", response_model=Worker)
+async def update_talent_qualification(worker_id: str, payload: QualificationUpdate) -> Worker:
+    # Education is the existing shared field for applications and Talent Bank.
+    # Updating it must not change deployment status, identity or other details.
+    doc = await db.workers.find_one_and_update(
+        {"id": worker_id}, {"$set": {"education": payload.education}}, return_document=True,
+    )
+    if not doc:
+        raise HTTPException(404, "Candidate not found")
+    return Worker(**doc)
+
+
 @router.post("/talents/import")
 async def import_talents(file: UploadFile = File(...)) -> dict:
 
@@ -339,7 +352,7 @@ async def import_talents(file: UploadFile = File(...)) -> dict:
                 age=value(row, "age") or None,
                 gender=value(row, "gender") or None,
                 current_location=location,
-                education=value(row, "education") or None,
+                education=value(row, "qualification") or value(row, "education") or None,
                 experience=value(row, "experience") or None,
                 skill_category=value(row, "skill_category") or "General Worker",
                 skills=value(row, "skills") or None,
@@ -592,7 +605,8 @@ async def export_workers() -> StreamingResponse:
 @router.get("/export/talents.csv")
 async def export_talents() -> StreamingResponse:
     rows = await db.workers.find({}, {"_id": 0}).sort("created_at", -1).to_list(5000)
-    return _csv_response(rows, WORKER_COLUMNS, "talent-bank.csv")
+    columns = [(key, "Qualification" if key == "education" else label) for key, label in WORKER_COLUMNS]
+    return _csv_response(rows, columns, "talent-bank.csv")
 
 
 @router.get("/export/company-requests.csv")
