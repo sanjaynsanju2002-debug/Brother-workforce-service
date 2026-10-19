@@ -14,7 +14,7 @@ from lib.auth import require_admin
 from lib.companies import company_name_key, company_name_query, invoice_company
 from lib.db import db
 from lib.workforce import archive_company, rename_roster_company
-from lib.invoices import Invoice, InvoiceCompany, InvoiceCompanyInput, InvoiceInput, InvoiceModel, InvoiceNumber, InvoiceProfile, calculate_invoice
+from lib.invoices import BillingMode, Invoice, InvoiceCompany, InvoiceCompanyInput, InvoiceInput, InvoiceModel, InvoiceNumber, InvoiceProfile, calculate_invoice
 from models.clients import Client
 
 router = APIRouter(prefix="/admin/invoices", dependencies=[Depends(require_admin)])
@@ -181,8 +181,11 @@ async def preview_invoice(payload: InvoiceInput):
 async def list_invoices(
     page: int = Query(1, ge=1), q: str = Query("", max_length=150),
     company_id: UUID | None = None, payment_status: Literal["Pending", "Paid"] | None = None,
+    billing_mode: BillingMode | None = None,
 ):
     filters = []
+    if billing_mode:
+        filters.append({"billing_mode": {"$in": [None, "managed_services"]} if billing_mode == "managed_services" else "services_only"})
     if company_id:
         company = await find_company(company_id)
         # Include earlier invoices for the same bill-to name without altering their

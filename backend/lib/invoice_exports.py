@@ -8,7 +8,7 @@ from xml.etree import ElementTree as ET
 from xml.sax.saxutils import escape
 from zipfile import ZIP_DEFLATED, ZipFile
 
-from lib.invoices import Invoice, LINE_LABELS
+from lib.invoices import BILLING_LABELS, Invoice, LINE_LABELS
 
 TEMPLATE = Path(__file__).resolve().parent.parent / "assets" / "invoice-template.xlsx"
 NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
@@ -60,6 +60,8 @@ def export_xlsx(invoice: Invoice) -> bytes:
                 ET.SubElement(cell, f"{{{NS}}}v").text = str(value)
 
         supplier = invoice.supplier
+        services_only = invoice.billing_mode == "services_only"
+        write("D2", "INVOICE")
         write("F4", invoice.invoice_number)
         write("F5", (invoice.invoice_date - date(1899, 12, 30)).days)
         write("A7", f"Mysore, Karnataka  |  {supplier.phone}")
@@ -74,14 +76,32 @@ def export_xlsx(invoice: Invoice) -> bytes:
         write("A35", f"Notes: {invoice.notes}" if invoice.notes else "")
         write("D35", f"For {supplier.name}")
         totals = invoice.totals
+        if services_only:
+            write("A18", "Services only - wages for service charges")
+            write("A19", "    Manpower supply")
+            write("E17", "Wages (INR)")
+            write("F17", "Wage total (INR)")
+            for row in [*range(19, 26), 27]:
+                for column in "DEF":
+                    write(f"{column}{row}", 0)
+            for row in sheet.findall(f"{{{NS}}}sheetData/{{{NS}}}row"):
+                if int(row.get("r")) in (21, 22, 23, 24, 27):
+                    row.set("hidden", "1")
+            write("A25", "Wage subtotal (reference only)")
+            write("C25", "")
+            write("D25", "")
+            write("E25", "")
+            write("F25", totals.base_amount, "SUM(F19:F20)")
         for line in invoice.lines:
-            row = 27 if line.key == "other" else list(LINE_LABELS).index(line.key) + 19
+            row = 27 if line.key == "other" else list(invoice.line_labels).index(line.key) + 19
             write(f"D{row}", line.quantity)
             write(f"E{row}", line.rate)
             write(f"F{row}", totals.line_amounts[line.key], f"ROUND(D{row}*E{row},2)")
         write("E26", invoice.service_percentage)
-        write("F26", totals.service_charge, "ROUND(SUM(F19:F25,F27)*E26/100,2)")
-        write("F29", totals.subtotal, "SUM(F19:F27)")
+        write("F26", totals.service_charge, "ROUND(F25*E26/100,2)" if services_only else "ROUND(SUM(F19:F25,F27)*E26/100,2)")
+        write("F29", totals.subtotal, "F26" if services_only else "SUM(F19:F27)")
+        if services_only:
+            write("D29", "Service charges")
         if invoice.uses_gst_percentages:
             # The template's spare row holds SGST without moving payment details
             # or the total. Unmerge the old GST label to expose the rate input.
@@ -100,11 +120,11 @@ def export_xlsx(invoice: Invoice) -> bytes:
                 write(f"E{row}", percentage)
                 write(f"F{row}", tax, f"ROUND($F$29*E{row}/100,2)")
             write("F32", totals.total, "SUM(F29:F31)")
-            write("A39", "Amounts in INR. Enter 10 for 10%. CGST and SGST apply to the subtotal including service charges.")
+            write("A39", "Amounts in INR. Wages are reference only. GST applies only to service charges." if services_only else "Amounts in INR. Enter 10 for 10%. CGST and SGST apply to the subtotal including service charges.")
         else:
             write("F30", totals.gst_amount)
             write("F32", totals.total, "SUM(F29:F30)")
-            write("A39", "Amounts in INR. Enter 10 for 10% service charge in E26 (before GST). GST is the amount recorded on this invoice.")
+            write("A39", "Amounts in INR. Wages are reference only. Total = service charges + recorded GST." if services_only else "Amounts in INR. Enter 10 for 10% service charge in E26 (before GST). GST is the amount recorded on this invoice.")
 
         output = BytesIO()
         with ZipFile(output, "w", ZIP_DEFLATED) as target:
@@ -163,6 +183,7 @@ def export_pdf(invoice: Invoice) -> bytes:
     with ZipFile(TEMPLATE) as archive:
         logo = Image(BytesIO(archive.read("xl/media/image.png")), width=100, height=68.2)
     metadata = [p("INVOICE", heading), p(invoice.invoice_number, heading), p(f"Date: {invoice.invoice_date:%d/%m/%Y}"),
+                p(BILLING_LABELS[invoice.billing_mode], bold),
                 p(f"Payment due: {invoice.due_date:%d/%m/%Y}" if invoice.due_date else "")]
     story = [Table([[logo, metadata]], colWidths=[doc.width * .58, doc.width * .42]), Spacer(1, 12)]
     supplier = invoice.supplier
@@ -173,9 +194,10 @@ def export_pdf(invoice: Invoice) -> bytes:
     details = Table([[billed, period]], colWidths=[doc.width * .58, doc.width * .42])
     details.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#F1F5F9")), ("TOPPADDING", (0, 0), (-1, -1), 8), ("BOTTOMPADDING", (0, 0), (-1, -1), 8)]))
     story.extend([details, Spacer(1, 10)])
-    rows = [[p("Description", small), p("Men / Women", small), p("Quantity", small_center), p("Rate (INR)", small), p("Amount (INR)", small)]]
+    services_only = invoice.billing_mode == "services_only"
+    rows = [[p("Description", small), p("Men / Women", small), p("Quantity", small_center), p("Wage / person (INR)" if services_only else "Rate (INR)", small), p("Wage total (INR)" if services_only else "Amount (INR)", small)]]
     for line in invoice.lines:
-        label, gender = LINE_LABELS[line.key]
+        label, gender = invoice.line_labels[line.key]
         rows.append([p(label, small), p(gender, small), p(f"{line.quantity:g}", center), p(amount(line.rate)), p(amount(invoice.totals.line_amounts[line.key]))])
     table = Table(rows, colWidths=[doc.width * .31, doc.width * .16, doc.width * .13, doc.width * .19, doc.width * .21], repeatRows=1)
     table.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#E2E8F0")), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("LINEBELOW", (0, 0), (-1, -1), .4, colors.HexColor("#CBD5E1")), ("TOPPADDING", (0, 0), (-1, -1), 3.5), ("BOTTOMPADDING", (0, 0), (-1, -1), 3.5)]))
@@ -187,21 +209,23 @@ def export_pdf(invoice: Invoice) -> bytes:
     ] if invoice.uses_gst_percentages else [[p("GST (recorded amount)"), p(amount(totals.gst_amount))]]
     # Wages cover the six workforce rows. Keep extras separate so the wage label
     # remains accurate without changing the saved service-charge or GST totals.
-    wages = totals.base_amount - totals.line_amounts["overtime"] - totals.line_amounts["other"]
+    wages = totals.base_amount - totals.line_amounts.get("overtime", 0) - totals.line_amounts.get("other", 0)
     additional_rows = [
         [p(LINE_LABELS[key][0]), p(amount(totals.line_amounts[key]))]
-        for key in ("overtime", "other") if totals.line_amounts[key]
+        for key in ("overtime", "other") if totals.line_amounts.get(key)
     ]
     summary = Table([
-        [p("Total wages"), p(amount(wages))],
+        [p("Wage subtotal (reference only)" if services_only else "Total wages"), p(amount(wages))],
         *additional_rows,
         [p(f"Service charge ({invoice.service_percentage:g}%)"), p(amount(totals.service_charge))],
-        [p("Subtotal before GST"), p(amount(totals.subtotal))],
+        *([] if services_only else [[p("Subtotal before GST"), p(amount(totals.subtotal))]]),
         *tax_rows,
         [p("TOTAL (INR)", heading), p(amount(totals.total), bold)],
     ], colWidths=[doc.width * .79, doc.width * .21])
     summary.setStyle(TableStyle([("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3), ("BACKGROUND", (0, -1), (-1, -1), colors.HexColor("#FFEDD5"))]))
     story.extend([summary, Spacer(1, 8)])
+    if services_only:
+        story.extend([p("Wages are used only to calculate service charges. Total payable includes service charges and GST.", small), Spacer(1, 8)])
     if supplier.payment_details:
         story.extend([p("PAYMENT DETAILS", heading), p(supplier.payment_details), Spacer(1, 8)])
     if invoice.notes:

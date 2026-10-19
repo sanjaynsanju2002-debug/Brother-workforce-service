@@ -12,7 +12,8 @@ Money = Annotated[Decimal, Field(ge=0, le=1_000_000_000, decimal_places=2, allow
 Quantity = Annotated[Decimal, Field(ge=0, le=1_000_000, decimal_places=2, allow_inf_nan=False)]
 Percentage = Annotated[Decimal, Field(ge=0, le=100, decimal_places=2, allow_inf_nan=False)]
 InvoiceNumber = Annotated[str, Field(min_length=1, max_length=16, pattern=r"^[A-Za-z0-9/-]+$")]
-LineKey = Literal["skilled_men", "skilled_women", "semi_men", "semi_women", "unskilled_men", "unskilled_women", "overtime", "other"]
+BillingMode = Literal["managed_services", "services_only"]
+LineKey = Literal["skilled_men", "skilled_women", "semi_men", "semi_women", "unskilled_men", "unskilled_women", "overtime", "other", "men", "women"]
 LINE_LABELS = {
     "skilled_men": ("Skilled", "Men"),
     "skilled_women": ("Skilled", "Women"),
@@ -23,6 +24,8 @@ LINE_LABELS = {
     "overtime": ("Overtime / additional work", "N/A"),
     "other": ("Other charges", "N/A"),
 }
+SERVICE_LINE_LABELS = {"men": ("Manpower supply", "Men"), "women": ("Manpower supply", "Women")}
+BILLING_LABELS = {"managed_services": "Managed services", "services_only": "Services only"}
 
 
 class InvoiceModel(BaseModel):
@@ -72,11 +75,14 @@ class InvoiceLine(InvoiceModel):
         return self
 
 
-def default_lines():
-    return [InvoiceLine(key=key) for key in LINE_LABELS]
+def default_lines(billing_mode: BillingMode = "managed_services"):
+    labels = SERVICE_LINE_LABELS if billing_mode == "services_only" else LINE_LABELS
+    return [InvoiceLine(key=key) for key in labels]
 
 
 class InvoiceInput(InvoiceModel):
+    # Invoices saved before billing modes retain their wage-inclusive calculation.
+    billing_mode: BillingMode = "managed_services"
     # Keep the bill-to snapshot even if a company record changes in the future.
     # Older saved invoices have no company reference and remain readable.
     company_id: UUID | None = None
@@ -91,7 +97,7 @@ class InvoiceInput(InvoiceModel):
     service_month: str | None = Field(default=None, pattern=MONTH_PATTERN)
     billing_period: str = Field(default="", max_length=100)
     supplier: InvoiceProfile = Field(default_factory=InvoiceProfile)
-    lines: list[InvoiceLine] = Field(default_factory=default_lines, min_length=8, max_length=8)
+    lines: list[InvoiceLine] = Field(default_factory=default_lines, min_length=2, max_length=8)
     service_percentage: Percentage = Decimal("0")
     cgst_percentage: Percentage | None = None
     sgst_percentage: Percentage | None = None
@@ -99,9 +105,16 @@ class InvoiceInput(InvoiceModel):
     gst_amount: Money = Decimal("0")
     notes: str = Field(default="", max_length=1000)
 
+    @model_validator(mode="before")
+    @classmethod
+    def mode_default_lines(cls, values):
+        if isinstance(values, dict) and "lines" not in values and values.get("billing_mode") == "services_only":
+            return {**values, "lines": default_lines("services_only")}
+        return values
+
     @model_validator(mode="after")
     def complete_lines(self):
-        if {line.key for line in self.lines} != set(LINE_LABELS):
+        if len(self.lines) != len(self.line_labels) or {line.key for line in self.lines} != set(self.line_labels):
             raise ValueError("Include each invoice charge row exactly once")
         if self.due_date is not None and self.due_date < self.invoice_date:
             raise ValueError("Payment due date cannot be before the invoice date")
@@ -110,7 +123,7 @@ class InvoiceInput(InvoiceModel):
         if self.service_month and not self.billing_period:
             self.billing_period = month_label(self.service_month)
         # A stable order keeps saved invoices and both exports aligned with the template.
-        self.lines.sort(key=lambda line: list(LINE_LABELS).index(line.key))
+        self.lines.sort(key=lambda line: list(self.line_labels).index(line.key))
         if self.uses_gst_percentages:
             self.cgst_percentage = self.cgst_percentage if self.cgst_percentage is not None else Decimal("0")
             self.sgst_percentage = self.sgst_percentage if self.sgst_percentage is not None else Decimal("0")
@@ -120,6 +133,10 @@ class InvoiceInput(InvoiceModel):
     @property
     def uses_gst_percentages(self) -> bool:
         return self.cgst_percentage is not None or self.sgst_percentage is not None
+
+    @property
+    def line_labels(self):
+        return SERVICE_LINE_LABELS if self.billing_mode == "services_only" else LINE_LABELS
 
 
 class InvoiceTotals(InvoiceModel):
@@ -151,7 +168,8 @@ def calculate_invoice(invoice: InvoiceInput) -> InvoiceTotals:
     amounts = {line.key: round_money(line.quantity * line.rate) for line in invoice.lines}
     base = sum(amounts.values(), Decimal("0.00"))
     service = round_money(base * invoice.service_percentage / Decimal("100"))
-    subtotal = base + service
+    # Services-only wages are a calculation reference, never an amount receivable.
+    subtotal = service if invoice.billing_mode == "services_only" else base + service
     cgst = round_money(subtotal * (invoice.cgst_percentage or Decimal("0")) / Decimal("100"))
     sgst = round_money(subtotal * (invoice.sgst_percentage or Decimal("0")) / Decimal("100"))
     gst = cgst + sgst if invoice.uses_gst_percentages else invoice.gst_amount
