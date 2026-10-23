@@ -1,4 +1,5 @@
-import { missingJobDetails } from "@/lib/jobContent";
+import { jobSaveError, jobValidationError } from "@/lib/jobValidation";
+import { CandidateDetailsStatus, JobSearchVerification } from "@/components/site/JobReadiness";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -285,13 +286,19 @@ function Dashboard({
     onError: () => toast.error("Could not delete company enquiry"),
   });
 
+  const [jobProblem, setJobProblem] = useState("");
+  const showJobError = (error: unknown) => {
+    const message = jobSaveError(error);
+    setJobProblem(message); toast.error(message);
+  };
   const createJob = useMutation({
     mutationFn: (payload: JobCreate) => apiPost<Job>(`/admin/jobs${q}`, payload),
     onSuccess: () => {
       invalidate();
+      setJobProblem("");
       toast.success("Job posted");
     },
-    onError: () => toast.error("Could not post job"),
+    onError: showJobError,
   });
 
   const toggleJob = useMutation({
@@ -326,11 +333,12 @@ function Dashboard({
     mutationFn: ({ id, payload }: { id: string; payload: JobCreate }) => apiPut<Job>(`/admin/jobs/${id}`, payload),
     onSuccess: () => {
       invalidate();
+      setJobProblem("");
       setEditingJobId(null);
       setJob({ title: "", location: "", skill_category: "Skilled", experience: "", salary: "", shift: "", openings: 1, description: "", description_kn: "", closing_date: "", employer_name: "" });
       toast.success("Job updated");
     },
-    onError: () => toast.error("Could not update job"),
+    onError: showJobError,
   });
 
   const s = stats.data;
@@ -761,20 +769,12 @@ function Dashboard({
                 <form
                   className="space-y-3"
                   data-testid="admin-job-form"
+                  onChange={() => { if (jobProblem) setJobProblem(""); }}
                   onSubmit={(e) => {
                     e.preventDefault();
-                    if (!job.title || !job.location) {
-                      toast.error("Title and location are required");
-                      return;
-                    }
-                    if (!Number.isInteger(job.openings) || job.openings < 1) {
-                      toast.error("Enter at least 1 opening");
-                      return;
-                    }
-                    if (!editingJobId && (job.description ?? "").trim().length < 40) {
-                      toast.error("Add a full job description with duties, qualifications, skills and working hours");
-                      return;
-                    }
+                    setJobProblem("");
+                    const problem = jobValidationError(job, !!editingJobId);
+                    if (problem) { setJobProblem(problem); toast.error(problem); return; }
                     if (editingJobId) {
                       editJob.mutate({ id: editingJobId, payload: job });
                       return;
@@ -842,12 +842,17 @@ function Dashboard({
                     onChange={(e) => setJob({ ...job, shift: e.target.value })}
                     data-testid="admin-job-shift"
                   />
-                  <Input
-                    placeholder="Hiring company (leave blank if confidential)"
+                  <div>
+                  <Label htmlFor="admin-job-employer" className="mb-2 block text-sm">Hiring company{job.schema_ready ? " *" : " (optional)"}</Label>
+                  <Input id="admin-job-employer"
+                    placeholder="Leave blank if confidential"
+                    aria-required={!!job.schema_ready} aria-describedby="admin-job-employer-help"
                     value={job.employer_name ?? ""}
                     onChange={(e) => setJob({ ...job, employer_name: e.target.value })}
                     data-testid="admin-job-employer"
                   />
+                  <p id="admin-job-employer-help" className="mt-1 text-xs text-slate-500">Required when job search verification is enabled. Otherwise optional.</p>
+                  </div>
                   <div>
                     <Label htmlFor="admin-job-closing-date" className="mb-2 block text-sm">Application closing date (optional)</Label>
                     <DateInput
@@ -903,11 +908,12 @@ function Dashboard({
                       data-testid="admin-job-description-kn"
                     />
                   </div>
-                  <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">Details to complete: {missingJobDetails(job).join(", ") || "All candidate details entered"}. Enter verified information; use “None” only when confirmed.</div>
+                  <CandidateDetailsStatus job={job} />
                   <div><Label htmlFor="job-salary-basis">Salary basis</Label><select id="job-salary-basis" className="h-11 w-full rounded-lg border px-3" value={job.salary_basis || ""} onChange={(e) => setJob({ ...job, salary_basis: e.target.value })}><option value="">Not yet confirmed</option>{["Gross monthly", "Take-home monthly", "Daily", "Hourly"].map((v) => <option key={v}>{v}</option>)}</select></div>
-                  {([['qualification', 'Qualification / eligibility'], ['working_hours', 'Working hours / days'], ['benefits', 'Benefits / deductions']] as const).map(([key, label]) => <div key={key}><Label htmlFor={`job-${key}`}>{label}</Label><Textarea id={`job-${key}`} maxLength={4000} value={job[key] || ""} onChange={(e) => setJob({ ...job, [key]: e.target.value })} /></div>)}
+                  {([['qualification', 'Qualification / eligibility'], ['working_hours', 'Working hours / days'], ['benefits', 'Benefits / deductions']] as const).map(([key, label]) => <div key={key}><Label htmlFor={`job-${key}`}>{label}</Label><Textarea id={`job-${key}`} maxLength={4000} value={job[key] || ""} onChange={(e) => setJob({ ...job, [key]: e.target.value })} />{key === "working_hours" && <p className="mt-1 text-xs text-slate-500">Enter actual hours and days, for example 8 hours/day, 6 days/week. Enter General or Rotational in the Shift field.</p>}</div>)}
                   <details className="rounded-lg border p-3"><summary className="cursor-pointer font-medium">Kannada role details</summary><div className="mt-3 grid gap-3">{([['title_kn', 'Job title'], ['location_kn', 'Location'], ['experience_kn', 'Experience'], ['shift_kn', 'Shift'], ['qualification_kn', 'Qualification'], ['working_hours_kn', 'Working hours'], ['benefits_kn', 'Benefits']] as const).map(([key, label]) => <div key={key}><Label htmlFor={`job-${key}`}>{label} in Kannada</Label><Textarea id={`job-${key}`} maxLength={4000} value={job[key] || ""} onChange={(e) => setJob({ ...job, [key]: e.target.value })} /></div>)}</div></details>
-                  <label className="flex items-start gap-3 text-sm"><input className="mt-1 h-5 w-5" type="checkbox" checked={job.schema_ready || false} onChange={(e) => setJob({ ...job, schema_ready: e.target.checked })} /><span>I verified the full description, eligibility, hours, hiring employer and location for job search structured data. Incomplete listings stay visible on this website.</span></label>
+                  <JobSearchVerification job={job} onChange={(checked) => { setJob({ ...job, schema_ready: checked }); setJobProblem(""); }} />
+                  {jobProblem && <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700" data-testid="job-save-error">{jobProblem}</p>}
                   <Button
                     type="submit"
                     disabled={createJob.isPending || editJob.isPending}
@@ -918,6 +924,7 @@ function Dashboard({
                   </Button>
                   {editingJobId && (
                     <Button type="button" variant="outline" className="w-full" onClick={() => {
+                      setJobProblem("");
                       setEditingJobId(null);
                       setJob({ title: "", location: "", skill_category: "Skilled", experience: "", salary: "", shift: "", openings: 1, description: "", description_kn: "", closing_date: "", employer_name: "" });
                     }}>Cancel edit</Button>
@@ -959,6 +966,7 @@ function Dashboard({
                         <TableCell>
                           <div className="flex flex-wrap gap-2">
                             <Button size="xs" variant="outline" onClick={() => {
+                              setJobProblem("");
                               setEditingJobId(j.id);
                               setJob({ ...j, title: j.title, location: j.location, skill_category: j.skill_category, experience: j.experience ?? "", salary: j.salary ?? "", shift: j.shift ?? "", openings: j.openings, description: j.description ?? "", description_kn: j.description_kn ?? "", closing_date: j.closing_date ?? "", employer_name: j.employer_name ?? "" });
                             }} data-testid={`admin-job-edit-${j.id}`}>Edit</Button>

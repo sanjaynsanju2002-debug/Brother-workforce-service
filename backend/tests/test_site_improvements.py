@@ -72,6 +72,28 @@ async def company(client, name="Example Factory"):
 
 
 @pytest.mark.asyncio
+async def test_job_edit_explains_missing_hiring_company_and_can_save_without_search_verification(business):
+    async with session() as client:
+        await client.post("/api/admin/login", json={"pin": "123456"})
+        details = {"title": "Assembler", "location": "Mysore", "skill_category": "General Worker", "openings": 20,
+                   "description": "Assemble components according to work instructions and check completed units for quality. " * 2,
+                   "qualification": "Discuss during screening", "working_hours": "8 hours/day", "employer_name": "",
+                   "salary": "16000", "salary_basis": "Gross monthly", "benefits": "Discuss during screening",
+                   "description_kn": "ಬಿಡಿಭಾಗಗಳನ್ನು ಜೋಡಿಸಿ ಮತ್ತು ಗುಣಮಟ್ಟವನ್ನು ಪರಿಶೀಲಿಸಿ.", "schema_ready": False}
+        created = await client.post("/api/admin/jobs", json=details)
+        assert created.status_code == 200, created.text
+        path = f"/api/admin/jobs/{created.json()['id']}"
+        blocked = await client.put(path, json={**details, "schema_ready": True})
+        assert blocked.status_code == 422
+        assert "hiring company" in blocked.json()["detail"][0]["msg"]
+        assert "turn off job search verification" in blocked.json()["detail"][0]["msg"]
+        saved = await client.put(path, json={**details, "working_hours": "8 hours/day, 6 days/week"})
+        assert saved.status_code == 200, saved.text
+        assert saved.json()["working_hours"] == "8 hours/day, 6 days/week"
+        assert saved.json()["schema_ready"] is False and saved.json()["employer_name"] == ""
+
+
+@pytest.mark.asyncio
 async def test_multiple_deployments_and_linked_talent_protection(business):
     async with session() as client:
         await client.post("/api/admin/login", json={"pin": "123456"})

@@ -108,8 +108,14 @@ class JobCreate(BaseModel):
 
     @model_validator(mode="after")
     def verified_schema_details(self):
-        if self.schema_ready and (len((self.description or "").strip()) < 100 or not all((getattr(self, key) or "").strip() for key in ("employer_name", "qualification", "working_hours", "location", "title"))):
-            raise ValueError("Complete the full description, hiring employer, eligibility and working hours before enabling job search structured data")
+        if self.schema_ready:
+            fields = (("title", "job title"), ("location", "location"), ("employer_name", "hiring company"),
+                      ("qualification", "qualification / eligibility"), ("working_hours", "working hours / days"))
+            missing = [label for key, label in fields if not (getattr(self, key) or "").strip()]
+            if len((self.description or "").strip()) < 100:
+                missing.append("full job description (at least 100 characters)")
+            if missing:
+                raise ValueError("For job search listings, complete: " + ", ".join(missing) + ". You can turn off job search verification and save the job on your website.")
         return self
 
     @field_validator("closing_date")
