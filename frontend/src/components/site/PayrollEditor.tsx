@@ -6,9 +6,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { apiPost } from "@/lib/api";
+import { apiGet, apiPost } from "@/lib/api";
 import { monthLabel, rupees } from "@/lib/finance";
 import { downloadPayroll, firstPayrollIssue, payrollDeductionTotal, payrollError, payrollRows, type PayrollAmounts, type PayrollDraft, type PayrollInput, type PayrollIssue, type PayrollRecord, type PayrollRow, type PayrollTotals, type PayrollValueField } from "@/lib/payroll";
+
+import { OPS, downloadPrivate, operationError, type AttendanceSummary } from "@/lib/operations";
+
+import { selectClass } from "@/lib/operations";
 
 type Props = {
   draft: PayrollDraft;
@@ -28,17 +32,19 @@ export default function PayrollEditor({ draft, month, deleting, onDirty, onBusy,
   const [saved, setSaved] = useState(draft.payroll);
   const [notes, setNotes] = useState(draft.payroll?.notes ?? "");
   const [dirty, setDirty] = useState(false);
+  const [attendanceRefs, setAttendanceRefs] = useState<Record<string, number>>(draft.payroll?.attendance_refs ?? {});
+  const [responsibility, setResponsibility] = useState<"Agency" | "Client">(draft.payroll?.cost_responsibility ?? "Agency");
   const [problem, setProblem] = useState("");
   const [issue, setIssue] = useState<PayrollIssue>();
   const [bulk, setBulk] = useState({ worked_days: "", daily_rate: "", esi_percentage: "", pf_percentage: "" });
   const monthDays = new Date(Number(month.slice(0, 4)), Number(month.slice(5)), 0).getDate();
   const payload = useMemo<PayrollInput>(() => ({
-    company_id: draft.company.id, month, notes,
+    company_id: draft.company.id, month, notes, cost_responsibility: responsibility, attendance_refs: attendanceRefs,
     lines: rows.filter((row) => row.selected).map((row) => ({
       assignment_id: row.assignment_id, worked_days: row.worked_days || "0", daily_rate: row.daily_rate || "0",
-      esi_percentage: row.esi_percentage || "0", pf_percentage: row.pf_percentage || "0",
+      esi_percentage: row.esi_percentage || "0", pf_percentage: row.pf_percentage || "0", overtime_hours: row.overtime_hours || "0", overtime_rate: row.overtime_rate || "0",
     })),
-  }), [draft.company.id, month, notes, rows]);
+  }), [draft.company.id, month, notes, rows, responsibility, attendanceRefs]);
   const [previewInput, setPreviewInput] = useState(payload);
   useEffect(() => {
     const timer = window.setTimeout(() => setPreviewInput(payload), 250);
@@ -96,7 +102,22 @@ export default function PayrollEditor({ draft, month, deleting, onDirty, onBusy,
     onError: (error) => { const message = payrollError(error); setProblem(message); toast.error(message); },
     onSettled: () => onBusy(false),
   });
-  const locked = deleting || save.isPending;
+  const attendanceImport = useMutation({
+    mutationFn: () => apiGet<AttendanceSummary>(`${OPS}/attendance-summary?company_id=${draft.company.id}&month=${month}`),
+    onSuccess: (summary) => {
+      if (!summary.approved_days) { setProblem("No approved attendance exists for this company and month. Save and approve daily attendance first."); return; }
+      const unknown = summary.lines.filter((line) => !rows.some((r) => r.assignment_id === line.assignment_id));
+      if (unknown.length) { setProblem("Approved attendance includes an employee no longer in this payroll draft. Reload payroll and review Company Workforce before importing."); return; }
+      if (!window.confirm(`Import ${summary.approved_days} approved attendance dates for this month? Worked days and overtime will replace the current values. Review the covered dates and rates before saving.`)) return;
+      const byId = new Map(summary.lines.map((line) => [line.assignment_id, line]));
+      setRows((items) => items.map((r) => ({ ...r, selected: byId.has(r.assignment_id), worked_days: byId.get(r.assignment_id)?.worked_days ?? "0", overtime_hours: byId.get(r.assignment_id)?.overtime_hours ?? "0" })));
+      setAttendanceRefs(Object.fromEntries(summary.sheets.map((s) => [s.id, s.revision]))); change();
+      toast.success(`Imported ${summary.approved_days} approved days. Review daily and overtime rates.`);
+    }, onError: (e) => setProblem(operationError(e)),
+  });
+  const linkedAttendance = Object.keys(attendanceRefs).length;
+  const coverage = useQuery({ queryKey: ["ops", "attendance-coverage", draft.company.id, month], queryFn: () => apiGet<AttendanceSummary>(`${OPS}/attendance-summary?company_id=${draft.company.id}&month=${month}`), enabled: linkedAttendance > 0 });
+  const locked = deleting || save.isPending || attendanceImport.isPending;
   const startSave = (format?: "pdf" | "xlsx") => {
     if (locked) return;
     if (!(saved && !dirty && format)) {
@@ -108,6 +129,7 @@ export default function PayrollEditor({ draft, month, deleting, onDirty, onBusy,
   };
   const applyBulk = () => {
     const values = Object.entries(bulk).filter(([, value]) => value !== "");
+    if (linkedAttendance && bulk.worked_days) { toast.error("Choose manual attendance before changing imported worked days."); return; }
     for (const [field, value] of values) {
       const amount = Number(value), maximum = field === "worked_days" ? monthDays : field === "daily_rate" ? 1_000_000_000 : 100;
       if (!Number.isFinite(amount) || amount < 0 || amount > maximum || !/^(?:\d+|\d*\.\d{1,2})$/.test(value)) {
@@ -132,6 +154,11 @@ export default function PayrollEditor({ draft, month, deleting, onDirty, onBusy,
             <Button type="button" variant="outline" disabled={!selected} aria-label={saved && !dirty ? "Download payroll Excel" : "Save payroll and download Excel"} onClick={() => startSave("xlsx")} data-testid="payroll-excel"><FileSpreadsheet className="h-4 w-4" />Excel</Button>
             <Button type="submit" className="bg-[#C2410C] text-white hover:bg-[#9A3412]" disabled={!selected || (!!saved && !dirty)} data-testid="payroll-save">{save.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}Save payroll</Button>
           </div>
+        </div>
+
+        <div className="space-y-4 rounded-xl border border-slate-200 bg-white p-4">
+          <div className="grid items-end gap-4 sm:grid-cols-2"><div><Label htmlFor="payroll-responsibility" className="mb-2 block">Who pays these salaries?</Label><select id="payroll-responsibility" className={selectClass} value={responsibility} onChange={(e) => { setResponsibility(e.target.value as "Agency" | "Client"); change(); }}><option value="Agency">Agency pays salaries</option><option value="Client">Client pays directly (reference payroll)</option></select></div><Button type="button" variant="outline" disabled={locked || !rows.length} onClick={() => attendanceImport.mutate()}>Import approved attendance</Button></div>
+          {linkedAttendance ? <div className="space-y-2 text-xs text-slate-600"><p>Linked to {linkedAttendance} approved attendance dates. Days and overtime hours are locked to those records.</p><details><summary className="cursor-pointer">Review covered dates</summary><p className="mt-2">{coverage.isPending ? "Loading covered dates…" : coverage.isError ? "Could not load dates. Import attendance again to review." : coverage.data?.sheets.filter((s) => s.id in attendanceRefs).map((s) => s.date).join(", ") || "Approved sheets changed. Import attendance again."}</p><p className="mt-2">Approval references are checked again when payroll is saved. Import again if any sheet is reopened or changed.</p></details><Button type="button" variant="outline" size="sm" onClick={() => { setAttendanceRefs({}); change(); }}>Use manual attendance</Button></div> : <p className="text-xs text-slate-500">Manual worked days. Import approved daily sheets to fill days and overtime hours. Enter the hourly overtime rate yourself. Client-paid registers are excluded from agency salary balances and company payroll costs.</p>}
         </div>
 
         <div className="payroll-metrics" aria-live="polite">
@@ -187,8 +214,9 @@ export default function PayrollEditor({ draft, month, deleting, onDirty, onBusy,
               <p className="mt-1 break-words text-xs text-slate-500">{active.employee_id || "No employee ID"}{active.role ? ` · ${active.role}` : ""}</p>
               <p className="mt-2 text-xs leading-relaxed text-slate-500">{active.salary === null ? "No salary on file" : `${rupees(active.salary)} per ${active.salary_basis === "Daily" ? "day" : "month"} on file`}</p>
               <label className="mt-4 flex min-h-9 items-center gap-2 text-sm"><input type="checkbox" className="h-4 w-4 accent-[#C2410C]" checked={active.selected} onChange={(event) => editRow(active.assignment_id, "selected", event.target.checked)} />Include in this payroll</label>
-              <EmployeeFields row={active} monthDays={monthDays} issue={issue} onChange={(field, value) => editRow(active.assignment_id, field, value)} />
-              <p className="mt-3 text-xs leading-relaxed text-slate-500">ESI and PF each apply to gross wages.</p>
+              <EmployeeFields row={active} attendanceLinked={!!linkedAttendance} monthDays={monthDays} issue={issue} onChange={(field, value) => editRow(active.assignment_id, field, value)} />
+              <p className="mt-3 text-xs leading-relaxed text-slate-500">Gross wages include worked days × daily rate and overtime hours × hourly rate. ESI and PF apply to gross wages at the rates you enter.</p>
+              {saved && !dirty && saved.lines.some((r) => r.assignment_id === active.assignment_id) && <Button type="button" variant="outline" size="sm" className="mt-3" onClick={() => void downloadPrivate(`${OPS}/payroll/${saved.id}/payslip/${active.assignment_id}.pdf`, `BWS-Payslip-${month}.pdf`).catch((e) => setProblem(operationError(e)))}>Download employee payslip</Button>}
               <div className="mt-5 space-y-3 border-t border-slate-200 pt-4 text-sm tabular-nums" aria-live="polite">
                 {[["Gross wages", calculated.get(active.assignment_id)?.gross_wages], ["ESI deduction", calculated.get(active.assignment_id)?.esi_deduction], ["PF deduction", calculated.get(active.assignment_id)?.pf_deduction]].map(([label, value]) => <div key={label} className="flex flex-wrap justify-between gap-x-3 gap-y-1"><span className="text-slate-500">{label}</span><span>{value ? rupees(value) : "—"}</span></div>)}
                 <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-orange-50 p-3"><span className="font-medium">Payable</span><span className="text-lg font-semibold" data-testid="payroll-active-payable">{calculated.has(active.assignment_id) ? rupees(calculated.get(active.assignment_id)!.payable) : "—"}</span></div>
@@ -226,16 +254,18 @@ function Metric({ label, value, testId, primary = false }: { label: string; valu
   return <div className={`min-w-0 rounded-xl p-4 ${primary ? "bg-[#0F2444] text-white" : "border border-slate-200 bg-white"}`}><p className={`text-xs leading-relaxed ${primary ? "text-slate-200" : "text-slate-500"}`}>{label}</p><p className="mt-2 break-words text-xl font-semibold tabular-nums" data-testid={testId}>{value}</p></div>;
 }
 
-function EmployeeFields({ row, monthDays, issue, onChange }: { row: PayrollRow; monthDays: number; issue?: PayrollIssue; onChange: (field: PayrollValueField, value: string) => void }) {
+function EmployeeFields({ row, monthDays, attendanceLinked, issue, onChange }: { row: PayrollRow; attendanceLinked: boolean; monthDays: number; issue?: PayrollIssue; onChange: (field: PayrollValueField, value: string) => void }) {
   const fields = [
     { key: "worked_days", label: "Worked days", min: "0", max: monthDays, prefix: "days" },
     { key: "daily_rate", label: "Daily rate (₹)", min: Number(row.worked_days) > 0 ? "0.01" : "0", max: 1_000_000_000, prefix: "rate" },
+    { key: "overtime_hours", label: "Overtime hours", min: "0", max: 744, prefix: "ot-hours" },
+    { key: "overtime_rate", label: "Overtime hourly rate (₹)", min: "0", max: 1_000_000_000, prefix: "ot-rate" },
     { key: "esi_percentage", label: "ESI (%)", min: "0", max: 100, prefix: "esi" },
     { key: "pf_percentage", label: "PF (%)", min: "0", max: 100, prefix: "pf" },
   ] as const;
   return <div className="mt-4 grid grid-cols-2 gap-4">{fields.map(({ key, label, min, max, prefix }) => {
     const invalid = issue?.assignment_id === row.assignment_id && issue.field === key;
     const id = `payroll-${prefix}-${row.assignment_id}`;
-    return <div key={key}><Label htmlFor={id} className="mb-2 block text-xs text-slate-600">{label}</Label><Input id={id} name={key} type="number" inputMode="decimal" min={min} max={max} step="0.01" required={row.selected && (key !== "daily_rate" || Number(row.worked_days) > 0)} disabled={!row.selected} className={key === "worked_days" ? "text-center tabular-nums" : "tabular-nums"} value={row[key]} onChange={(event) => onChange(key, event.target.value)} aria-invalid={invalid || undefined} aria-label={`${label} for ${row.full_name}`} data-testid={id} /></div>;
+    return <div key={key}><Label htmlFor={id} className="mb-2 block text-xs text-slate-600">{label}</Label><Input id={id} name={key} type="number" inputMode="decimal" min={min} max={max} step="0.01" required={row.selected && (key !== "daily_rate" || Number(row.worked_days) > 0)} disabled={!row.selected || (attendanceLinked && (key === "worked_days" || key === "overtime_hours"))} className={key === "worked_days" ? "text-center tabular-nums" : "tabular-nums"} value={row[key]} onChange={(event) => onChange(key, event.target.value)} aria-invalid={invalid || undefined} aria-label={`${label} for ${row.full_name}`} data-testid={id} /></div>;
   })}</div>;
 }

@@ -82,6 +82,8 @@ app = FastAPI(lifespan=lifespan)
 @app.middleware("http")
 async def response_headers(request, call_next):
     response = await call_next(request)
+    from lib.audit import log_admin_change
+    await log_admin_change(request, response.status_code)
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
     response.headers.setdefault("X-Frame-Options", "DENY")
     response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
@@ -135,6 +137,8 @@ from routers.service_info import router as service_info_router
 from routers.team import router as team_router
 from routers.backups import router as backups_router
 from routers.payroll import router as payroll_router  # noqa: E402
+from routers.operations import router as operations_router
+from routers.payments import router as payments_router
 
 admin_router.include_router(email_router)
 api_router.include_router(public_router)
@@ -145,6 +149,8 @@ api_router.include_router(invoices_router)
 api_router.include_router(expenses_router)
 api_router.include_router(finance_router)
 api_router.include_router(payroll_router)
+api_router.include_router(operations_router)
+api_router.include_router(payments_router)
 api_router.include_router(service_info_router)
 api_router.include_router(team_router)
 api_router.include_router(backups_router)

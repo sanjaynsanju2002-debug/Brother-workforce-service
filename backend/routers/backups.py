@@ -27,10 +27,12 @@ from routers.assignments import Assignment
 from routers.expenses import Expense
 from routers.talent import Shortlist
 from routers.service_info import ServiceInfo
+from models.operations import AttendanceRecord, RequirementRecord, RecruitmentRecord, DocumentRecord, AuditRecord
 
 router = APIRouter(prefix="/admin/backups", dependencies=[Depends(require_owner)])
-COLLECTIONS = ("clients", "invoice_companies", "workers", "jobs", "assignments", "company_requests", "shortlists", "invoices", "payroll", "expenses", "resume_files", "client_logos", "settings")
-MODELS = {"clients": Client, "invoice_companies": InvoiceCompany, "workers": Worker, "jobs": Job,
+BASE_COLLECTIONS = ("clients", "invoice_companies", "workers", "jobs", "assignments", "company_requests", "shortlists", "invoices", "payroll", "expenses", "resume_files", "client_logos", "settings")
+COLLECTIONS = (*BASE_COLLECTIONS, "attendance", "staffing_requirements", "recruitment", "documents", "audit_events")
+MODELS = {"attendance": AttendanceRecord, "staffing_requirements": RequirementRecord, "recruitment": RecruitmentRecord, "documents": DocumentRecord, "audit_events": AuditRecord,"clients": Client, "invoice_companies": InvoiceCompany, "workers": Worker, "jobs": Job,
           "assignments": Assignment, "company_requests": CompanyRequest, "shortlists": Shortlist,
           "invoices": Invoice, "payroll": Payroll, "expenses": Expense}
 MAX_BYTES = 64 * 1024 * 1024
@@ -50,12 +52,12 @@ def read_archive(raw):
         with ZipFile(io.BytesIO(raw)) as archive:
             names = archive.namelist()
             allowed = {"manifest.json", *(name + ".json" for name in COLLECTIONS)}
-            if len(names) != len(set(names)) or set(names) != allowed or sum(i.file_size for i in archive.infolist()) > MAX_BYTES:
+            if len(names) != len(set(names)) or not set(names) <= allowed or not {"manifest.json", *(n + ".json" for n in BASE_COLLECTIONS)} <= set(names) or sum(i.file_size for i in archive.infolist()) > MAX_BYTES:
                 raise ValueError("Invalid backup contents or backup larger than 64 MB")
             manifest = json_util.loads(archive.read("manifest.json"))
-            if not isinstance(manifest, dict) or manifest.get("format") != "bws-business-backup" or manifest.get("version") != 1:
+            if not isinstance(manifest, dict) or manifest.get("format") != "bws-business-backup" or manifest.get("version") not in {1, 2}:
                 raise ValueError("Unsupported backup format")
-            data = {name: json_util.loads(archive.read(name + ".json")) for name in COLLECTIONS}
+            data = {name: json_util.loads(archive.read(name + ".json")) if name + ".json" in names else [] for name in COLLECTIONS}
         total = 0
         for name, rows in data.items():
             if not isinstance(rows, list) or len(rows) > MAX_ROWS:
@@ -70,9 +72,11 @@ def read_archive(raw):
                     raise ValueError("Duplicate record in backup")
                 seen.add(key)
                 if name in MODELS:
-                    MODELS[name].model_validate(row)
+                    MODELS[name].model_validate({k: v for k, v in row.items() if (name != "documents" or k != "file_data") and (name != "payroll" or k != "input_hash")})
                 if name in {"resume_files", "client_logos"} and (not isinstance(row.get("data"), bytes) or len(row["data"]) > 2 * 1024 * 1024):
                     raise ValueError("Invalid attachment")
+                if name == "documents" and row.get("file_data") is not None and (not isinstance(row["file_data"], bytes) or len(row["file_data"]) > 5 * 1024 * 1024):
+                    raise ValueError("Invalid document attachment")
                 if name == "settings":
                     if row["id"] == "invoice_profile" and not (set(row) - {"id", "profile"}):
                         InvoiceProfile.model_validate(row.get("profile", {}))
@@ -135,7 +139,7 @@ async def download_backup():
                 missing.append(worker["id"])
     if sum(len(rows) for rows in data.values()) > MAX_ROWS:
         raise HTTPException(413, "This backup has too many records. Ask your website maintainer for a database export.")
-    manifest = {"format": "bws-business-backup", "version": 1, "created_at": datetime.now(timezone.utc),
+    manifest = {"format": "bws-business-backup", "version": 2, "created_at": datetime.now(timezone.utc),
                 "counts": {name: len(rows) for name, rows in data.items()}, "missing_resume_ids": missing,
                 "excludes": ["login credentials", "sessions", "email credentials", "analytics", "hosting configuration"],
                 "restore": "Adds missing records only; never replaces existing records. Keep a separate database backup for disaster recovery."}

@@ -7,9 +7,10 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from pathlib import Path
 from uuid import UUID
+from typing import Literal
 
 from bson.binary import Binary
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, Response, UploadFile
 from pydantic import BaseModel
 from pymongo import ReturnDocument
 from pymongo.errors import DuplicateKeyError
@@ -31,6 +32,9 @@ class Expense(BaseModel):
     description: str
     amount: str
     bill_filename: str | None = None
+    company_id: str | None = None
+    company_name: str | None = None
+    cost_type: Literal["Operating", "Payroll"] = "Operating"
     revision: int
     created_at: datetime
 
@@ -69,6 +73,15 @@ def expense_values(expense_date: str, description: str, amount: str) -> dict:
             "amount_paise": int(Decimal(amount) * 100)}
 
 
+async def attribution(company_id, cost_type):
+    if not company_id:
+        return {"company_id": None, "company_name": None, "cost_type": cost_type}
+    company = await db.clients.find_one({"id": company_id})
+    if not company:
+        raise HTTPException(404, "Company not found")
+    return {"company_id": company_id, "company_name": company["name"], "cost_type": cost_type}
+
+
 async def bill_values(file: UploadFile | None) -> dict:
     if file is None:
         return {}
@@ -100,9 +113,10 @@ async def list_expenses(month: str = Query(pattern=MONTH_PATTERN), page: int = Q
 
 
 @router.post("", response_model=Expense)
-async def create_expense(request_id: UUID = Form(), expense_date: str = Form(), description: str = Form(),
-                         amount: str = Form(), file: UploadFile | None = File(default=None)):
-    values = expense_values(expense_date, description, amount)
+async def create_expense(request: Request, request_id: UUID = Form(), expense_date: str = Form(), description: str = Form(),
+                         amount: str = Form(), file: UploadFile | None = File(default=None), company_id: str | None = Form(default=None), cost_type: Literal["Operating", "Payroll"] = Form(default="Operating")):
+    values = {**expense_values(expense_date, description, amount), **await attribution(company_id, cost_type)}
+    request.state.audit_subject = f"{request_id} · {values['description']} · {expense_date}"
     bill = await bill_values(file)
     digest = hashlib.sha256(json.dumps(values, sort_keys=True).encode() + bytes(bill.get("bill_data", b""))).hexdigest()
     expense_id = str(request_id)
@@ -126,9 +140,10 @@ async def create_expense(request_id: UUID = Form(), expense_date: str = Form(), 
 
 
 @router.put("/{expense_id}", response_model=Expense)
-async def update_expense(expense_id: UUID, expense_date: str = Form(), description: str = Form(),
-                         amount: str = Form(), revision: int = Form(ge=1), file: UploadFile | None = File(default=None)):
-    changes = {**expense_values(expense_date, description, amount), **await bill_values(file),
+async def update_expense(expense_id: UUID, request: Request, expense_date: str = Form(), description: str = Form(),
+                         amount: str = Form(), revision: int = Form(ge=1), file: UploadFile | None = File(default=None), company_id: str | None = Form(default=None), cost_type: Literal["Operating", "Payroll"] = Form(default="Operating")):
+    request.state.audit_subject = f"{expense_id} · {description[:200]} · {expense_date}"
+    changes = {**expense_values(expense_date, description, amount), **await attribution(company_id, cost_type), **await bill_values(file),
                "updated_at": datetime.now(timezone.utc)}
     doc = await db.expenses.find_one_and_update({"_id": str(expense_id), "revision": revision},
         {"$set": changes, "$inc": {"revision": 1}}, return_document=ReturnDocument.AFTER,

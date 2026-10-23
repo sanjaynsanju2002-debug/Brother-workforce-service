@@ -20,8 +20,8 @@ it("renders the employee register and the selected employee's editable details w
     payroll: { id: "register", company_id: "company", company_name: "Example Manufacturing", company_location: "Mysore", month: "2026-10", notes: "Approved attendance", lines, totals, revision: 1, created_at: "2026-10-16T00:00:00Z", updated_at: "2026-10-16T00:00:00Z" },
   };
   const input: PayrollInput = {
-    company_id: "company", month: "2026-10", notes: draft.payroll!.notes,
-    lines: lines.map(({ assignment_id, worked_days, daily_rate, esi_percentage, pf_percentage }) => ({ assignment_id, worked_days, daily_rate, esi_percentage, pf_percentage })),
+    company_id: "company", month: "2026-10", notes: draft.payroll!.notes, cost_responsibility: "Agency", attendance_refs: {},
+    lines: lines.map(({ assignment_id, worked_days, daily_rate, esi_percentage, pf_percentage }) => ({ assignment_id, worked_days, daily_rate, esi_percentage, pf_percentage, overtime_hours: "0", overtime_rate: "0" })),
   };
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
   client.setQueryData(["payroll-preview", input], { lines, totals });

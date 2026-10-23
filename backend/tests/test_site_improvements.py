@@ -16,7 +16,7 @@ os.environ.setdefault("DB_NAME", "bws_improvements_test")
 from lib import auth
 from lib.workforce import reconcile_companies, reconcile_workforce
 from models.bws import Worker
-from routers import admin, assignments, backups, clients, invoices, payroll, public, service_info, team
+from routers import admin, assignments, backups, clients, invoices, payroll, public, service_info, team, operations, payments
 from server import app
 from tests.test_admin_session_and_application import FakeDB
 from tests.test_invoices import payload as invoice_payload
@@ -51,7 +51,7 @@ def business(monkeypatch):
         setattr(fake, name, collection)
     fake.jobs.records = []
     fake.company_requests.records = []
-    for module in (auth, admin, assignments, backups, clients, invoices, payroll, public, service_info, team):
+    for module in (auth, admin, assignments, backups, clients, invoices, payroll, public, service_info, team, operations, payments):
         monkeypatch.setattr(module, "db", fake)
 
     async def no_notification(*args, **kwargs):

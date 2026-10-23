@@ -1,0 +1,332 @@
+"""Attendance approval, staffing, recruitment, private documents and daily operations."""
+from datetime import date, datetime, timedelta, timezone
+from decimal import Decimal
+from uuid import NAMESPACE_URL, UUID, uuid5
+
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, Response, UploadFile
+from pymongo.errors import DuplicateKeyError
+
+from lib.auth import require_admin, require_owner
+from lib.db import db
+from lib.ledger import amount, money, received, salary_paid, today
+from lib.months import MONTH_PATTERN, service_month
+from models.operations import AttendanceInput, AttendanceRecord, DocumentInput, DocumentRecord, RecruitmentInput, RecruitmentRecord, RequirementInput, RequirementRecord, VersionInput
+
+router = APIRouter(prefix="/admin/operations", dependencies=[Depends(require_admin)])
+CONFLICT = "This record changed in another session. Reload it before saving."
+
+
+def key(*parts):
+    return str(uuid5(NAMESPACE_URL, "bws:operations:" + ":".join(str(p) for p in parts)))
+
+
+def clean(doc):
+    return {k: v for k, v in doc.items() if k not in {"_id", "file_data"}}
+
+
+async def company(company_id, active=True):
+    query = {"id": company_id}
+    if active:
+        query["archived"] = {"$ne": True}
+    doc = await db.clients.find_one(query)
+    if not doc:
+        raise HTTPException(404, "Company not found. Add or restore it in Company Workforce.")
+    return doc
+
+
+async def write_record(collection, record_id, values, revision):
+    coll = db[collection]
+    existing = await coll.find_one({"id": record_id})
+    if (existing and existing.get("revision") != revision) or (not existing and revision is not None):
+        raise HTTPException(409, CONFLICT)
+    now = datetime.now(timezone.utc).isoformat()
+    doc = {**values, "id": record_id, "revision": (revision or 0) + 1,
+           "created_at": existing["created_at"] if existing else now, "updated_at": now}
+    if existing:
+        result = await coll.update_one({"id": record_id, "revision": revision}, {"$set": doc})
+        if not result.matched_count:
+            raise HTTPException(409, CONFLICT)
+        return {**clean(existing), **doc}
+    try:
+        await coll.insert_one({"_id": record_id, **doc})
+    except DuplicateKeyError:
+        raise HTTPException(409, CONFLICT)
+    return doc
+
+
+def active_on(row, day):
+    if row.get("company_archived") or (row.get("start_date") and row["start_date"] > day):
+        return False
+    if row.get("end_date") and row["end_date"] < day:
+        return False
+    return row.get("status", "Active") == "Active" or bool(row.get("end_date"))
+
+
+async def roster(company_id, day):
+    records = await db.assignments.find({"client_id": company_id}, {"_id": 0}).to_list(2001)
+    if len(records) > 2000:
+        raise HTTPException(422, "Attendance supports up to 2000 employees per company")
+    return [r for r in records if active_on(r, day)]
+
+
+@router.get("/attendance")
+async def attendance_draft(company_id: str, attendance_date: date):
+    c = await company(company_id, active=False)
+    day = attendance_date.isoformat()
+    saved = await db.attendance.find_one({"id": key("attendance", company_id, day)}, {"_id": 0})
+    return {"company_name": c["name"], "employees": await roster(company_id, day), "sheet": saved}
+
+
+@router.put("/attendance", response_model=AttendanceRecord)
+async def save_attendance(payload: AttendanceInput):
+    c = await company(payload.company_id)
+    day = payload.attendance_date.isoformat()
+    sheet_id = key("attendance", payload.company_id, day)
+    existing = await db.attendance.find_one({"id": sheet_id})
+    if existing and existing["status"] == "Approved":
+        raise HTTPException(409, "Reopen the approved sheet before changing attendance")
+    people = {p["id"]: p for p in await roster(payload.company_id, day)}
+    if set(people) != {r.assignment_id for r in payload.rows}:
+        raise HTTPException(409, "The workforce changed. Reload attendance and review every employee for this date.")
+    rows = [{**row.model_dump(mode="json"), "full_name": people[row.assignment_id]["full_name"],
+             "worker_id": people[row.assignment_id].get("worker_id"), "role": people[row.assignment_id].get("role") or ""} for row in payload.rows]
+    return await write_record("attendance", sheet_id, {"company_id": payload.company_id, "company_name": c["name"],
+        "attendance_date": day, "rows": rows, "notes": payload.notes, "status": "Draft", "approved_by": None, "approved_at": None}, payload.revision)
+
+
+@router.post("/attendance/{sheet_id}/{action}", response_model=AttendanceRecord)
+async def attendance_action(sheet_id: str, action: str, payload: VersionInput, request: Request):
+    if action not in {"approve", "reopen"}:
+        raise HTTPException(404, "Choose approve or reopen")
+    doc = await db.attendance.find_one({"id": sheet_id})
+    if not doc:
+        raise HTTPException(404, "Attendance not found")
+    await company(doc["company_id"])
+    if action == "approve":
+        if doc["status"] != "Draft" or doc["attendance_date"] > today():
+            raise HTTPException(422, "Only a draft for today or an earlier date can be approved")
+        if any(r["status"] == "Unmarked" for r in doc["rows"]):
+            raise HTTPException(422, "Mark every employee before approving attendance")
+        if {r["assignment_id"] for r in doc["rows"]} != {r["id"] for r in await roster(doc["company_id"], doc["attendance_date"])}:
+            raise HTTPException(409, "The workforce changed. Reload and save the attendance draft again.")
+    elif doc["status"] != "Approved":
+        raise HTTPException(422, "This sheet is already a draft")
+    values = {k: v for k, v in clean(doc).items() if k not in {"id", "revision", "created_at", "updated_at"}}
+    values.update(status="Approved" if action == "approve" else "Draft",
+                  approved_by=request.state.admin["name"] if action == "approve" else None,
+                  approved_at=datetime.now(timezone.utc).isoformat() if action == "approve" else None)
+    return await write_record("attendance", sheet_id, values, payload.revision)
+
+
+async def attendance_totals(company_id, month):
+    sheets = await db.attendance.find({"company_id": company_id, "status": "Approved", "attendance_date": {"$gte": month + "-01", "$lt": month + "-32"}}, {"_id": 0}).sort("attendance_date", 1).to_list(32)
+    people = {}
+    for sheet in sheets:
+        for row in sheet["rows"]:
+            summary = people.setdefault(row["assignment_id"], {"assignment_id": row["assignment_id"], "full_name": row["full_name"], "worked_days": Decimal("0"), "overtime_hours": Decimal("0")})
+            summary["worked_days"] += {"Present": Decimal("1"), "Half-day": Decimal("0.5")}.get(row["status"], Decimal("0"))
+            summary["overtime_hours"] += amount(row.get("overtime_hours"))
+    return {"lines": [{**r, "worked_days": money(r["worked_days"]), "overtime_hours": money(r["overtime_hours"])} for r in people.values()],
+            "sheets": [{"id": s["id"], "date": s["attendance_date"], "revision": s["revision"]} for s in sheets],
+            "approved_days": len(sheets)}
+
+
+@router.get("/attendance-summary")
+async def approved_attendance(company_id: str, month: str = Query(pattern=MONTH_PATTERN)):
+    await company(company_id, active=False)
+    return await attendance_totals(company_id, month)
+
+
+@router.get("/requirements")
+async def requirements():
+    docs = await db.staffing_requirements.find({}, {"_id": 0}).sort("updated_at", -1).to_list(2000)
+    companies = {c["id"]: c for c in await db.clients.find({}, {"id": 1, "archived": 1}).to_list(None)}
+    assignments = await db.assignments.find({}, {"_id": 0}).to_list(None)
+    sheets = await db.attendance.find({"attendance_date": today(), "status": "Approved"}, {"company_id": 1, "rows": 1}).to_list(None)
+    present = {s["company_id"]: {r["assignment_id"] for r in s["rows"] if r["status"] in {"Present", "Half-day"}} for s in sheets}
+    result = []
+    for d in docs:
+        deployed = [a for a in assignments if a["client_id"] == d["company_id"] and a.get("status", "Active") == "Active" and active_on(a, today()) and " ".join((a.get("role") or "").casefold().split()) == " ".join(d["role"].casefold().split())]
+        archived = not companies.get(d["company_id"]) or companies[d["company_id"]].get("archived", False)
+        result.append({**d, "company_archived": archived, "deployed": len(deployed),
+                       "present": sum(a["id"] in present[d["company_id"]] for a in deployed) if d["company_id"] in present else None,
+                       "shortage": max(0, d["required_count"] - len(deployed))})
+    return result
+
+
+@router.put("/requirements", response_model=RequirementRecord)
+async def save_requirement(payload: RequirementInput):
+    record_id = key("requirement", payload.company_id, " ".join(payload.role.casefold().split()))
+    existing = await db.staffing_requirements.find_one({"id": record_id})
+    c = await company(payload.company_id, active=not bool(existing))
+    if c.get("archived") and payload.status == "Open":
+        raise HTTPException(422, "Restore the company before reopening its staffing target")
+    return await write_record("staffing_requirements", record_id, {**payload.model_dump(mode="json", exclude={"revision"}), "company_name": c["name"]}, payload.revision)
+
+
+@router.get("/recruitment")
+async def recruitment():
+    return await db.recruitment.find({}, {"_id": 0}).sort("updated_at", -1).to_list(2000)
+
+
+@router.put("/recruitment", response_model=RecruitmentRecord)
+async def save_recruitment(payload: RecruitmentInput):
+    record_id = key("recruitment", payload.worker_id, payload.company_id or "", payload.job_id or "", payload.shortlist_id or "")
+    existing = await db.recruitment.find_one({"id": record_id})
+    worker = await db.workers.find_one({"id": payload.worker_id})
+    if existing and not worker:
+        worker = {"full_name": existing["worker_name"]}
+    if not worker or (worker.get("status") == "Archived" and not existing):
+        raise HTTPException(404, "Worker profile not found or archived")
+    c = await company(payload.company_id, active=not bool(existing)) if payload.company_id else None
+    job = await db.jobs.find_one({"id": payload.job_id}) if payload.job_id else None
+    shortlist = await db.shortlists.find_one({"id": payload.shortlist_id}) if payload.shortlist_id else None
+    if (payload.job_id and not job and not existing) or (payload.shortlist_id and not shortlist and not existing):
+        raise HTTPException(404, "The selected job or shortlist no longer exists")
+    return await write_record("recruitment", record_id, {**payload.model_dump(mode="json", exclude={"revision"}), "worker_name": worker["full_name"],
+        "company_name": c["name"] if c else "", "job_title": job["title"] if job else (existing or {}).get("job_title", ""), "shortlist_name": shortlist["name"] if shortlist else (existing or {}).get("shortlist_name", "")}, payload.revision)
+
+
+@router.get("/documents")
+async def documents():
+    return await db.documents.find({}, {"_id": 0, "file_data": 0}).sort("updated_at", -1).to_list(2000)
+
+
+@router.put("/documents/{document_id}", response_model=DocumentRecord)
+async def save_document(document_id: UUID, payload: DocumentInput):
+    old = await db.documents.find_one({"id": str(document_id)}, {"file_data": 0})
+    c = await company(payload.company_id, active=not bool(old)) if payload.company_id else await db.workers.find_one({"id": payload.worker_id})
+    if not c and old and old.get("worker_id") == payload.worker_id:
+        c = {"full_name": old["entity_name"]}
+    if not c:
+        raise HTTPException(404, "Worker profile not found")
+    if old and (old.get("company_id") != payload.company_id or old.get("worker_id") != payload.worker_id):
+        raise HTTPException(422, "Keep this document linked to its original company or worker")
+    values = {**payload.model_dump(mode="json", exclude={"revision"}), "entity_name": c.get("name") or c["full_name"]}
+    return await write_record("documents", str(document_id), values, payload.revision)
+
+
+@router.post("/documents/{document_id}/file", response_model=DocumentRecord)
+async def attach_document(document_id: UUID, revision: int = Query(ge=1), file: UploadFile = File()):
+    from routers.expenses import bill_values
+    upload = await bill_values(file)
+    doc = await db.documents.find_one({"id": str(document_id)}, {"file_data": 0})
+    if not doc:
+        raise HTTPException(404, "Document not found")
+    result = await db.documents.update_one({"id": str(document_id), "revision": revision}, {"$set": {
+        "file_data": upload["bill_data"], "filename": upload["bill_filename"], "content_type": upload["bill_content_type"],
+        "status": "Received", "updated_at": datetime.now(timezone.utc).isoformat()}, "$inc": {"revision": 1}})
+    if not result.matched_count:
+        raise HTTPException(409, CONFLICT)
+    return clean(await db.documents.find_one({"id": str(document_id)}))
+
+
+@router.get("/documents/{document_id}/file")
+async def download_document(document_id: UUID):
+    doc = await db.documents.find_one({"id": str(document_id)})
+    if not doc or not doc.get("file_data"):
+        raise HTTPException(404, "No file is attached")
+    return Response(bytes(doc["file_data"]), media_type=doc["content_type"], headers={
+        "Content-Disposition": f'attachment; filename="{doc["filename"]}"', "Cache-Control": "private, no-store"})
+
+
+@router.delete("/documents/{document_id}", status_code=204)
+async def delete_document(document_id: UUID, revision: int = Query(ge=1)):
+    result = await db.documents.delete_one({"id": str(document_id), "revision": revision})
+    if not result.deleted_count:
+        raise HTTPException(409, CONFLICT)
+    return Response(status_code=204)
+
+
+@router.get("/activity", dependencies=[Depends(require_owner)])
+async def activity(page: int = Query(1, ge=1), q: str = Query("", max_length=100)):
+    import re
+    query = {"$or": [{f: {"$regex": re.escape(q.strip()), "$options": "i"}} for f in ("actor", "path", "action", "subject")]} if q.strip() else {}
+    return {"items": await db.audit_events.find(query, {"_id": 0}).sort("at", -1).skip((page - 1) * 50).limit(50).to_list(50),
+            "total": await db.audit_events.count_documents(query), "page": page}
+
+
+@router.get("/profitability")
+async def profitability(month: str = Query(pattern=MONTH_PATTERN)):
+    companies = await db.clients.find({}, {"id": 1, "name": 1, "archived": 1}).to_list(None)
+    rows = {c["id"]: {"company_id": c["id"], "company_name": c["name"], "archived": c.get("archived", False),
+            "revenue": Decimal("0"), "payroll_cost": Decimal("0"), "operating_expenses": Decimal("0"), "salary_cash_expenses": Decimal("0"), "payroll_registers": 0, "invoice_count": 0} for c in companies}
+    def row_for(cid, name):
+        return rows.setdefault(cid or "unassigned", {"company_id": cid, "company_name": name if cid else "Unassigned company", "archived": False,
+            "revenue": Decimal("0"), "payroll_cost": Decimal("0"), "operating_expenses": Decimal("0"), "salary_cash_expenses": Decimal("0"), "payroll_registers": 0, "invoice_count": 0})
+    unassigned_month = Decimal("0")
+    async for inv in db.invoices.find({}, {"company_id": 1, "client_name": 1, "totals": 1, "service_month": 1, "billing_period": 1}):
+        attributed = service_month(inv)
+        if attributed is None:
+            unassigned_month += amount(inv["totals"]["subtotal"])
+        elif attributed == month:
+            r = row_for(inv.get("company_id"), inv.get("client_name", "Company"))
+            r["revenue"] += amount(inv["totals"]["subtotal"])
+            r["invoice_count"] += 1
+    async for p in db.payroll.find({"month": month}, {"company_id": 1, "company_name": 1, "totals": 1, "cost_responsibility": 1}):
+        r = row_for(p["company_id"], p["company_name"])
+        r["payroll_registers"] += 1
+        if p.get("cost_responsibility", "Agency") == "Agency":
+            r["payroll_cost"] += amount(p["totals"]["gross_wages"])
+    async for e in db.expenses.find({"month": month}, {"company_id": 1, "company_name": 1, "amount_paise": 1, "cost_type": 1}):
+        r = row_for(e.get("company_id"), e.get("company_name", "Company"))
+        r["salary_cash_expenses" if e.get("cost_type") == "Payroll" else "operating_expenses"] += Decimal(e["amount_paise"]) / 100
+    data = []
+    for r in rows.values():
+        r["profit"] = r["revenue"] - r["payroll_cost"] - r["operating_expenses"]
+        if r["invoice_count"] or r["payroll_registers"] or r["operating_expenses"] or r["salary_cash_expenses"]:
+            data.append({k: money(v) if isinstance(v, Decimal) else v for k, v in r.items()})
+    return {"month": month, "items": sorted(data, key=lambda r: r["company_name"].casefold()), "unassigned_month_revenue": money(unassigned_month)}
+
+
+@router.get("/overview")
+async def overview():
+    day = today()
+    month = day[:7]
+    assignments = [a for a in await db.assignments.find({}, {"_id": 0}).to_list(None) if a.get("status", "Active") == "Active" and active_on(a, day)]
+    sheets = await db.attendance.find({"attendance_date": day}, {"_id": 0}).to_list(None)
+    approved = [s for s in sheets if s["status"] == "Approved"]
+    assignment_ids = {a["id"] for a in assignments}
+    marked = [r for s in approved for r in s["rows"] if r["assignment_id"] in assignment_ids]
+    invoices = await db.invoices.find({}, {"id": 1, "client_name": 1, "invoice_number": 1, "totals": 1, "payments": 1, "opening_paid_amount": 1, "payment_status": 1, "due_date": 1, "follow_up_date": 1}).to_list(None)
+    payrolls = await db.payroll.find({"month": month, "cost_responsibility": {"$ne": "Client"}}, {"_id": 0}).to_list(None)
+    receipts = sum((amount(p["amount"]) for i in invoices for p in i.get("payments", []) if not p.get("voided_at") and p["payment_date"].startswith(month)), Decimal("0"))
+    balances = [(i, max(Decimal("0"), amount(i["totals"]["total"]) - received(i))) for i in invoices]
+    reqs = [r for r in await requirements() if r["status"] == "Open" and not r["company_archived"]]
+    reminders = []
+    active_company_ids = {c["id"] for c in await db.clients.find({"archived": {"$ne": True}}, {"id": 1}).to_list(None)}
+    for collection, label, title_field, link in (("staffing_requirements", "Staffing", "role", "requirements"), ("recruitment", "Recruitment", "worker_name", "recruitment"), ("documents", "Document", "title", "documents")):
+        async for d in db[collection].find({"follow_up_date": {"$ne": None}}, {"file_data": 0}):
+            if collection in {"staffing_requirements", "recruitment"} and d.get("company_id") and d["company_id"] not in active_company_ids:
+                continue
+            due = d.get("follow_up_date")
+            if due and due <= day and d.get("status") not in {"Closed", "Not required"} and d.get("stage") not in {"Joined", "Rejected", "Withdrawn"}:
+                reminders.append({"id": d["id"], "kind": label, "title": d[title_field], "date": due, "tab": link})
+    for inv, balance in balances:
+        due = inv.get("follow_up_date") or inv.get("due_date")
+        if balance > 0 and due and due <= day:
+            reminders.append({"id": inv["id"], "kind": "Client payment", "title": f'{inv["client_name"]} · {inv["invoice_number"]} · {money(balance)} INR', "date": due, "tab": "invoices"})
+    async for rec in db.recruitment.find({"stage": {"$in": ["Interview", "Joining Scheduled"]}}, {"_id": 0}):
+        if rec.get("company_id") and rec["company_id"] not in active_company_ids:
+            continue
+        scheduled = rec.get("interview_date") if rec["stage"] == "Interview" else rec.get("joining_date")
+        if scheduled and scheduled <= day and not (rec.get("follow_up_date") and rec["follow_up_date"] <= day):
+            reminders.append({"id": rec["id"] + "-scheduled", "kind": rec["stage"], "title": rec["worker_name"] + " · " + (rec.get("company_name") or rec.get("job_title") or rec.get("shortlist_name") or "Recruitment"), "date": scheduled, "tab": "recruitment"})
+    cutoff = (date.fromisoformat(day) + timedelta(days=30)).isoformat()
+    expiring = await db.documents.find({"expiry_date": {"$ne": None}, "status": {"$ne": "Not required"}}, {"file_data": 0}).to_list(None)
+    for doc in expiring:
+        if doc.get("expiry_date") and doc["expiry_date"] <= cutoff:
+            reminders.append({"id": doc["id"] + "-expiry", "kind": "Document expiry", "title": f'{doc["entity_name"]} · {doc["title"]}', "date": doc["expiry_date"], "tab": "documents"})
+    payable = sum((amount(p["totals"]["payable"]) for p in payrolls), Decimal("0"))
+    paid = sum((salary_paid(p) for p in payrolls), Decimal("0"))
+    return {"date": day, "month": month, "deployed_workers": len({a.get("worker_id") or a["id"] for a in assignments}), "deployments": len(assignments),
+            "available_workers": await db.workers.count_documents({"status": "Available"}),
+            "absent": sum(r["status"] == "Absent" for r in marked), "leave": sum(r["status"] == "Leave" for r in marked),
+            "half_days": sum(r["status"] == "Half-day" for r in marked), "unmarked": len(assignment_ids - {r["assignment_id"] for r in marked}),
+            "draft_sheets": sum(s["status"] == "Draft" for s in sheets), "shortages": sum(r["shortage"] for r in reqs),
+            "receipts_month": money(receipts), "outstanding": money(sum((b for _, b in balances), Decimal("0"))),
+            "overdue": money(sum((b for i, b in balances if i.get("due_date") and i["due_date"] < day), Decimal("0"))),
+            "salary_payable": money(payable), "salary_paid": money(paid), "salary_balance": money(max(Decimal("0"), payable - paid)),
+            "missing_documents": await db.documents.count_documents({"status": "Missing"}),
+            "expiring_documents": sum(bool(d.get("expiry_date")) and d["expiry_date"] <= cutoff for d in expiring),
+            "reminders": sorted(reminders, key=lambda r: r["date"]), "requirements": reqs}

@@ -14,6 +14,7 @@ it("saves and edits historical dates, then displays the expense in its new month
   const requests: { method: string; date: string }[] = [];
   vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
     const method = init?.method || "GET";
+    if (url === "/api/admin/clients") return new Response("[]");
     if (method === "POST" || method === "PUT") {
       const body = init!.body as FormData;
       const date = String(body.get("expense_date"));

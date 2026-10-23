@@ -15,6 +15,7 @@ from lib.auth import require_admin
 from lib.db import db
 from lib.invoices import InvoiceProfile
 from lib.months import MONTH_PATTERN
+from lib.ledger import salary_paid, amount
 from lib.payroll import MAX_EMPLOYEES, Payroll, PayrollEmployee, PayrollInput, PayrollLine, PayrollSave, calculate_payroll
 
 router = APIRouter(prefix="/admin/payroll", dependencies=[Depends(require_admin)])
@@ -96,12 +97,24 @@ async def save_payroll(payload: PayrollSave):
         raise HTTPException(422, "Select employees and enter worked days for at least one employee")
     if any(line.worked_days > 0 and line.daily_rate == 0 for line in payload.lines):
         raise HTTPException(422, "Enter a daily rate for every employee with worked days")
+    if any(line.overtime_hours > 0 and line.overtime_rate == 0 for line in payload.lines):
+        raise HTTPException(422, "Enter an hourly overtime rate for every employee with overtime")
+    if payload.attendance_refs:
+        from routers.operations import attendance_totals
+        summary = await attendance_totals(payload.company_id, payload.month)
+        if payload.attendance_refs != {s["id"]: s["revision"] for s in summary["sheets"]}:
+            raise HTTPException(409, "Approved attendance changed. Import it again before saving payroll.")
+        by_id = {r["assignment_id"]: r for r in summary["lines"]}
+        for line in payload.lines:
+            imported = by_id.get(line.assignment_id)
+            if imported and (line.worked_days != amount(imported["worked_days"]) or line.overtime_hours != amount(imported["overtime_hours"])):
+                raise HTTPException(422, "Attendance-linked payroll must match approved days and overtime. Re-import attendance or choose manual attendance.")
     run_id = register_id(payload.company_id, payload.month)
     existing = await db.payroll.find_one({"_id": run_id})
     data = payload.model_dump(mode="json", exclude={"revision", "created_at"})
     data["lines"] = sorted(data["lines"], key=lambda line: line["assignment_id"])
     fingerprint = hashlib.sha256(json.dumps(data, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
-    if existing and existing.get("input_hash") == fingerprint:
+    if existing and existing.get("input_hash") == fingerprint and (payload.revision in {existing["revision"], existing["revision"] - 1} or (existing["revision"] == 1 and payload.revision is None)):
         return record_model(existing)
     if (existing and payload.revision != existing["revision"]) or (not existing and payload.revision is not None):
         raise HTTPException(409, CONFLICT)
@@ -127,6 +140,13 @@ async def save_payroll(payload: PayrollSave):
     amounts = {row.assignment_id: row.model_dump(exclude={"assignment_id"}) for row in calculated}
     lines = [PayrollLine(**people[line.assignment_id].model_dump(), **line.model_dump(exclude={"assignment_id"}), **amounts[line.assignment_id]) for line in payload.lines]
     if old:
+        payable_by_id = {line.assignment_id: line.payable for line in lines}
+        for paid_line in old.lines:
+            paid = salary_paid(existing, paid_line.assignment_id)
+            if paid > payable_by_id.get(paid_line.assignment_id, 0):
+                raise HTTPException(422, "This edit removes or reduces salary below payments already recorded. Void incorrect payments first.")
+        if salary_paid(existing) > 0 and payload.cost_responsibility != old.cost_responsibility:
+            raise HTTPException(422, "Void recorded salary payments before changing who pays salaries")
         supplier = old.supplier
     else:
         settings = await db.settings.find_one({"id": "invoice_profile"})
@@ -136,6 +156,7 @@ async def save_payroll(payload: PayrollSave):
         id=run_id, company_id=payload.company_id, company_name=old.company_name if old else company["name"],
         company_location=old.company_location if old else (company.get("location") or ""),
         month=payload.month, supplier=supplier, lines=lines, notes=payload.notes, totals=totals,
+        attendance_refs=payload.attendance_refs, cost_responsibility=payload.cost_responsibility, salary_payments=old.salary_payments if old else [],
         revision=old.revision + 1 if old else 1, created_at=old.created_at if old else now, updated_at=now,
     )
     record = {**payroll.model_dump(mode="json"), "input_hash": fingerprint}
@@ -165,6 +186,8 @@ async def delete_payroll(run_id: str, revision: int = Query(ge=1), updated_at: A
     if not doc:
         raise HTTPException(404, "Payroll not found")
     saved = record_model(doc)
+    if doc.get("salary_payments"):
+        raise HTTPException(409, "Payroll with a salary payment history must be kept. Correct entries in the Salary Payments register.")
     conflict = "This payroll changed in another session. Refresh saved payroll before deleting it."
     if saved.revision != revision or saved.updated_at != updated_at:
         raise HTTPException(409, conflict)

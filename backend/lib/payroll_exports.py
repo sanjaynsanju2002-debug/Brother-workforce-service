@@ -87,10 +87,10 @@ def export_payroll_xlsx(payroll: Payroll) -> bytes:
         for number, length, chars in ((9, len(payroll.company_name) + 9, 85), (10, len(payroll.company_location) + 10, 85)):
             next(row for row in data if row.get("r") == str(number)).set("ht", str(max(22, 14 * ((length + chars - 1) // chars))))
         for offset, line in enumerate(payroll.lines, 16):
-            for col, value in {"A": offset - 15, "B": line.employee_id or "", "C": line.full_name, "D": line.worked_days, "E": line.daily_rate, "G": line.esi_percentage, "I": line.pf_percentage}.items():
+            for col, value in {"A": offset - 15, "B": line.employee_id or "", "C": line.full_name + (f" | OT {line.overtime_hours.normalize():g} h x INR {line.overtime_rate}" if line.overtime_hours else ""), "D": line.worked_days, "E": line.daily_rate, "G": line.esi_percentage, "I": line.pf_percentage}.items():
                 write(f"{col}{offset}", value)
             for col, value, formula in (
-                ("F", line.gross_wages, f"ROUND(D{offset}*E{offset},2)"),
+                ("F", line.gross_wages, (f"ROUND(D{offset}*E{offset}+{line.overtime_hours * line.overtime_rate},2)" if line.overtime_hours else f"ROUND(D{offset}*E{offset},2)")),
                 ("H", line.esi_deduction, f"ROUND(F{offset}*G{offset}/100,2)"),
                 ("J", line.pf_deduction, f"ROUND(F{offset}*I{offset}/100,2)"),
                 ("K", line.payable, f"F{offset}-H{offset}-J{offset}"),
@@ -230,7 +230,7 @@ def export_payroll_pdf(payroll: Payroll) -> bytes:
     labels = ("No.", "Employee ID", "Employee name", "Worked days", "Daily rate (INR)", "Gross wages (INR)", "ESI %", "ESI deduction (INR)", "PF %", "PF deduction (INR)", "Payable (INR)")
     rows = [[p(label, tablehead) for label in labels]]
     for number, line in enumerate(payroll.lines, 1):
-        rows.append([p(number, center), p(line.employee_id or "—"), p(line.full_name), p(f"{line.worked_days:g}", center),
+        rows.append([p(number, center), p(line.employee_id or "—"), p(line.full_name + (f"\nOT: {line.overtime_hours.normalize():g} h x INR {money(line.overtime_rate)}" if line.overtime_hours else "")), p(f"{line.worked_days:g}", center),
                      p(money(line.daily_rate)), p(money(line.gross_wages)), p(f"{line.esi_percentage:g}", center),
                      p(money(line.esi_deduction)), p(f"{line.pf_percentage:g}", center), p(money(line.pf_deduction)), p(money(line.payable), bold)])
     rows.append([p("TOTAL", bold), "", "", p(f"{totals.worked_days:g}", center), "", p(money(totals.gross_wages), bold), "", p(money(totals.esi_deduction), bold), "", p(money(totals.pf_deduction), bold), p(money(totals.payable), bold)])
@@ -241,7 +241,7 @@ def export_payroll_pdf(payroll: Payroll) -> bytes:
                                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("LINEBELOW", (0, 1), (-1, -1), .3, colors.HexColor("#E2E8F0")),
                                ("TOPPADDING", (0, 0), (-1, -1), 4), ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
                                ("LEFTPADDING", (0, 0), (-1, -1), 4), ("RIGHTPADDING", (0, 0), (-1, -1), 4)]))
-    story.extend([table, Spacer(1, 10), p("Gross wages = worked days x daily rate. ESI and PF each use the entered percentage of gross wages. Payable = gross wages - ESI - PF.", muted_style)])
+    story.extend([table, Spacer(1, 10), p("Gross wages = worked days x daily rate + overtime hours x overtime hourly rate. ESI and PF each use the entered percentage of gross wages. Payable = gross wages - ESI - PF.", muted_style)])
     if payroll.notes:
         story.append(KeepTogether([Spacer(1, 7), p("Notes", bold), p(payroll.notes)]))
 

@@ -123,6 +123,14 @@ async def require_admin(request: Request) -> None:
     else:
         principal = {"user_id": None, "name": "Owner", "role": "owner"}
     request.state.admin = principal
+    if request.headers.get("content-type", "").startswith("application/json") and request.method in {"POST", "PUT", "PATCH"} and not any(p in request.url.path for p in ("security", "login", "email")):
+        try:
+            body = await request.json()
+            if isinstance(body, dict):
+                names = [str(body[k])[:150] for k in ("invoice_number", "title", "name", "username", "full_name", "role", "company_id", "worker_id", "month", "request_id") if body.get(k)]
+                request.state.audit_subject = " · ".join(names)[:700]
+        except (ValueError, TypeError):
+            pass
     if request.method not in {"GET", "HEAD", "OPTIONS"}:
         if principal["role"] == "viewer":
             raise HTTPException(403, "This account has view-only access")

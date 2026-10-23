@@ -7,6 +7,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from lib.months import MONTH_PATTERN, month_label, parse_billing_period
+from lib.ledger import LedgerAmount, Payment
 
 Money = Annotated[Decimal, Field(ge=0, le=1_000_000_000, decimal_places=2, allow_inf_nan=False)]
 Quantity = Annotated[Decimal, Field(ge=0, le=1_000_000, decimal_places=2, allow_inf_nan=False)]
@@ -157,7 +158,10 @@ class Invoice(InvoiceInput):
     created_at: datetime
     updated_at: datetime
     totals: InvoiceTotals
-    payment_status: Literal["Pending", "Paid"] = "Pending"
+    payment_status: Literal["Pending", "Partially Paid", "Paid"] = "Pending"
+    opening_paid_amount: LedgerAmount | None = None
+    payments: list[Payment] = Field(default_factory=list, max_length=5000)
+    follow_up_date: date | None = None
 
 
 def round_money(amount: Decimal) -> Decimal:

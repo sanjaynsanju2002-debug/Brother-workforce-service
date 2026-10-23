@@ -16,6 +16,9 @@ export interface Expense {
   description: string;
   amount: string;
   bill_filename: string | null;
+  company_id?: string | null;
+  company_name?: string | null;
+  cost_type?: "Operating" | "Payroll";
   revision: number;
   created_at: string;
 }

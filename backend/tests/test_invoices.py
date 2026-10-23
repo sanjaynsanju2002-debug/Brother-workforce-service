@@ -410,13 +410,14 @@ async def test_status_persists_without_altering_amounts_and_rejects_stale_update
         assert (await client.patch(f"{path}/status", json={"payment_status": "Overdue", "revision": 2})).status_code == 422
         update = {key: value for key, value in changed.json().items() if key in invoices.InvoiceUpdate.model_fields}
         update.update(company_id=company["id"], service_percentage="8")
+        assert (await client.put(path, json=update)).status_code == 422  # cannot reduce below the recorded receipt
+        pending = await client.patch(f"{path}/status", json={"payment_status": "Pending", "revision": 2})
+        assert pending.status_code == 200
+        update["revision"] = 3
         edited = await client.put(path, json=update)
         assert edited.status_code == 200, edited.text
-        assert edited.json()["payment_status"] == "Paid"
-        pending = await client.patch(f"{path}/status", json={"payment_status": "Pending", "revision": 3})
-        assert pending.status_code == 200
-        assert pending.json()["totals"] == edited.json()["totals"]
-        assert pending.json()["payment_status"] == "Pending"
+        assert edited.json()["payment_status"] == "Pending"
+        assert edited.json()["totals"] != original["totals"]
 
 
 @pytest.mark.asyncio
@@ -448,6 +449,11 @@ async def test_delete_is_private_checks_revision_and_preserves_other_records_and
         assert (await client.delete(path, params={"revision": revision + 1})).status_code == 409
         assert (await client.delete(path, params={"revision": revision}, headers={"Origin": "https://another.example"})).status_code == 403
         assert len(fake.invoices.records) == 2
+        if payment_status == "Paid":
+            assert (await client.delete(path, params={"revision": revision})).status_code == 409
+            corrected = await client.patch(f"{path}/status", json={"payment_status": "Pending", "revision": revision})
+            assert corrected.status_code == 200
+            revision = corrected.json()["revision"]
         response = await client.delete(path, params={"revision": revision})
         assert response.status_code == 204
         assert response.content == b""

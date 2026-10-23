@@ -11,6 +11,7 @@ from pymongo.errors import DuplicateKeyError
 from starlette.concurrency import run_in_threadpool
 
 from lib.auth import require_admin
+from lib.ledger import received, amount, money, payment_state
 from lib.companies import company_name_key, company_name_query, invoice_company
 from lib.db import db
 from lib.workforce import archive_company, rename_roster_company
@@ -180,7 +181,7 @@ async def preview_invoice(payload: InvoiceInput):
 @router.get("")
 async def list_invoices(
     page: int = Query(1, ge=1), q: str = Query("", max_length=150),
-    company_id: UUID | None = None, payment_status: Literal["Pending", "Paid"] | None = None,
+    company_id: UUID | None = None, payment_status: Literal["Pending", "Partially Paid", "Paid"] | None = None,
     billing_mode: BillingMode | None = None,
 ):
     filters = []
@@ -223,7 +224,7 @@ async def create_invoice(payload: InvoiceCreate):
     now = datetime.now(timezone.utc)
     invoice = Invoice(
         **data, id=invoice_id,
-        revision=1, created_at=now, updated_at=now, totals=calculate_invoice(payload),
+        revision=1, created_at=now, updated_at=now, totals=calculate_invoice(payload), opening_paid_amount="0.00",
     )
     try:
         await db.invoices.insert_one({"_id": invoice_id, **invoice.model_dump(mode="json")})
@@ -253,7 +254,9 @@ async def get_invoice(invoice_id: str):
 
 @router.delete("/{invoice_id}", status_code=204)
 async def delete_invoice(invoice_id: str, revision: int = Query(ge=1)):
-    await find_invoice(invoice_id)
+    old = await find_invoice(invoice_id)
+    if old.payments or received(old.model_dump(mode="json")) > 0:
+        raise HTTPException(409, "Keep invoices with a payment history. Correct payments using the receipts register.")
     # Match the reviewed version atomically.
     result = await db.invoices.delete_one({"id": invoice_id, "revision": revision})
     if result.deleted_count == 0:
@@ -272,10 +275,15 @@ async def update_invoice(invoice_id: str, payload: InvoiceUpdate):
     number = payload.invoice_number if payload.invoice_number is not None else old.invoice_number
     await require_available_number(number, old.id)
     data = {**input_data(payload), "invoice_number": number}
+    paid = received(old.model_dump(mode="json"))
+    calculated = calculate_invoice(payload)
+    if paid > calculated.total:
+        raise HTTPException(422, "Invoice total cannot be less than payments already recorded")
     invoice = Invoice(
         **data, id=old.id,
         revision=payload.revision + 1, created_at=old.created_at,
-        updated_at=datetime.now(timezone.utc), totals=calculate_invoice(payload), payment_status=old.payment_status,
+        updated_at=datetime.now(timezone.utc), totals=calculated, payment_status=payment_state(calculated.total, paid),
+        opening_paid_amount=money(paid - sum((p.amount for p in old.payments if not p.voided_at), amount(0))), payments=old.payments, follow_up_date=old.follow_up_date,
     )
     try:
         result = await db.invoices.update_one(
@@ -291,12 +299,14 @@ async def update_invoice(invoice_id: str, payload: InvoiceUpdate):
 @router.patch("/{invoice_id}/status", response_model=Invoice)
 async def update_invoice_status(invoice_id: str, payload: InvoiceStatusUpdate):
     old = await find_invoice(invoice_id)
-    # Status updates touch only payment metadata, never the saved bill or totals.
+    if old.payments:
+        raise HTTPException(409, "Payment status follows the receipts register. Add or void a payment there.")
+    # Legacy status changes remain available until the invoice has receipts.
     invoice = old.model_copy(update={
-        "payment_status": payload.payment_status, "revision": payload.revision + 1,
+        "payment_status": payload.payment_status, "opening_paid_amount": old.totals.total if payload.payment_status == "Paid" else amount(0), "revision": payload.revision + 1,
         "updated_at": datetime.now(timezone.utc),
     })
-    changes = invoice.model_dump(mode="json", include={"payment_status", "revision", "updated_at"})
+    changes = invoice.model_dump(mode="json", include={"payment_status", "opening_paid_amount", "revision", "updated_at"})
     result = await db.invoices.update_one(
         {"id": invoice_id, "revision": payload.revision}, {"$set": changes},
     )

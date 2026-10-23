@@ -28,7 +28,7 @@ export default function ProfitLoss() {
         </div>
         {data.invoice_count === 0 && data.expense_count === 0 && <p className="rounded-xl border border-dashed bg-white p-6">No invoices or expenses have been recorded for this month.</p>}
         <div className="rounded-xl border bg-white p-6">
-          <h2 className="font-semibold">Unpaid invoices for this service month</h2><p className="mt-2 text-xl font-bold" data-testid="profit-loss-unpaid">{rupees(data.unpaid_invoice_amount)}</p><p className="mt-1 text-sm text-slate-600">{data.unpaid_invoice_count} unpaid invoice{data.unpaid_invoice_count === 1 ? "" : "s"} · full invoice amounts, including any tax.</p>
+          <h2 className="font-semibold">Unpaid invoices for this service month</h2><p className="mt-2 text-xl font-bold" data-testid="profit-loss-unpaid">{rupees(data.unpaid_invoice_amount)}</p><p className="mt-1 text-sm text-slate-600">{data.unpaid_invoice_count} unpaid invoice{data.unpaid_invoice_count === 1 ? "" : "s"} · remaining balances, including any tax.</p>
         </div>
         <div className="space-y-2 text-sm leading-relaxed text-slate-600"><p>October services invoiced in November count as October revenue. Revenue includes both paid and pending invoices, before GST. Expenses follow the month of the expense date you enter.</p><p>Record salaries, rent, travel and other business costs in Expenses to include them here. Figures update when you save, edit or delete an invoice or expense.</p></div>
       </>}

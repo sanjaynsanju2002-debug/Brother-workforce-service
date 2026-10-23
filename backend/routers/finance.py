@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 from lib.auth import require_admin
 from lib.db import db
+from lib.ledger import received
 from lib.months import MONTH_PATTERN, service_month
 
 router = APIRouter(prefix="/admin", dependencies=[Depends(require_admin)])
@@ -36,7 +37,7 @@ async def monthly_profit_loss(month: str = Query(pattern=MONTH_PATTERN)):
     invoice_count = unpaid_count = 0
     unassigned_count = 0
     unassigned_revenue = Decimal("0.00")
-    async for invoice in db.invoices.find(query, {"totals": 1, "payment_status": 1, "service_month": 1, "billing_period": 1}):
+    async for invoice in db.invoices.find(query, {"totals": 1, "payment_status": 1, "service_month": 1, "billing_period": 1, "payments": 1, "opening_paid_amount": 1}):
         attributed_month = service_month(invoice)
         if attributed_month is None:
             unassigned_count += 1
@@ -46,8 +47,9 @@ async def monthly_profit_loss(month: str = Query(pattern=MONTH_PATTERN)):
             continue
         revenue += Decimal(str(invoice["totals"]["subtotal"]))
         invoice_count += 1
-        if invoice.get("payment_status", "Pending") != "Paid":
-            unpaid += Decimal(str(invoice["totals"]["total"]))
+        balance = max(Decimal("0"), Decimal(str(invoice["totals"]["total"])) - received(invoice))
+        if balance > 0:
+            unpaid += balance
             unpaid_count += 1
     summary = await db.expenses.aggregate([
         {"$match": {"month": month}},

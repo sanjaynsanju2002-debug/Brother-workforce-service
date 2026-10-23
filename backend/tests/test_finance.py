@@ -249,7 +249,9 @@ async def test_service_month_controls_revenue_and_payment_status_only_controls_r
         assert paid.status_code == 200
         result = (await client.get("/api/admin/profit-loss?month=2026-10")).json()
         assert result["revenue"] == "112000.00" and result["unpaid_invoice_amount"] == "0.00"
-        assert (await client.delete(f"/api/admin/invoices/{invoice['id']}?revision=2")).status_code == 204
+        assert (await client.delete(f"/api/admin/invoices/{invoice['id']}?revision=2")).status_code == 409
+        assert (await client.patch(f"/api/admin/invoices/{invoice['id']}/status", json={"revision": 2, "payment_status": "Pending"})).status_code == 200
+        assert (await client.delete(f"/api/admin/invoices/{invoice['id']}?revision=3")).status_code == 204
         result = (await client.get("/api/admin/profit-loss?month=2026-10")).json()
         assert result["revenue"] == "2000.00" and result["profit_loss"] == "-99000.00"
 

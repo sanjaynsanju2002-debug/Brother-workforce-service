@@ -25,6 +25,14 @@ import Invoices from "@/components/site/Invoices";
 import Expenses from "@/components/site/Expenses";
 import ProfitLoss from "@/components/site/ProfitLoss";
 import Payroll from "@/components/site/Payroll";
+import Attendance from "@/components/operations/Attendance";
+import Staffing from "@/components/operations/Staffing";
+import Recruitment from "@/components/operations/Recruitment";
+import SalaryPayments from "@/components/operations/Payments";
+import Documents from "@/components/operations/Documents";
+import BusinessOverview from "@/components/operations/BusinessOverview";
+import CompanyProfitability from "@/components/operations/CompanyProfitability";
+import ActivityHistory from "@/components/operations/ActivityHistory";
 import { waLink, workerMessage, companyMessage } from "@/lib/wa";
 import {
   Table,
@@ -180,6 +188,7 @@ function Dashboard({
   const [filters, setFilters] = useState(EMPTY_FILTERS);
   const [matchJobId, setMatchJobId] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState("overview");
 
   const shortlists = useQuery({
     queryKey: ["admin-shortlists", pin],
@@ -367,8 +376,8 @@ function Dashboard({
       </header>
 
       <main className="mx-auto max-w-7xl px-3 py-5 sm:px-6 sm:py-8">
-        <Tabs defaultValue="overview" orientation="vertical" className="flex flex-col gap-6 lg:grid lg:grid-cols-[240px_minmax(0,1fr)]">
-          <aside className="min-w-0 lg:sticky lg:top-4 lg:self-start" aria-label="Admin sections">
+        <Tabs value={activeTab} onValueChange={(value) => { if (value) setActiveTab(value); }} orientation="vertical" className="flex flex-col gap-6 lg:grid lg:grid-cols-[240px_minmax(0,1fr)]">
+          <aside className="min-w-0 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:self-start lg:overflow-y-auto" aria-label="Admin sections">
             <button type="button" className="flex w-full items-center justify-between rounded-lg border border-slate-200 bg-white px-4 py-3 font-semibold text-[#0F2444] lg:hidden" onClick={() => setSidebarOpen((open) => !open)} aria-expanded={sidebarOpen} aria-controls="admin-sidebar-menu" data-testid="admin-sidebar-toggle">
               Dashboard menu <Menu className="h-5 w-5" />
             </button>
@@ -388,6 +397,13 @@ function Dashboard({
                 <TabsTrigger value="jobs" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-jobs">Job Postings</TabsTrigger>
                 <TabsTrigger value="email" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-email">Email Settings</TabsTrigger>
                 <TabsTrigger value="security" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-security">Security</TabsTrigger>
+                <TabsTrigger value="attendance" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-attendance">Attendance</TabsTrigger>
+                <TabsTrigger value="requirements" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-requirements">Staffing Requirements</TabsTrigger>
+                <TabsTrigger value="recruitment" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-recruitment">Recruitment Progress</TabsTrigger>
+                <TabsTrigger value="salary-payments" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-salary-payments">Salary Payments</TabsTrigger>
+                <TabsTrigger value="documents" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-documents">Documents & Reminders</TabsTrigger>
+                <TabsTrigger value="company-profitability" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-company-profitability">Company Profitability</TabsTrigger>
+                {account.data?.role === "owner" && <TabsTrigger value="activity" className="min-h-10 w-full justify-start px-3 text-left" data-testid="admin-tab-activity">Staff Activity</TabsTrigger>}
                 <TabsTrigger value="shortlists" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-shortlists">Shortlists</TabsTrigger>
               </TabsList>
             </div>
@@ -396,6 +412,7 @@ function Dashboard({
             <TabsContent value="overview" className="mt-0">
               <div className="mb-5">
                 <h1 className="text-2xl font-bold text-[#0F2444]">Overview</h1>
+                <div className="mt-6"><BusinessOverview onNavigate={setActiveTab} /></div>
                 <p className="mt-1 text-sm text-slate-500">Key totals and website activity in one place.</p>
               </div>
 
@@ -1020,6 +1037,13 @@ function Dashboard({
           <TabsContent value="expenses" className="mt-0"><Expenses /></TabsContent>
           <TabsContent value="profit-loss" className="mt-0"><ProfitLoss /></TabsContent>
           <TabsContent value="payroll" className="mt-0"><Payroll /></TabsContent>
+          <TabsContent value="attendance" className="mt-0"><Attendance /></TabsContent>
+          <TabsContent value="requirements" className="mt-0"><Staffing /></TabsContent>
+          <TabsContent value="recruitment" className="mt-0"><Recruitment /></TabsContent>
+          <TabsContent value="salary-payments" className="mt-0"><SalaryPayments /></TabsContent>
+          <TabsContent value="documents" className="mt-0"><Documents /></TabsContent>
+          <TabsContent value="company-profitability" className="mt-0"><CompanyProfitability /></TabsContent>
+          <TabsContent value="activity" className="mt-0">{account.data?.role === "owner" && <ActivityHistory />}</TabsContent>
           <TabsContent value="workforce" className="mt-6">
             <WorkforceManager pin={pin} />
           </TabsContent>

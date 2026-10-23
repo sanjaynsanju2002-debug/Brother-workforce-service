@@ -10,8 +10,12 @@ import { ApiError, apiDelete, apiGet } from "@/lib/api";
 import { parseCalendarValue } from "@/lib/calendarDate";
 import { indiaToday, monthDate, monthLabel, rupees, type Expense, type ExpensePage } from "@/lib/finance";
 
+import { getCompanies } from "@/lib/operations";
+
+import { selectClass } from "@/lib/operations";
+
 const MAX_BILL_BYTES = 5 * 1024 * 1024;
-const blank = (month: string) => ({ expense_date: monthDate(month), description: "", amount: "" });
+const blank = (month: string) => ({ expense_date: monthDate(month), description: "", amount: "", company_id: "", cost_type: "Operating" });
 const message = (error: unknown) => {
   const detail = error instanceof ApiError ? (error.body as { detail?: unknown })?.detail : null;
   return typeof detail === "string" ? detail : "Could not save the expense. Please try again.";
@@ -27,10 +31,12 @@ export default function Expenses() {
   const fileInput = useRef<HTMLInputElement>(null);
   const formHeading = useRef<HTMLHeadingElement>(null);
   const qc = useQueryClient();
+  const companies = useQuery({ queryKey: ["ops", "companies"], queryFn: getCompanies });
   const records = useQuery({ queryKey: ["admin-expenses", month, page], queryFn: () => apiGet<ExpensePage>(`/admin/expenses?month=${month}&page=${page}`) });
   const refresh = () => {
     void qc.invalidateQueries({ queryKey: ["admin-expenses"] });
     void qc.invalidateQueries({ queryKey: ["admin-profit-loss"] });
+    void qc.invalidateQueries({ queryKey: ["ops"] });
   };
   const reset = (nextMonth = month) => {
     setForm(blank(nextMonth)); setEditing(null); setBill(null);
@@ -63,7 +69,7 @@ export default function Expenses() {
   });
   const busy = save.isPending || remove.isPending;
   const hasUnsavedChanges = editing || form.description || form.amount || bill ||
-    form.expense_date !== monthDate(month);
+    form.expense_date !== monthDate(month) || form.company_id || form.cost_type !== "Operating";
 
   return (
     <section className="space-y-6 text-[#0F2444]" data-testid="expenses-panel">
@@ -92,6 +98,8 @@ export default function Expenses() {
             <p id="expense-date-help" className="text-xs text-slate-500">Older dates are allowed. After saving, the list shows the expense’s month.</p>
           </div>
           <div><Label htmlFor="expense-amount" className="mb-2 block">Amount (₹) *</Label><Input id="expense-amount" type="number" inputMode="decimal" min="0.01" max="9999999999.99" step="0.01" placeholder="0.00" required value={form.amount} disabled={busy} onChange={(e) => setForm({ ...form, amount: e.target.value })} data-testid="expense-amount" /></div>
+          <div><Label htmlFor="expense-company" className="mb-2 block">Company (optional)</Label><select id="expense-company" className={selectClass} value={form.company_id} disabled={busy} onChange={(e) => setForm({ ...form, company_id: e.target.value })}><option value="">Unassigned / general overhead</option>{editing?.company_id && !companies.data?.some((c) => c.id === editing.company_id) && <option value={editing.company_id}>{editing.company_name || "Saved company"} (archived)</option>}{companies.data?.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
+          <div><Label htmlFor="expense-cost-type" className="mb-2 block">Cost type</Label><select id="expense-cost-type" className={selectClass} value={form.cost_type} disabled={busy} onChange={(e) => setForm({ ...form, cost_type: e.target.value })}><option value="Operating">Operating expense</option><option value="Payroll">Payroll / salary cash expense</option></select><p className="mt-1 text-xs text-slate-500">Company Profitability uses saved payroll wages. Tag salary cash entries Payroll to avoid counting them twice there.</p></div>
           <div><Label htmlFor="expense-description" className="mb-2 block">Description *</Label><Input id="expense-description" placeholder="e.g. Office rent or travel" required maxLength={200} value={form.description} disabled={busy} onChange={(e) => setForm({ ...form, description: e.target.value })} data-testid="expense-description" /></div>
           <div className="min-w-0"><Label htmlFor="expense-choose-bill" className="mb-2 block">{editing?.bill_filename ? "Replace bill (optional)" : "Bill (optional)"}</Label><input ref={fileInput} id="expense-bill" type="file" hidden accept=".pdf,.jpg,.jpeg,.png" disabled={busy} onChange={(e) => {
             const file = e.target.files?.[0] ?? null;
@@ -107,7 +115,7 @@ export default function Expenses() {
         {records.isPending ? <p className="p-6" role="status">Loading expenses…</p> : records.isError ? <div className="p-6" role="alert"><p>Expenses could not be loaded.</p><Button variant="outline" className="mt-3" onClick={() => records.refetch()}>Try again</Button></div> : records.data?.items.length === 0 ? <p className="p-6 text-slate-600">No expenses recorded for this month. Add the first one above.</p> : <>
           <div className="overflow-x-auto"><table className="w-full text-left text-sm" data-testid="expenses-table"><thead className="bg-slate-50 text-slate-600"><tr><th scope="col" className="px-5 py-3">Date</th><th scope="col" className="px-5 py-3">Description</th><th scope="col" className="px-5 py-3 text-right">Amount</th><th scope="col" className="px-5 py-3">Bill</th><th scope="col" className="px-5 py-3">Actions</th></tr></thead><tbody>{records.data?.items.map((expense) => <tr key={expense.id} className="border-t align-top"><td className="whitespace-nowrap px-5 py-4">{new Date(expense.expense_date + "T12:00:00").toLocaleDateString("en-IN")}</td><td className="min-w-40 max-w-xs break-words px-5 py-4">{expense.description}</td><td className="whitespace-nowrap px-5 py-4 text-right font-semibold">{rupees(expense.amount)}</td><td className="px-5 py-4">{expense.bill_filename ? <a href={`/api/admin/expenses/${expense.id}/bill`} download className="inline-flex items-center gap-1.5 whitespace-nowrap font-semibold text-[#C2410C] underline" aria-label={`Download bill for ${expense.description}`}><Download className="h-4 w-4" />Download</a> : <span className="text-slate-500">No bill</span>}</td><td className="px-5 py-4"><div className="flex gap-2"><Button variant="outline" size="icon" disabled={busy} aria-label={`Edit ${expense.description}`} onClick={() => {
             if (hasUnsavedChanges && !window.confirm("Discard the unsaved expense and edit this one?")) return;
-            setEditing(expense); setForm({ expense_date: expense.expense_date, description: expense.description, amount: expense.amount }); setBill(null); if (fileInput.current) fileInput.current.value = ""; formHeading.current?.focus(); formHeading.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+            setEditing(expense); setForm({ expense_date: expense.expense_date, description: expense.description, amount: expense.amount, company_id: expense.company_id || "", cost_type: expense.cost_type || "Operating" }); setBill(null); if (fileInput.current) fileInput.current.value = ""; formHeading.current?.focus(); formHeading.current?.scrollIntoView({ block: "center", behavior: "smooth" });
           }}><Pencil className="h-4 w-4" /></Button><Button variant="outline" size="icon" disabled={busy} aria-label={`Delete ${expense.description}`} onClick={() => { if (window.confirm(`Delete “${expense.description}” (${rupees(expense.amount)}) and its attached bill?`)) remove.mutate(expense); }}><Trash2 className="h-4 w-4 text-red-600" /></Button></div></td></tr>)}</tbody></table></div>
           {records.data && records.data.total > records.data.page_size && <div className="flex items-center justify-between gap-3 border-t p-4"><Button variant="outline" disabled={page === 1 || busy} onClick={() => setPage(page - 1)}>Previous</Button><span className="text-sm text-slate-600">Page {page} of {Math.ceil(records.data.total / records.data.page_size)}</span><Button variant="outline" disabled={page * records.data.page_size >= records.data.total || busy} onClick={() => setPage(page + 1)}>Next</Button></div>}
         </>}

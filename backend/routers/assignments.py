@@ -1,7 +1,7 @@
 """Private company workforce roster, linked to Talent Bank profiles."""
 
 import re
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Literal
 from uuid import uuid4
 
@@ -12,6 +12,7 @@ from pymongo.errors import DuplicateKeyError
 from lib.auth import require_admin
 from lib.db import db
 from lib.invoices import Money
+from lib.ledger import today
 from lib.workforce import check_employee_id, sync_worker_status
 from models.bws import Worker
 
@@ -34,6 +35,16 @@ class AssignmentCreate(EmployeeIdInput):
     mobile: str | None = None
     role: str | None = None
     start_date: str | None = None
+    end_date: str | None = None
+
+    @field_validator("start_date", "end_date")
+    @classmethod
+    def valid_date(cls, value):
+        if value == "":
+            return None
+        if value is not None and date.fromisoformat(value).isoformat() != value:
+            raise ValueError("Enter a valid date")
+        return value
     notes: str | None = None
     salary: Money | None = None
     salary_basis: Literal["Monthly", "Daily"] = "Monthly"
@@ -41,6 +52,16 @@ class AssignmentCreate(EmployeeIdInput):
 
 class AssignmentUpdate(EmployeeIdInput):
     status: Literal["Active", "Completed"] | None = None
+    end_date: str | None = None
+
+    @field_validator("end_date")
+    @classmethod
+    def valid_end_date(cls, value):
+        if value == "":
+            return None
+        if value is not None and date.fromisoformat(value).isoformat() != value:
+            raise ValueError("Enter a valid leaving date")
+        return value
     salary: Money | None = None
     salary_basis: Literal["Monthly", "Daily"] | None = None
 
@@ -69,6 +90,8 @@ async def create_assignment(payload: AssignmentCreate) -> Assignment:
     data["full_name"] = data["full_name"].strip()
     if not data["full_name"]:
         raise HTTPException(status_code=400, detail="Worker name is required")
+    if payload.start_date and payload.end_date and payload.end_date < payload.start_date:
+        raise HTTPException(422, "Leaving date cannot be before joining date")
     worker = None
     if payload.worker_id:
         worker = await db.workers.find_one({"id": payload.worker_id})
@@ -146,6 +169,12 @@ async def update_assignment(assignment_id: str, payload: AssignmentUpdate) -> As
     before = await db.assignments.find_one({"id": assignment_id})
     if not before:
         raise HTTPException(404, "Assignment not found")
+    if changes.get("status") == "Completed" and "end_date" not in changes:
+        changes["end_date"] = before.get("end_date") or today()
+    if changes.get("status") == "Active" and "end_date" not in changes:
+        changes["end_date"] = None
+    if changes.get("end_date") and before.get("start_date") and changes["end_date"] < before["start_date"]:
+        raise HTTPException(422, "Leaving date cannot be before joining date")
     if before.get("company_archived"):
         raise HTTPException(409, "Restore the company before changing its assignments")
     if "employee_id" in changes:

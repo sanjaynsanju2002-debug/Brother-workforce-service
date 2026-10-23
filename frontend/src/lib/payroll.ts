@@ -6,13 +6,14 @@ export type PayrollEmployee = {
 };
 export type PayrollAmounts = { assignment_id: string; gross_wages: string; esi_deduction: string; pf_deduction: string; payable: string };
 export type PayrollTotals = { employee_count: number; worked_days: string; gross_wages: string; esi_deduction: string; pf_deduction: string; payable: string };
-export type PayrollRow = PayrollEmployee & { selected: boolean; worked_days: string; daily_rate: string; esi_percentage: string; pf_percentage: string };
-export type PayrollValueField = "worked_days" | "daily_rate" | "esi_percentage" | "pf_percentage";
+export type PayrollRow = PayrollEmployee & { selected: boolean; worked_days: string; daily_rate: string; esi_percentage: string; pf_percentage: string; overtime_hours?: string; overtime_rate?: string };
+export type PayrollValueField = "worked_days" | "daily_rate" | "esi_percentage" | "pf_percentage" | "overtime_hours" | "overtime_rate";
 export type PayrollIssue = { assignment_id: string; field: PayrollValueField; message: string };
-export type PayrollInput = { company_id: string; month: string; notes: string; lines: { assignment_id: string; worked_days: string; daily_rate: string; esi_percentage: string; pf_percentage: string }[] };
+export type PayrollInput = { company_id: string; month: string; notes: string; cost_responsibility?: "Agency" | "Client"; attendance_refs?: Record<string, number>; lines: { assignment_id: string; worked_days: string; daily_rate: string; esi_percentage: string; pf_percentage: string; overtime_hours?: string; overtime_rate?: string }[] };
 export type PayrollRecord = {
   id: string; company_id: string; company_name: string; company_location: string; month: string; notes: string;
-  lines: (PayrollEmployee & PayrollAmounts & { worked_days: string; daily_rate: string; esi_percentage: string; pf_percentage: string })[];
+  lines: (PayrollEmployee & PayrollAmounts & { worked_days: string; daily_rate: string; esi_percentage: string; pf_percentage: string; overtime_hours?: string; overtime_rate?: string })[];
+  cost_responsibility?: "Agency" | "Client"; attendance_refs?: Record<string, number>;
   totals: PayrollTotals; revision: number; created_at: string; updated_at: string;
 };
 export type PayrollDraft = { company: { id: string; name: string }; employees: PayrollEmployee[]; payroll: PayrollRecord | null };
@@ -28,7 +29,7 @@ export function payrollRows(draft: PayrollDraft): PayrollRow[] {
       ...(line ?? person), selected: draft.payroll ? !!line : person.status === "Active",
       worked_days: line?.worked_days ?? "", daily_rate: line?.daily_rate ?? (person.salary_basis === "Daily" ? person.salary ?? "" : ""),
       esi_percentage: line?.esi_percentage ?? "0",
-      pf_percentage: line?.pf_percentage ?? "0",
+      pf_percentage: line?.pf_percentage ?? "0", overtime_hours: line?.overtime_hours ?? "0", overtime_rate: line?.overtime_rate ?? "0",
     };
   });
 }
@@ -41,8 +42,9 @@ export function firstPayrollIssue(rows: PayrollRow[], monthDays: number): Payrol
     for (const [field, label, maximum] of [
       ["worked_days", "worked days", monthDays], ["daily_rate", "daily rate", 1_000_000_000],
       ["esi_percentage", "ESI percentage", 100], ["pf_percentage", "PF percentage", 100],
+      ["overtime_hours", "overtime hours", 744], ["overtime_rate", "overtime hourly rate", 1_000_000_000],
     ] as const) {
-      const value = row[field].trim();
+      const value = (row[field] ?? "0").trim();
       if (field === "daily_rate" && !value && Number(row.worked_days) === 0) continue;
       if (!value || !/^(?:\d+|\d*\.\d{1,2})$/.test(value) || !Number.isFinite(Number(value)) || Number(value) > maximum) {
         return { assignment_id: row.assignment_id, field, message: `${row.full_name}: enter ${label} from 0 to ${maximum}, with up to 2 decimal places.` };
@@ -51,6 +53,7 @@ export function firstPayrollIssue(rows: PayrollRow[], monthDays: number): Payrol
         return { assignment_id: row.assignment_id, field, message: `${row.full_name}: enter a daily rate greater than 0 for worked days.` };
       }
     }
+    if (Number(row.overtime_hours) > 0 && !Number(row.overtime_rate)) return { assignment_id: row.assignment_id, field: "overtime_rate", message: `${row.full_name}: enter an hourly overtime rate greater than 0.` };
     if (Math.round(Number(row.esi_percentage) * 100) + Math.round(Number(row.pf_percentage) * 100) > 10_000) {
       return { assignment_id: row.assignment_id, field: "pf_percentage", message: `${row.full_name}: combined ESI and PF percentages cannot exceed 100%.` };
     }

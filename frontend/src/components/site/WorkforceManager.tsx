@@ -24,6 +24,7 @@ type Assignment = {
   mobile: string | null;
   role: string | null;
   start_date: string | null;
+  end_date?: string | null;
   notes: string | null;
   status: "Active" | "Completed";
   created_at: string;
@@ -54,12 +55,14 @@ export default function WorkforceManager({ pin }: { pin: string }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [employeeId, setEmployeeId] = useState("");
   const [salary, setSalary] = useState("");
+  const [endDate, setEndDate] = useState("");
   const [salaryBasis, setSalaryBasis] = useState<"Monthly" | "Daily">("Monthly");
   const clients = useQuery({ queryKey: ["admin-clients", pin], queryFn: () => apiGet<Client[]>(`/admin/clients${q}`) });
   const workers = useQuery({ queryKey: ["admin-talents", pin], queryFn: () => apiGet<Worker[]>(`/admin/talents${q}`) });
   const assignments = useQuery({ queryKey: key, queryFn: () => apiGet<Assignment[]>(`/admin/assignments${q}`) });
   const refresh = () => {
     void qc.invalidateQueries({ queryKey: key });
+    void qc.invalidateQueries({ queryKey: ["ops"] });
     void qc.invalidateQueries({ queryKey: ["admin-talents", pin] });
     void qc.invalidateQueries({ queryKey: ["payroll-draft"] });
     void qc.invalidateQueries({ queryKey: ["payroll-companies"] });
@@ -107,8 +110,8 @@ export default function WorkforceManager({ pin }: { pin: string }) {
     onError: (e) => toast.error(errorMessage(e)),
   });
   const saveEmployeeId = useMutation({
-    mutationFn: (value: { id: string; employee_id: string; salary: string; salary_basis: "Monthly" | "Daily" }) =>
-      apiPatch<Assignment>(`/admin/assignments/${value.id}${q}`, { employee_id: value.employee_id, salary: value.salary || null, salary_basis: value.salary_basis }),
+    mutationFn: (value: { id: string; employee_id: string; salary: string; salary_basis: "Monthly" | "Daily"; end_date: string }) =>
+      apiPatch<Assignment>(`/admin/assignments/${value.id}${q}`, { employee_id: value.employee_id, salary: value.salary || null, salary_basis: value.salary_basis, end_date: value.end_date || null }),
     onSuccess: () => { setEditingId(null); refresh(); toast.success("Employee details saved"); },
     onError: (e) => toast.error(errorMessage(e)),
   });
@@ -209,18 +212,19 @@ export default function WorkforceManager({ pin }: { pin: string }) {
               <p className="mt-1 text-sm text-slate-600">{a.company_name}{a.role ? ` · ${a.role}` : ""}</p>
               <p className="mt-1 text-sm text-slate-600" data-testid={`assignment-employee-id-${a.id}`}>Employee ID: <span className="font-medium">{a.employee_id || "Not set"}</span></p>
               <p className="mt-1 text-sm text-slate-600" data-testid={`assignment-salary-${a.id}`}>Salary: <span className="font-medium">{a.salary === null ? "Not set" : `${rupees(a.salary)} ${a.salary_basis === "Daily" ? "per day" : "per month"}`}</span></p>
-              <p className="mt-1 text-xs text-slate-500">{a.mobile || "No mobile"}{a.start_date ? ` · Started ${a.start_date}` : ""}{a.notes ? ` · ${a.notes}` : ""}</p>
-              {editingId === a.id && <form className="mt-3 flex max-w-2xl flex-wrap items-end gap-2" onSubmit={(event) => { event.preventDefault(); saveEmployeeId.mutate({ id: a.id, employee_id: employeeId, salary, salary_basis: salaryBasis }); }}>
+              <p className="mt-1 text-xs text-slate-500">{a.mobile || "No mobile"}{a.start_date ? ` · Started ${a.start_date}` : ""}{a.end_date ? ` · Leaving ${a.end_date}` : ""}{a.notes ? ` · ${a.notes}` : ""}</p>
+              {editingId === a.id && <form className="mt-3 flex max-w-2xl flex-wrap items-end gap-2" onSubmit={(event) => { event.preventDefault(); saveEmployeeId.mutate({ id: a.id, employee_id: employeeId, salary, salary_basis: salaryBasis, end_date: endDate }); }}>
                 <Label htmlFor={`employee-id-${a.id}`} className="sr-only">Employee ID for {a.full_name}</Label>
                 <Input id={`employee-id-${a.id}`} className="min-w-0 flex-1 basis-40" maxLength={80} value={employeeId} disabled={saveEmployeeId.isPending} onChange={(event) => setEmployeeId(event.target.value)} autoFocus data-testid={`assignment-edit-id-input-${a.id}`} />
                 <div className="min-w-0 flex-1 basis-32"><Label htmlFor={`employee-salary-${a.id}`} className="mb-1 block text-xs">Salary / rate (₹)</Label><Input id={`employee-salary-${a.id}`} type="number" inputMode="decimal" min="0" max="1000000000" step="0.01" value={salary} disabled={saveEmployeeId.isPending} onChange={(event) => setSalary(event.target.value)} data-testid={`assignment-edit-salary-${a.id}`} /></div>
+                <div><Label htmlFor={`employee-end-${a.id}`} className="mb-1 block text-xs">Last working date (completed)</Label><DateInput id={`employee-end-${a.id}`} value={endDate} onValueChange={setEndDate} disabled={saveEmployeeId.isPending || a.status === "Active"} /></div>
                 <div><Label htmlFor={`employee-salary-basis-${a.id}`} className="mb-1 block text-xs">Salary basis</Label><select id={`employee-salary-basis-${a.id}`} className="h-8 rounded-md border border-slate-300 bg-white px-2 text-sm" value={salaryBasis} disabled={saveEmployeeId.isPending} onChange={(event) => setSalaryBasis(event.target.value as "Monthly" | "Daily")}><option value="Monthly">Per month</option><option value="Daily">Per day</option></select></div>
                 <Button type="submit" size="sm" disabled={saveEmployeeId.isPending}>Save details</Button>
                 <Button type="button" variant="outline" size="sm" disabled={saveEmployeeId.isPending} onClick={() => setEditingId(null)}>Cancel</Button>
               </form>}
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <Button type="button" size="sm" variant="outline" disabled={saveEmployeeId.isPending || remove.isPending || changeStatus.isPending} onClick={() => { setEditingId(a.id); setEmployeeId(a.employee_id || ""); setSalary(a.salary ?? ""); setSalaryBasis(a.salary_basis || "Monthly"); }} data-testid={`assignment-edit-id-${a.id}`}>Edit ID / salary</Button>
+              <Button type="button" size="sm" variant="outline" disabled={saveEmployeeId.isPending || remove.isPending || changeStatus.isPending} onClick={() => { setEditingId(a.id); setEmployeeId(a.employee_id || ""); setSalary(a.salary ?? ""); setSalaryBasis(a.salary_basis || "Monthly"); setEndDate(a.end_date || ""); }} data-testid={`assignment-edit-id-${a.id}`}>Edit ID / salary</Button>
               <Button size="sm" variant="outline" disabled={changeStatus.isPending || saveEmployeeId.isPending || remove.isPending} onClick={() => changeStatus.mutate({ id: a.id, status: a.status === "Active" ? "Completed" : "Active" })}>
                 Mark {a.status === "Active" ? "completed" : "active"}
               </Button>

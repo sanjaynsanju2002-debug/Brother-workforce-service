@@ -80,6 +80,7 @@ class FakeDB:
         self.settings = Collection([{"id": "admin", "pin": "123456"}])
         self.admin_login_attempts = Collection()
         self.admin_sessions = Collection()
+        self.audit_events = Collection()
         self.jobs = Collection([{
             "id": "job-1", "title": "Machine Operator", "location": "Mysuru",
             "skill_category": "Skilled", "active": True,

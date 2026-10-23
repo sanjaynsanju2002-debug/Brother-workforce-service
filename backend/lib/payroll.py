@@ -9,14 +9,15 @@ from pydantic import AwareDatetime, Field, field_validator, model_validator
 
 from lib.invoices import InvoiceModel, InvoiceProfile, Money, Percentage, round_money
 from lib.months import MONTH_PATTERN
+from lib.ledger import Payment
 
 Amount = Annotated[Decimal, Field(ge=0, le=100_000_000_000_000, decimal_places=2, allow_inf_nan=False)]
 WorkedDays = Annotated[Decimal, Field(ge=0, le=31, decimal_places=2, allow_inf_nan=False)]
 MAX_EMPLOYEES = 2000
 
 
-def line_amounts(days: Decimal, rate: Decimal, esi_rate: Decimal, pf_rate: Decimal):
-    gross = round_money(days * rate)
+def line_amounts(days: Decimal, rate: Decimal, esi_rate: Decimal, pf_rate: Decimal, overtime_hours=Decimal("0"), overtime_rate=Decimal("0")):
+    gross = round_money(days * rate + overtime_hours * overtime_rate)
     esi = round_money(gross * esi_rate / Decimal("100"))
     pf = round_money(gross * pf_rate / Decimal("100"))
     if esi + pf > gross:
@@ -28,10 +29,12 @@ class PayrollLineInput(InvoiceModel):
     assignment_id: str = Field(min_length=1, max_length=80)
     worked_days: WorkedDays = Decimal("0.00")
     daily_rate: Money = Decimal("0.00")
+    overtime_hours: Annotated[Decimal, Field(ge=0, le=744, decimal_places=2, allow_inf_nan=False)] = Decimal("0.00")
+    overtime_rate: Money = Decimal("0.00")
     esi_percentage: Percentage = Decimal("0.00")
     pf_percentage: Percentage = Decimal("0.00")
 
-    @field_validator("worked_days", "daily_rate", "esi_percentage", "pf_percentage")
+    @field_validator("worked_days", "daily_rate", "esi_percentage", "pf_percentage", "overtime_hours", "overtime_rate")
     @classmethod
     def two_places(cls, value: Decimal) -> Decimal:
         return round_money(value)
@@ -40,7 +43,7 @@ class PayrollLineInput(InvoiceModel):
     def valid_deductions(self):
         if self.esi_percentage + self.pf_percentage > 100:
             raise ValueError("Combined ESI and PF percentages cannot exceed 100%")
-        line_amounts(self.worked_days, self.daily_rate, self.esi_percentage, self.pf_percentage)
+        line_amounts(self.worked_days, self.daily_rate, self.esi_percentage, self.pf_percentage, self.overtime_hours, self.overtime_rate)
         return self
 
 
@@ -49,6 +52,8 @@ class PayrollInput(InvoiceModel):
     month: str = Field(pattern=MONTH_PATTERN)
     lines: list[PayrollLineInput] = Field(default_factory=list, max_length=MAX_EMPLOYEES)
     notes: str = Field(default="", max_length=1000)
+    cost_responsibility: Literal["Agency", "Client"] = "Agency"
+    attendance_refs: dict[str, int] = Field(default_factory=dict, max_length=31)
 
     @model_validator(mode="after")
     def valid_attendance(self):
@@ -108,6 +113,9 @@ class Payroll(InvoiceModel):
     supplier: InvoiceProfile
     lines: list[PayrollLine] = Field(max_length=MAX_EMPLOYEES)
     notes: str = ""
+    cost_responsibility: Literal["Agency", "Client"] = "Agency"
+    attendance_refs: dict[str, int] = Field(default_factory=dict, max_length=31)
+    salary_payments: list[Payment] = Field(default_factory=list, max_length=10000)
     totals: PayrollTotals
     revision: int
     created_at: datetime
@@ -117,7 +125,7 @@ class Payroll(InvoiceModel):
 def calculate_payroll(value: PayrollInput) -> tuple[list[PayrollLineTotals], PayrollTotals]:
     rows = []
     for line in value.lines:
-        gross, esi, pf, payable = line_amounts(line.worked_days, line.daily_rate, line.esi_percentage, line.pf_percentage)
+        gross, esi, pf, payable = line_amounts(line.worked_days, line.daily_rate, line.esi_percentage, line.pf_percentage, line.overtime_hours, line.overtime_rate)
         rows.append(PayrollLineTotals(assignment_id=line.assignment_id, gross_wages=gross, esi_deduction=esi, pf_deduction=pf, payable=payable))
     zero = Decimal("0.00")
     return rows, PayrollTotals(
