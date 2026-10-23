@@ -19,6 +19,7 @@ load_dotenv(ROOT_DIR / '.env')
 from lib.db import client, db, ensure_indexes
 from lib.workforce import reconcile_companies, reconcile_workforce
 from lib.job_translations import translate_known_job
+from lib.job_descriptions import fill_missing_job_descriptions
 
 
 # Startup runs before the yield, shutdown after it. Add your own setup/teardown here.
@@ -58,6 +59,11 @@ async def lifespan(app: FastAPI):
         {"$set": {"visible": False}},
     )
     # Migration is retryable: deterministic IDs and name+phone matching prevent duplicates.
+    try:
+        descriptions = await fill_missing_job_descriptions(db)
+        logging.getLogger(__name__).info("Job descriptions completed: %s", descriptions)
+    except Exception:
+        logging.getLogger(__name__).exception("Job descriptions will retry on next startup")
     try:
         await translate_known_job(db)
         await reconcile_companies(db)
