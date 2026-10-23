@@ -5,6 +5,7 @@ import { Building2, Download, FileText, Loader2, Plus, Save, Trash2 } from "luci
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError, apiDelete, apiGet, apiPatch, apiPost, apiPut } from "@/lib/api";
@@ -276,13 +277,12 @@ export default function Invoices() {
             <div className="grid gap-4 sm:grid-cols-2">
               <div><Label htmlFor="invoice-number" className="mb-2 block">Invoice number *</Label><Input id="invoice-number" required maxLength={16} pattern={"[A-Za-z0-9\\/\\-]+"} value={form.invoice_number} onChange={(e) => edit({ invoice_number: e.target.value })} aria-describedby="invoice-number-help" data-testid="invoice-number" /><p id="invoice-number-help" className="mt-1 text-xs text-slate-500">Enter your own invoice number. Use up to 16 letters, numbers, / or -.</p></div>
               <div><Label htmlFor="invoice-client" className="mb-2 block">Client / company name *</Label><Input id="invoice-client" value={form.client_name} readOnly={!!form.company_id} required maxLength={150} onChange={(e) => edit({ client_name: e.target.value })} data-testid="invoice-client" /></div>
-              <div><Label htmlFor="invoice-service-month" className="mb-2 block">Service month *</Label><Input id="invoice-service-month" type="month" required value={form.service_month} onChange={(e) => edit({ service_month: e.target.value, billing_period: e.target.value ? monthLabel(e.target.value) : "" })} data-testid="invoice-service-month" /><p className="mt-1 text-xs text-slate-500">Choose the month the work was done. October services billed in November count as October revenue.</p></div>
-              <div><Label htmlFor="invoice-date" className="mb-2 block">Invoice date *</Label><Input id="invoice-date" type="date" required disabled={!!saved} value={form.invoice_date} onChange={(e) => {
-                const invoiceDate = e.target.value;
-                if (invoiceDate && form.service_month === previousMonth(form.invoice_date)) { const serviceMonth = previousMonth(invoiceDate); edit({ invoice_date: invoiceDate, service_month: serviceMonth, billing_period: monthLabel(serviceMonth) }); }
+              <div><Label htmlFor="invoice-service-month" className="mb-2 block">Service month *</Label><DateInput id="invoice-service-month" type="month" required value={form.service_month} onValueChange={(value) => edit({ service_month: value, billing_period: value ? monthLabel(value) : "" })} data-testid="invoice-service-month" /><p className="mt-1 text-xs text-slate-500">Choose the month the work was done. October services billed in November count as October revenue.</p></div>
+              <div><Label htmlFor="invoice-date" className="mb-2 block">Invoice date *</Label><DateInput id="invoice-date" required value={form.invoice_date} onValueChange={(invoiceDate) => {
+                if (!saved && invoiceDate && form.service_month === previousMonth(form.invoice_date)) { const serviceMonth = previousMonth(invoiceDate); edit({ invoice_date: invoiceDate, service_month: serviceMonth, billing_period: monthLabel(serviceMonth) }); }
                 else edit({ invoice_date: invoiceDate });
-              }} /><p className="mt-1 text-xs text-slate-500">{saved ? "The date stays fixed after an invoice is saved." : "New invoices start with the previous service month. You can change it above."}</p></div>
-              <div><Label htmlFor="invoice-due" className="mb-2 block">Payment due date</Label><Input id="invoice-due" type="date" min={form.invoice_date} value={form.due_date} onChange={(e) => edit({ due_date: e.target.value })} /></div>
+              }} /><p className="mt-1 text-xs text-slate-500">{saved ? "Correct the invoice date here, then save changes." : "New invoices start with the previous service month. You can change it above."}</p></div>
+              <div><Label htmlFor="invoice-due" className="mb-2 block">Payment due date</Label><DateInput id="invoice-due" min={form.invoice_date || undefined} value={form.due_date} onValueChange={(value) => edit({ due_date: value })} /></div>
               <div><Label htmlFor="invoice-address" className="mb-2 block">Client address</Label><Textarea id="invoice-address" value={form.client_address} maxLength={500} onChange={(e) => edit({ client_address: e.target.value })} /></div>
               <div><Label htmlFor="invoice-gstin" className="mb-2 block">Client GSTIN</Label><Input id="invoice-gstin" value={form.client_gstin} maxLength={30} onChange={(e) => edit({ client_gstin: e.target.value })} /></div>
             </div>

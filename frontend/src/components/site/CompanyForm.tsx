@@ -5,6 +5,7 @@ import { CheckCircle2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -182,10 +183,9 @@ export default function CompanyForm() {
             />
           </Field>
           <Field label="Expected Joining Date">
-            <Input
-              type="date"
+            <DateInput
               value={form.joining_date ?? ""}
-              onChange={(e) => set("joining_date", e.target.value)}
+              onValueChange={(value) => set("joining_date", value)}
               data-testid="company-input-joining-date"
             />
           </Field>

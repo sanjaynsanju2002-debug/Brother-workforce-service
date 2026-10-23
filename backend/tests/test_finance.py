@@ -144,6 +144,55 @@ async def test_expense_bill_save_retry_month_total_edit_and_delete(db):
 
 
 @pytest.mark.asyncio
+async def test_older_expense_dates_and_date_edits_move_month_totals_with_the_bill(db):
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="https://brothersworkforcesolutions.in") as client:
+        await client.post("/api/admin/login", json={"pin": "123456"})
+        data = {"request_id": str(uuid4()), "expense_date": "2024-02-29", "description": "Historical office bill", "amount": "250.75"}
+        bill = b"%PDF-1.4\n%%EOF"
+        created = await client.post("/api/admin/expenses", data=data, files={"file": ("bill.pdf", bill, "application/pdf")})
+        assert created.status_code == 200, created.text
+        entry = created.json()
+        assert entry["expense_date"] == "2024-02-29"
+        assert (await client.get("/api/admin/expenses?month=2024-02")).json()["total_amount"] == "250.75"
+
+        updated = await client.put(f"/api/admin/expenses/{entry['id']}", data={**data, "expense_date": "2023-12-31", "revision": entry["revision"]})
+        assert updated.status_code == 200, updated.text
+        assert updated.json()["expense_date"] == "2023-12-31"
+        assert updated.json()["revision"] == 2
+        old_month = (await client.get("/api/admin/expenses?month=2024-02")).json()
+        new_month = (await client.get("/api/admin/expenses?month=2023-12")).json()
+        assert old_month["total"] == 0 and old_month["total_amount"] == "0.00"
+        assert new_month["total"] == 1 and new_month["items"][0]["id"] == entry["id"]
+        assert new_month["total_amount"] == "250.75"
+        assert (await client.get("/api/admin/profit-loss?month=2024-02")).json()["expenses"] == "0.00"
+        assert (await client.get("/api/admin/profit-loss?month=2023-12")).json()["expenses"] == "250.75"
+        assert (await client.get(f"/api/admin/expenses/{entry['id']}/bill")).content == bill
+
+
+@pytest.mark.asyncio
+async def test_saved_invoice_dates_can_be_corrected_without_changing_number_or_service_month(db):
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="https://brothersworkforcesolutions.in") as client:
+        await client.post("/api/admin/login", json={"pin": "123456"})
+        company = (await client.post("/api/admin/invoices/companies", json={"name": "Historical invoice client"})).json()
+        created = await client.post("/api/admin/invoices", json={**payload(), "company_id": company["id"]})
+        assert created.status_code == 200, created.text
+        invoice = created.json()
+        changes = {key: value for key, value in invoice.items() if key in invoices.InvoiceUpdate.model_fields}
+        changes.update(invoice_date="2024-02-29", due_date="2024-03-31")
+        path = f"/api/admin/invoices/{invoice['id']}"
+        updated = await client.put(path, json=changes)
+        assert updated.status_code == 200, updated.text
+        saved = updated.json()
+        assert saved["invoice_date"] == "2024-02-29" and saved["due_date"] == "2024-03-31"
+        for key in ("id", "invoice_number", "company_id", "service_month", "totals", "payment_status"):
+            assert saved[key] == invoice[key]
+        assert saved["revision"] == 2
+        assert (await client.put(path, json=changes)).status_code == 409
+        assert (await client.put(path, json={**changes, "revision": 2, "due_date": "2024-02-28"})).status_code == 422
+        assert (await client.get(path)).json() == saved
+
+
+@pytest.mark.asyncio
 async def test_expense_validation_and_pagination_total_are_independent(db):
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="https://brothersworkforcesolutions.in") as client:
         await client.post("/api/admin/login", json={"pin": "123456"})

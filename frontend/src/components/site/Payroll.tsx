@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Building2, Download, FileSpreadsheet, Loader2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Label } from "@/components/ui/label";
 import { apiDelete, apiGet } from "@/lib/api";
 import { indiaToday, monthLabel, rupees } from "@/lib/finance";
@@ -73,9 +73,9 @@ export default function Payroll() {
         if (!discard()) return;
         setDirty(false); setCompanyId(event.target.value); setPage(1); setEditorVersion((value) => value + 1);
       }} data-testid="payroll-company"><option value="">Select a company</option>{companies.data?.filter((company) => !company.saved_only || company.id === companyId).map((company) => <option key={company.id} value={company.id}>{company.name}{company.saved_only ? " (saved payroll)" : ""}</option>)}</select></div>
-      <div><Label htmlFor="payroll-month" className="mb-2 block">Payroll month</Label><Input id="payroll-month" type="month" value={month} disabled={working} onChange={(event) => {
-        if (!event.target.value || !discard()) return;
-        setDirty(false); setMonth(event.target.value); setEditorVersion((value) => value + 1);
+      <div><Label htmlFor="payroll-month" className="mb-2 block">Payroll month</Label><DateInput id="payroll-month" type="month" value={month} disabled={working} onValueChange={(value) => {
+        if (!value || !discard()) return false;
+        setDirty(false); setMonth(value); setEditorVersion((value) => value + 1);
       }} data-testid="payroll-month" /></div>
       {companies.isError && <div className="text-sm text-red-700 sm:col-span-2" role="alert">Could not load companies. <Button type="button" variant="outline" size="sm" onClick={() => companies.refetch()}>Try again</Button></div>}
       {!companies.isPending && !companies.isError && !companies.data?.length && <p className="text-sm text-slate-600 sm:col-span-2">Add a company and its employees in Company Workforce first.</p>}

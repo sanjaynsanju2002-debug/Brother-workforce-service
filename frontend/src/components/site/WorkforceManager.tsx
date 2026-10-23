@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Label } from "@/components/ui/label";
 import { ApiError, apiDelete, apiGet, apiPatch, apiPost } from "@/lib/api";
 import type { Client, Worker } from "@/types";
@@ -166,7 +167,7 @@ export default function WorkforceManager({ pin }: { pin: string }) {
           <div><Label htmlFor="assignment-employee-id" className="mb-2 block">Employee ID</Label><Input id="assignment-employee-id" maxLength={80} value={form.employee_id} onChange={(e) => setForm({ ...form, employee_id: e.target.value })} placeholder="e.g. BWS-001" data-testid="assignment-employee-id" /></div>
           <div><Label className="mb-2 block">Mobile</Label><Input value={form.mobile} disabled={!!form.worker_id} onChange={(e) => setForm({ ...form, mobile: e.target.value })} data-testid="assignment-mobile" /></div>
           <div><Label className="mb-2 block">Role / work</Label><Input value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })} placeholder="Machine operator" data-testid="assignment-role" /></div>
-          <div><Label className="mb-2 block">Start date</Label><Input type="date" value={form.start_date} onChange={(e) => setForm({ ...form, start_date: e.target.value })} data-testid="assignment-start-date" /></div>
+          <div><Label htmlFor="assignment-start-date" className="mb-2 block">Start date</Label><DateInput id="assignment-start-date" value={form.start_date} onValueChange={(value) => setForm({ ...form, start_date: value })} data-testid="assignment-start-date" /></div>
           <div><Label htmlFor="assignment-salary" className="mb-2 block">Salary / rate (₹)</Label><Input id="assignment-salary" type="number" inputMode="decimal" min="0" max="1000000000" step="0.01" value={form.salary} onChange={(e) => setForm({ ...form, salary: e.target.value })} placeholder="Optional" data-testid="assignment-salary" /></div>
           <div><Label htmlFor="assignment-salary-basis" className="mb-2 block">Salary basis</Label><select id="assignment-salary-basis" className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm" value={form.salary_basis} onChange={(e) => setForm({ ...form, salary_basis: e.target.value as "Monthly" | "Daily" })} data-testid="assignment-salary-basis"><option value="Monthly">Per month</option><option value="Daily">Per day</option></select><p className="mt-1 text-xs text-slate-500">Daily salaries prefill the rate in Payroll.</p></div>
           <div className="sm:col-span-2 lg:col-span-3"><Label className="mb-2 block">Notes</Label><Input value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} placeholder="Shift or site details (optional)" /></div>

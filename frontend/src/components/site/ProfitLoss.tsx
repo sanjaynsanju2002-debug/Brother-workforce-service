@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Label } from "@/components/ui/label";
 import { apiGet } from "@/lib/api";
 import { indiaToday, monthLabel, rupees, type ProfitLoss as ProfitLossData } from "@/lib/finance";
@@ -14,7 +14,7 @@ export default function ProfitLoss() {
     <section data-testid="profit-loss-panel" className="space-y-6 text-[#0F2444]">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div><h1 className="text-2xl font-bold">Profit &amp; Loss</h1><p className="mt-1 text-sm text-slate-600">Revenue by service month, matched with that month’s recorded expenses.</p></div>
-        <div><Label htmlFor="profit-loss-month" className="mb-2 block">Month</Label><Input id="profit-loss-month" type="month" value={month} onChange={(e) => { if (e.target.value) setMonth(e.target.value); }} data-testid="profit-loss-month" /></div>
+        <div><Label htmlFor="profit-loss-month" className="mb-2 block">Month</Label><DateInput id="profit-loss-month" type="month" value={month} onValueChange={(value) => { if (!value) return false; setMonth(value); }} data-testid="profit-loss-month" /></div>
       </div>
       {report.isPending ? <p role="status">Loading monthly figures…</p> : report.isError ? (
         <div role="alert" className="rounded-xl border border-red-200 bg-white p-6"><p>Monthly figures could not be loaded.</p><Button className="mt-3" variant="outline" onClick={() => report.refetch()}>Try again</Button></div>

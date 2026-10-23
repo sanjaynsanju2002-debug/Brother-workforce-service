@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { DateInput } from "@/components/ui/date-input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -849,11 +850,10 @@ function Dashboard({
                   />
                   <div>
                     <Label htmlFor="admin-job-closing-date" className="mb-2 block text-sm">Application closing date (optional)</Label>
-                    <Input
+                    <DateInput
                       id="admin-job-closing-date"
-                      type="date"
                       value={job.closing_date ?? ""}
-                      onChange={(e) => setJob({ ...job, closing_date: e.target.value })}
+                      onValueChange={(value) => setJob({ ...job, closing_date: value })}
                       data-testid="admin-job-closing-date"
                     />
                     <p className="mt-1 text-xs text-slate-500">After this date, the job automatically stops accepting applications.</p>

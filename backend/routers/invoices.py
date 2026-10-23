@@ -269,8 +269,6 @@ async def update_invoice(invoice_id: str, payload: InvoiceUpdate):
         await find_company(payload.company_id)
     if old.company_id is not None and payload.company_id != old.company_id:
         raise HTTPException(422, "A saved invoice stays with its company. Create a new invoice for another company.")
-    if payload.invoice_date != old.invoice_date:
-        raise HTTPException(422, "The date of a numbered invoice is fixed. Create a new invoice to use another date.")
     number = payload.invoice_number if payload.invoice_number is not None else old.invoice_number
     await require_available_number(number, old.id)
     data = {**input_data(payload), "invoice_number": number}
