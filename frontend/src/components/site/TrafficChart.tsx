@@ -44,19 +44,21 @@ export default function TrafficChart({ pin }: { pin: string }) {
         ) : (
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={data} margin={{ top: 5, right: 10, bottom: 0, left: -20 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" vertical={false} />
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--dashboard-chart-grid, #E2E8F0)" vertical={false} />
               <XAxis
                 dataKey="label"
-                tick={{ fontSize: 11, fill: "#64748B" }}
+                tick={{ fontSize: 11, fill: "var(--dashboard-chart-muted, #64748B)" }}
                 interval="preserveStartEnd"
                 minTickGap={18}
-                stroke="#CBD5E1"
+                stroke="var(--dashboard-chart-grid, #CBD5E1)"
               />
-              <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: "#64748B" }} stroke="#CBD5E1" />
+              <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: "var(--dashboard-chart-muted, #64748B)" }} stroke="var(--dashboard-chart-grid, #CBD5E1)" />
               <Tooltip
                 contentStyle={{
                   borderRadius: 6,
-                  border: "1px solid #E2E8F0",
+                  border: "1px solid var(--border)",
+                  backgroundColor: "var(--popover)",
+                  color: "var(--popover-foreground)",
                   fontSize: 12,
                   fontFamily: "IBM Plex Sans, sans-serif",
                 }}
@@ -65,7 +67,7 @@ export default function TrafficChart({ pin }: { pin: string }) {
                 type="monotone"
                 dataKey="visits"
                 name="Visits"
-                stroke="#0F2444"
+                stroke="var(--dashboard-chart-visits, #0F2444)"
                 strokeWidth={2.5}
                 dot={false}
                 activeDot={{ r: 4 }}
@@ -74,7 +76,7 @@ export default function TrafficChart({ pin }: { pin: string }) {
                 type="monotone"
                 dataKey="applications"
                 name="Worker Registrations"
-                stroke="#EA580C"
+                stroke="var(--dashboard-chart-applications, #EA580C)"
                 strokeWidth={2.5}
                 dot={false}
                 activeDot={{ r: 4 }}
@@ -83,7 +85,7 @@ export default function TrafficChart({ pin }: { pin: string }) {
                 type="monotone"
                 dataKey="requests"
                 name="Manpower Requests"
-                stroke="#16A34A"
+                stroke="var(--dashboard-chart-requests, #16A34A)"
                 strokeWidth={2.5}
                 dot={false}
                 activeDot={{ r: 4 }}
@@ -95,9 +97,9 @@ export default function TrafficChart({ pin }: { pin: string }) {
 
       <div className="mt-4 flex flex-wrap gap-3 text-xs text-slate-600 sm:gap-5">
         {[
-          ["#0F2444", "Visits"],
-          ["#EA580C", "Applications"],
-          ["#16A34A", "Manpower Requests"],
+          ["var(--dashboard-chart-visits, #0F2444)", "Visits"],
+          ["var(--dashboard-chart-applications, #EA580C)", "Applications"],
+          ["var(--dashboard-chart-requests, #16A34A)", "Manpower Requests"],
         ].map(([color, label]) => (
           <span key={label} className="inline-flex items-center gap-2">
             <span className="h-2.5 w-2.5 rounded-full" style={{ background: color }} />

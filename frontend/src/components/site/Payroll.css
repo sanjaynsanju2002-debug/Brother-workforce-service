@@ -26,8 +26,8 @@
 }
 
 .payroll-register-table thead {
-  background: #f8fafc;
-  color: #64748b;
+  background: var(--payroll-table-bg, #f8fafc);
+  color: var(--payroll-muted, #64748b);
 }
 
 .payroll-register-table th,
@@ -47,15 +47,15 @@
 
 .payroll-register-table tbody tr,
 .payroll-register-table tfoot {
-  border-top: 1px solid #e2e8f0;
+  border-top: 1px solid var(--payroll-border, #e2e8f0);
 }
 
 .payroll-register-table tbody tr[data-active="true"] {
-  background: #eef3fb;
+  background: var(--payroll-selected, #eef3fb);
 }
 
 .payroll-register-table tbody tr[data-included="false"] {
-  color: #64748b;
+  color: var(--payroll-muted, #64748b);
 }
 
 .payroll-register-table .payroll-days-cell {
@@ -63,12 +63,12 @@
 }
 
 .payroll-register-table .payroll-payable-cell {
-  color: #0f2444;
+  color: var(--payroll-ink, #0f2444);
   font-weight: 600;
 }
 
 .payroll-register-table tfoot {
-  background: #f8fafc;
+  background: var(--payroll-table-bg, #f8fafc);
   font-weight: 600;
 }
 
@@ -133,7 +133,7 @@
     content: attr(data-label);
     display: block;
     margin-bottom: 0.25rem;
-    color: #64748b;
+    color: var(--payroll-muted, #64748b);
     font-size: 0.75rem;
     font-weight: 400;
   }
@@ -141,7 +141,7 @@
   .payroll-register-table .payroll-payable-cell {
     grid-column: 1 / -1;
     padding-top: 0.5rem;
-    border-top: 1px solid #e2e8f0;
+    border-top: 1px solid var(--payroll-border, #e2e8f0);
   }
 }
 

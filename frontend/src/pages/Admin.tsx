@@ -1,3 +1,4 @@
+import { DashboardTheme, DashboardThemeToggle } from "@/components/dashboard/DashboardTheme";
 import { jobSaveError, jobValidationError } from "@/lib/jobValidation";
 import { CandidateDetailsStatus, JobSearchVerification } from "@/components/site/JobReadiness";
 import { useEffect, useState } from "react";
@@ -58,6 +59,10 @@ const EMPTY_FILTERS = { skill_category: "", location: "", availability: "", stat
 const WORKER_STATUS = ["New", "Contacted", "Deployed", "Archived"];
 const REQUEST_STATUS = ["Pending", "Quote Sent", "In Progress", "Closed"];
 export default function Admin() {
+  return <DashboardTheme><AdminPage /></DashboardTheme>;
+}
+
+function AdminPage() {
   useEffect(() => {
     const previousTitle = document.title;
     const existingRobots = document.querySelector<HTMLMetaElement>('meta[name="robots"]');
@@ -111,10 +116,11 @@ export default function Admin() {
 
   if (!authenticated && (loggedOut || !session.isSuccess)) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#0F2444] px-6">
+      <div className="relative flex min-h-screen items-center justify-center bg-[#0F2444] px-6 py-24">
+        <div className="absolute top-4 right-4 sm:top-6 sm:right-6"><DashboardThemeToggle /></div>
         <Card className="w-full max-w-sm border-slate-200 bg-white" data-testid="admin-login-card">
           <CardContent className="p-8">
-            <img src={BRAND.logo} alt="" className="mx-auto mb-4 h-16 w-16 object-contain" />
+            <img src={BRAND.logo} alt="" className="dashboard-brand-logo mx-auto mb-4 h-16 w-16 object-contain" />
             <h1 className="text-center text-xl font-bold text-[#0F2444]">Admin Access</h1>
             <p className="mt-1 text-center text-sm text-slate-500">Enter your security PIN to continue</p>
             <form
@@ -357,7 +363,7 @@ function Dashboard({
     <div className="min-h-screen bg-[#F8FAFC]">
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-3 px-4 py-3 sm:flex-nowrap sm:px-6 sm:py-4">
-          <img src={BRAND.logo} alt="" className="h-10 w-10 object-contain" />
+          <img src={BRAND.logo} alt="" className="dashboard-brand-logo h-10 w-10 object-contain" />
           <div>
             <p className="font-[family-name:var(--font-heading)] text-sm font-bold text-[#0F2444]">
               ADMIN DASHBOARD
@@ -365,6 +371,7 @@ function Dashboard({
             <p className="text-xs text-slate-500">{account.data ? `${account.data.name} · ${account.data.role === "viewer" ? "View only" : account.data.role}` : "Brothers Workforce Solutions"}</p>
           </div>
           <div className="ml-auto flex w-full gap-2 sm:w-auto">
+            <DashboardThemeToggle />
             <Link to="/" className="flex-1 rounded-md border border-slate-200 px-3 py-2 text-center text-sm text-slate-600 hover:text-[#0F2444] sm:flex-none sm:px-4">
               View Site
             </Link>

@@ -1,0 +1,75 @@
+/* Dashboard-only theme. Legacy colour utilities are mapped here so every admin
+   section follows the switch, while public pages and generated PDFs keep their design. */
+.bws-dashboard {
+  min-height: 100vh;
+  background: var(--background);
+  color: var(--foreground);
+}
+
+html[data-dashboard-theme="dark"], .bws-dashboard.dark {
+  --background: #0b1220;
+  --foreground: #f1f5f9;
+  --card: #142238;
+  --card-foreground: #f1f5f9;
+  --popover: #142238;
+  --popover-foreground: #f1f5f9;
+  --secondary: #23334b;
+  --secondary-foreground: #f1f5f9;
+  --muted: #1c2c42;
+  --muted-foreground: #b0bfd3;
+  --border: #364963;
+  --input: #475b76;
+  --ring: #fdba74;
+  --dashboard-soft: #1b2b41;
+  --dashboard-hover: #263b56;
+  --dashboard-link: #fdba74;
+  --dashboard-chart-visits: #93c5fd;
+  --dashboard-chart-applications: #fb923c;
+  --dashboard-chart-requests: #86efac;
+  --dashboard-chart-muted: #b0bfd3;
+  --dashboard-chart-grid: #364963;
+  --payroll-table-bg: #1b2b41;
+  --payroll-muted: #b0bfd3;
+  --payroll-border: #364963;
+  --payroll-selected: #263b56;
+  --payroll-ink: #f1f5f9;
+  color-scheme: dark;
+}
+
+.bws-dashboard.dark :is(.bg-white, [class~="bg-white/95"], [class~="bg-white/[0.88]"]) { background-color: var(--card); }
+.bws-dashboard.dark [class~="bg-[#F8FAFC]"] { background-color: var(--background); }
+.bws-dashboard.dark :is(.bg-slate-50, .bg-slate-100) { background-color: var(--dashboard-soft); }
+.bws-dashboard.dark :is(.border-slate-100, .border-slate-200, .border-slate-300, [class~="border-slate-200/80"], [class~="border-slate-200/60"]) { border-color: var(--border); }
+.bws-dashboard.dark :is([class~="text-[#0F2444]"], .text-slate-700, .text-slate-800, .text-slate-900) { color: var(--foreground); }
+.bws-dashboard.dark :is(.text-slate-400, .text-slate-500, .text-slate-600) { color: var(--muted-foreground); }
+.bws-dashboard.dark :is([class~="text-[#C2410C]"], [class~="text-[#9A3412]"]) { color: var(--dashboard-link); }
+
+/* Status colours retain a distinct background, border and readable foreground. */
+.bws-dashboard.dark :is(.bg-amber-50, .bg-amber-100, .bg-orange-50) { background-color: #35291c; }
+.bws-dashboard.dark :is(.border-amber-200, .border-amber-300, .border-orange-200) { border-color: #956b35; }
+.bws-dashboard.dark :is(.text-amber-600, .text-amber-700, .text-amber-800, .text-amber-900, .text-orange-900) { color: #fde68a; }
+.bws-dashboard.dark .bg-red-50 { background-color: #3b202c; }
+.bws-dashboard.dark .border-red-200 { border-color: #9c5160; }
+.bws-dashboard.dark :is(.text-red-600, .text-red-700, .text-red-800, .text-red-900) { color: #fda4af; }
+.bws-dashboard.dark :is(.bg-green-50, .bg-emerald-50) { background-color: #15372e; }
+.bws-dashboard.dark :is(.border-green-200, .border-emerald-200, .border-emerald-300) { border-color: #39856c; }
+.bws-dashboard.dark :is(.text-green-600, .text-green-700, .text-green-900, .text-emerald-800, .text-emerald-900) { color: #a7f3d0; }
+.bws-dashboard.dark .bg-blue-50 { background-color: #182e49; }
+.bws-dashboard.dark .border-blue-200 { border-color: #537ba8; }
+.bws-dashboard.dark :is(.text-blue-600, .text-blue-900) { color: #bfdbfe; }
+.bws-dashboard.dark :is(.bg-green-600, [class~="bg-[#16A34A]"]) { background-color: #166534; }
+
+.bws-dashboard.dark :is([class~="hover:bg-slate-50"], [class~="hover:bg-slate-100"]):hover { background-color: var(--dashboard-hover); }
+.bws-dashboard.dark [class~="hover:bg-red-50"]:hover { background-color: #4a2632; }
+.bws-dashboard.dark [class~="hover:bg-orange-100"]:hover { background-color: #493521; }
+.bws-dashboard.dark [class~="hover:bg-emerald-50"]:hover { background-color: #204b3e; }
+.bws-dashboard.dark [class~="hover:bg-[#15803D]"]:hover { background-color: #14532d; }
+.bws-dashboard.dark [class~="hover:text-[#0F2444]"]:hover { color: var(--foreground); }
+.bws-dashboard.dark :is([class~="hover:text-[#C2410C]"], [class~="hover:text-orange-800"]):hover { color: #fed7aa; }
+.bws-dashboard.dark [data-slot="tabs-trigger"][data-active] { background-color: var(--dashboard-hover); color: var(--foreground); border-color: var(--input); }
+.bws-dashboard.dark [data-slot="tabs-trigger"]:not([data-active]):hover { background-color: var(--dashboard-soft); color: var(--foreground); }
+.bws-dashboard.dark :is([data-slot="input"], [data-slot="textarea"]):disabled { background-color: var(--muted); }
+.bws-dashboard.dark :is(input, select, textarea) { color-scheme: dark; }
+.bws-dashboard.dark :is(input, textarea)::placeholder { color: #9aabc1; opacity: 1; }
+
+.bws-dashboard.dark .dashboard-brand-logo { background: #fff; padding: 2px; border-radius: 8px; }
