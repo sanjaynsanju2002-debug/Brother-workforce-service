@@ -84,7 +84,7 @@ it("starts attendance unmarked, saves every employee and only approves a reviewe
     expect(Array.from(document.querySelectorAll("form input")).filter((f) => (f as HTMLInputElement).validity.valueMissing || (f as HTMLInputElement).validity.rangeUnderflow || (f as HTMLInputElement).validity.rangeOverflow).map((f) => [f.getAttribute("aria-label"), (f as HTMLInputElement).validationMessage])).toEqual([]);
     submitText("Save draft");
     await waitFor(() => expect(Array.from(document.querySelectorAll("button")).find((b) => b.textContent === "Approve attendance")?.disabled).toBe(false));
-    expect(writes[0].body.rows).toEqual([{ assignment_id: "assignment", status: "Half-day", overtime_hours: "2.5" }]);
+    expect(writes[0].body.rows).toEqual([{ assignment_id: "assignment", status: "Half-day", shift: "General", overtime_hours: "2.5" }]);
     clickText("Approve attendance");
     await waitFor(() => expect(document.body.textContent).toContain("Approved by Owner"));
     expect(writes[1]).toMatchObject({ url: "/api/admin/operations/attendance/sheet/approve", body: { revision: 1 } });

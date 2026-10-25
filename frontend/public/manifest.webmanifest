@@ -18,6 +18,7 @@
     {"name": "Find jobs", "url": "/#jobs"},
     {"name": "Register for work", "url": "/#worker-registration"},
     {"name": "Request workers", "url": "/#manpower-request"},
-    {"name": "Admin access", "url": "/admin"}
+    {"name": "Admin access", "url": "/admin"},
+    {"name": "Attendance tracker", "url": "/attendance"}
   ]
 }

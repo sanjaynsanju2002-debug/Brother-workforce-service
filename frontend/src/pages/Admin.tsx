@@ -194,7 +194,7 @@ function Dashboard({
   const [filters, setFilters] = useState(EMPTY_FILTERS);
   const [matchJobId, setMatchJobId] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState("overview");
+  const [activeTab, setActiveTab] = useState(() => new URLSearchParams(window.location.search).get("tab") || "overview");
 
   const shortlists = useQuery({
     queryKey: ["admin-shortlists", pin],
@@ -372,6 +372,9 @@ function Dashboard({
           </div>
           <div className="ml-auto flex w-full gap-2 sm:w-auto">
             <DashboardThemeToggle />
+            <Link to="/attendance" className="flex-1 rounded-md border border-orange-200 bg-orange-50 px-3 py-2 text-center text-sm font-medium text-[#C2410C] hover:bg-orange-100 sm:flex-none sm:px-4">
+              Attendance App
+            </Link>
             <Link to="/" className="flex-1 rounded-md border border-slate-200 px-3 py-2 text-center text-sm text-slate-600 hover:text-[#0F2444] sm:flex-none sm:px-4">
               View Site
             </Link>

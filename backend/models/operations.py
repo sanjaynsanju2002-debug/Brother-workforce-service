@@ -7,6 +7,11 @@ from lib.months import MONTH_PATTERN
 
 Identifier = Annotated[str, Field(min_length=1, max_length=80, pattern=r"^[A-Za-z0-9_-]+$")]
 Hours = Annotated[Decimal, Field(ge=0, le=24, decimal_places=2, allow_inf_nan=False)]
+ShiftName = Literal["General", "Morning", "Afternoon", "Night"]
+AttendanceStatus = Literal[
+    "Unmarked", "Present", "Absent", "Half-day", "Paid leave",
+    "Unpaid leave", "Leave", "Holiday", "Weekly off",
+]
 
 
 class OperationalModel(BaseModel):
@@ -15,7 +20,8 @@ class OperationalModel(BaseModel):
 
 class AttendanceRow(OperationalModel):
     assignment_id: Identifier
-    status: Literal["Unmarked", "Present", "Absent", "Half-day", "Leave"] = "Unmarked"
+    status: AttendanceStatus = "Unmarked"
+    shift: ShiftName = "General"
     overtime_hours: Hours = Decimal("0")
 
     @model_validator(mode="after")
@@ -42,6 +48,7 @@ class AttendanceInput(OperationalModel):
 class AttendanceSnapshot(AttendanceRow):
     full_name: str
     worker_id: str | None = None
+    employee_id: str | None = None
     role: str = ""
 
 

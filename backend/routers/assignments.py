@@ -18,6 +18,8 @@ from models.bws import Worker
 
 router = APIRouter(prefix="/admin", dependencies=[Depends(require_admin)])
 
+ShiftName = Literal["General", "Morning", "Afternoon", "Night"]
+
 
 class EmployeeIdInput(BaseModel):
     employee_id: str | None = Field(default=None, max_length=80)
@@ -34,6 +36,7 @@ class AssignmentCreate(EmployeeIdInput):
     full_name: str = Field(min_length=1, max_length=150)
     mobile: str | None = None
     role: str | None = None
+    shift: ShiftName = "General"
     start_date: str | None = None
     end_date: str | None = None
 
@@ -64,6 +67,7 @@ class AssignmentUpdate(EmployeeIdInput):
         return value
     salary: Money | None = None
     salary_basis: Literal["Monthly", "Daily"] | None = None
+    shift: ShiftName | None = None
 
 
 class Assignment(AssignmentCreate):
@@ -164,7 +168,7 @@ async def create_assignment(payload: AssignmentCreate) -> Assignment:
 @router.patch("/assignments/{assignment_id}", response_model=Assignment)
 async def update_assignment(assignment_id: str, payload: AssignmentUpdate) -> Assignment:
     changes = payload.model_dump(mode="json", exclude_unset=True)
-    if not changes or any(key in changes and changes[key] is None for key in ("status", "salary_basis")):
+    if not changes or any(key in changes and changes[key] is None for key in ("status", "salary_basis", "shift")):
         raise HTTPException(status_code=422, detail="Enter employee details, salary or a valid assignment status")
     before = await db.assignments.find_one({"id": assignment_id})
     if not before:

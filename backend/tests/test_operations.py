@@ -159,6 +159,39 @@ async def test_attendance_review_import_overtime_and_stale_approval(store):
 
 
 @pytest.mark.asyncio
+async def test_attendance_shifts_paid_statuses_and_monthly_register(store):
+    async with session() as c:
+        await login(c); co = await company(c)
+        morning = await person(c, co["id"], "Morning Worker", employee_id="M-1", shift="Morning")
+        night = await person(c, co["id"], "Night Worker", employee_id="N-1", shift="Night")
+        route = "/api/admin/operations"
+        draft = (await c.get(f"{route}/attendance", params={"company_id": co["id"], "attendance_date": "2026-01-26"})).json()
+        assert {row["id"]: row["shift"] for row in draft["employees"]} == {morning["id"]: "Morning", night["id"]: "Night"}
+        payload = {
+            "company_id": co["id"], "attendance_date": "2026-01-26",
+            "rows": [
+                {"assignment_id": morning["id"], "shift": "Morning", "status": "Holiday"},
+                {"assignment_id": night["id"], "shift": "Night", "status": "Paid leave"},
+            ],
+            "notes": "Republic Day",
+        }
+        saved = (await c.put(f"{route}/attendance", json=payload)).json()
+        approved = await c.post(f"{route}/attendance/{saved['id']}/approve", json={"revision": 1})
+        assert approved.status_code == 200, approved.text
+        summary = (await c.get(f"{route}/attendance-summary", params={"company_id": co["id"], "month": "2026-01"})).json()
+        assert {row["full_name"]: row["worked_days"] for row in summary["lines"]} == {"Morning Worker": "1.00", "Night Worker": "1.00"}
+        assert summary["status_counts"] == {"Holiday": 1, "Paid leave": 1}
+        register = (await c.get(f"{route}/attendance-register", params={"company_id": co["id"], "month": "2026-01"})).json()
+        assert register["company_name"] == "QA Factory" and len(register["sheets"]) == 1
+        rows = {row["full_name"]: row for row in register["sheets"][0]["rows"]}
+        assert rows["Morning Worker"]["employee_id"] == "M-1" and rows["Morning Worker"]["shift"] == "Morning"
+        pdf = await c.get(f"{route}/attendance-register/download/pdf", params={"company_id": co["id"], "month": "2026-01"})
+        excel = await c.get(f"{route}/attendance-register/download/xlsx", params={"company_id": co["id"], "month": "2026-01"})
+        assert pdf.content.startswith(b"%PDF-") and excel.content.startswith(b"PK")
+        assert "BWS-Attendance-QA-Factory-2026-01" in pdf.headers["content-disposition"]
+
+
+@pytest.mark.asyncio
 async def test_attendance_requires_current_roster_and_respects_joining_and_leaving_dates(store):
     async with session() as c:
         await login(c); co = await company(c); p = await person(c, co["id"], start_date="2026-01-10")
