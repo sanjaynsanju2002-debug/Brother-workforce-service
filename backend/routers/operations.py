@@ -1,14 +1,17 @@
 """Attendance approval, staffing, recruitment, private documents and daily operations."""
+import re
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from uuid import NAMESPACE_URL, UUID, uuid5
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, Response, UploadFile
 from pymongo.errors import DuplicateKeyError
+from starlette.concurrency import run_in_threadpool
 
 from lib.auth import require_admin, require_owner
 from lib.db import db
 from lib.ledger import amount, money, received, salary_paid, today
+from lib.invoices import InvoiceProfile
 from lib.months import MONTH_PATTERN, service_month
 from models.operations import AttendanceInput, AttendanceRecord, DocumentInput, DocumentRecord, RecruitmentInput, RecruitmentRecord, RequirementInput, RequirementRecord, VersionInput
 
@@ -66,7 +69,7 @@ async def roster(company_id, day):
     records = await db.assignments.find({"client_id": company_id}, {"_id": 0}).to_list(2001)
     if len(records) > 2000:
         raise HTTPException(422, "Attendance supports up to 2000 employees per company")
-    return [r for r in records if active_on(r, day)]
+    return [{**r, "shift": r.get("shift") or "General"} for r in records if active_on(r, day)]
 
 
 @router.get("/attendance")
@@ -89,7 +92,8 @@ async def save_attendance(payload: AttendanceInput):
     if set(people) != {r.assignment_id for r in payload.rows}:
         raise HTTPException(409, "The workforce changed. Reload attendance and review every employee for this date.")
     rows = [{**row.model_dump(mode="json"), "full_name": people[row.assignment_id]["full_name"],
-             "worker_id": people[row.assignment_id].get("worker_id"), "role": people[row.assignment_id].get("role") or ""} for row in payload.rows]
+             "worker_id": people[row.assignment_id].get("worker_id"), "employee_id": people[row.assignment_id].get("employee_id"),
+             "role": people[row.assignment_id].get("role") or ""} for row in payload.rows]
     return await write_record("attendance", sheet_id, {"company_id": payload.company_id, "company_name": c["name"],
         "attendance_date": day, "rows": rows, "notes": payload.notes, "status": "Draft", "approved_by": None, "approved_at": None}, payload.revision)
 
@@ -121,20 +125,75 @@ async def attendance_action(sheet_id: str, action: str, payload: VersionInput, r
 async def attendance_totals(company_id, month):
     sheets = await db.attendance.find({"company_id": company_id, "status": "Approved", "attendance_date": {"$gte": month + "-01", "$lt": month + "-32"}}, {"_id": 0}).sort("attendance_date", 1).to_list(32)
     people = {}
+    status_counts = {}
+    paid_values = {
+        "Present": Decimal("1"), "Half-day": Decimal("0.5"),
+        "Paid leave": Decimal("1"), "Holiday": Decimal("1"), "Weekly off": Decimal("1"),
+    }
     for sheet in sheets:
         for row in sheet["rows"]:
-            summary = people.setdefault(row["assignment_id"], {"assignment_id": row["assignment_id"], "full_name": row["full_name"], "worked_days": Decimal("0"), "overtime_hours": Decimal("0")})
-            summary["worked_days"] += {"Present": Decimal("1"), "Half-day": Decimal("0.5")}.get(row["status"], Decimal("0"))
+            summary = people.setdefault(row["assignment_id"], {"assignment_id": row["assignment_id"], "full_name": row["full_name"], "worked_days": Decimal("0"), "overtime_hours": Decimal("0"), "status_counts": {}})
+            summary["worked_days"] += paid_values.get(row["status"], Decimal("0"))
             summary["overtime_hours"] += amount(row.get("overtime_hours"))
+            summary["status_counts"][row["status"]] = summary["status_counts"].get(row["status"], 0) + 1
+            status_counts[row["status"]] = status_counts.get(row["status"], 0) + 1
     return {"lines": [{**r, "worked_days": money(r["worked_days"]), "overtime_hours": money(r["overtime_hours"])} for r in people.values()],
             "sheets": [{"id": s["id"], "date": s["attendance_date"], "revision": s["revision"]} for s in sheets],
-            "approved_days": len(sheets)}
+            "approved_days": len(sheets), "status_counts": status_counts}
 
 
 @router.get("/attendance-summary")
 async def approved_attendance(company_id: str, month: str = Query(pattern=MONTH_PATTERN)):
     await company(company_id, active=False)
     return await attendance_totals(company_id, month)
+
+
+async def attendance_register_data(company_id: str, month: str):
+    c = await company(company_id, active=False)
+    sheets = await db.attendance.find(
+        {"company_id": company_id, "attendance_date": {"$gte": month + "-01", "$lt": month + "-32"}},
+        {"_id": 0},
+    ).sort("attendance_date", 1).to_list(32)
+    people = {}
+    for sheet in sheets:
+        for row in sheet.get("rows", []):
+            people.setdefault(row["assignment_id"], {
+                "assignment_id": row["assignment_id"], "full_name": row["full_name"],
+                "worker_id": row.get("worker_id"), "employee_id": row.get("employee_id"), "role": row.get("role") or "",
+            })
+    current = await roster(company_id, month + "-32")
+    for row in current:
+        people.setdefault(row["id"], {
+            "assignment_id": row["id"], "full_name": row["full_name"],
+            "worker_id": row.get("worker_id"), "employee_id": row.get("employee_id"), "role": row.get("role") or "",
+        })
+    return {
+        "company_id": company_id, "company_name": c["name"], "month": month,
+        "employees": sorted(people.values(), key=lambda row: row["full_name"].casefold()),
+        "sheets": [clean(sheet) for sheet in sheets],
+    }
+
+
+@router.get("/attendance-register")
+async def attendance_register(company_id: str, month: str = Query(pattern=MONTH_PATTERN)):
+    """Return the complete monthly register for the private attendance application."""
+    return await attendance_register_data(company_id, month)
+
+
+@router.get("/attendance-register/download/{format}")
+async def download_attendance_register(format: str, company_id: str, month: str = Query(pattern=MONTH_PATTERN)):
+    if format not in {"pdf", "xlsx"}:
+        raise HTTPException(404, "Choose PDF or Excel")
+    from lib.attendance_exports import export_attendance_pdf, export_attendance_xlsx
+    register = await attendance_register_data(company_id, month)
+    settings = await db.settings.find_one({"id": "invoice_profile"})
+    supplier = InvoiceProfile(**(settings or {}).get("profile", {}))
+    exporter = export_attendance_pdf if format == "pdf" else export_attendance_xlsx
+    content = await run_in_threadpool(exporter, register, supplier)
+    company_name = re.sub(r"[^A-Za-z0-9]+", "-", register["company_name"]).strip("-")[:50] or "Company"
+    filename = f"BWS-Attendance-{company_name}-{month}.{format}"
+    media = "application/pdf" if format == "pdf" else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    return Response(content, media_type=media, headers={"Content-Disposition": f'attachment; filename="{filename}"', "Cache-Control": "private, no-store"})
 
 
 @router.get("/requirements")
