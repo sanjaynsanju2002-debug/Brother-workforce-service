@@ -6,6 +6,9 @@
 @import "@fontsource/ibm-plex-sans/500.css";
 @import "@fontsource/ibm-plex-sans/600.css";
 
+/* Keep utility discovery stable when this stylesheet is built from the standalone attendance root. */
+@source ".";
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {

@@ -1,0 +1,21 @@
+{
+  "id": "/",
+  "name": "Brothers Workforce Attendance",
+  "short_name": "BWS Attendance",
+  "description": "Private multi-company employee attendance and payroll tracker for Brothers Workforce Solutions.",
+  "lang": "en-IN",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#071A33",
+  "theme_color": "#071A33",
+  "icons": [
+    {"src": "https://brothersworkforcesolutions.in/app-icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+    {"src": "https://brothersworkforcesolutions.in/app-icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+    {"src": "https://brothersworkforcesolutions.in/app-icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+  ],
+  "shortcuts": [
+    {"name": "Open attendance", "short_name": "Attendance", "url": "/"}
+  ]
+}

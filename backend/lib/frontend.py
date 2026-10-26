@@ -47,7 +47,7 @@ class WebsiteFiles(StaticFiles):
     async def get_response(self, path, scope):
         response = await super().get_response(path, scope)
         # Let installed clients discover new releases on their next visit.
-        if path in {"sw.js", "install.js", "manifest.webmanifest", "attendance.webmanifest", "offline.html"}:
+        if path in {"sw.js", "install.js", "manifest.webmanifest", "offline.html"}:
             response.headers["Cache-Control"] = "no-cache"
         elif response.headers.get("content-type", "").startswith("text/html"):
             response.headers["Cache-Control"] = "no-store, max-age=0"
@@ -125,11 +125,6 @@ def mount_frontend(app: FastAPI, directory: Path) -> None:
     @app.api_route("/admin/{path:path}", methods=["GET", "HEAD"], include_in_schema=False)
     async def admin_page(path: str = ""):
         return FileResponse(directory / "index.html", headers={"Cache-Control": "no-store"})
-
-    @app.api_route("/attendance", methods=["GET", "HEAD"], include_in_schema=False)
-    @app.api_route("/attendance/", methods=["GET", "HEAD"], include_in_schema=False)
-    async def attendance_page():
-        return FileResponse(directory / "index.html", headers={"Cache-Control": "private, no-store"})
 
     @app.api_route("/app", methods=["GET", "HEAD"], include_in_schema=False)
     @app.api_route("/app/", methods=["GET", "HEAD"], include_in_schema=False)

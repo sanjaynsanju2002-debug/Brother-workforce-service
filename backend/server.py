@@ -87,7 +87,7 @@ async def response_headers(request, call_next):
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
     response.headers.setdefault("X-Frame-Options", "DENY")
     response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
-    if request.url.path in {"/admin", "/attendance"} or request.url.path.startswith(("/admin/", "/attendance/", "/api/admin/")):
+    if request.url.path == "/admin" or request.url.path.startswith(("/admin/", "/api/admin/")):
         response.headers["X-Robots-Tag"] = "noindex, nofollow"
         response.headers.setdefault("Cache-Control", "private, no-store")
     return response
@@ -161,13 +161,18 @@ api_router.include_router(cron_router)
 # Include the router in the main app
 app.include_router(api_router)
 
+cors_origins = os.environ.get(
+    'CORS_ORIGINS',
+    'https://brothersworkforcesolutions.in,https://brother-workforce-service.onrender.com',
+).split(',')
+attendance_origin = os.environ.get('ATTENDANCE_APP_ORIGIN', '').strip().rstrip('/')
+if attendance_origin and attendance_origin not in cors_origins:
+    cors_origins.append(attendance_origin)
+
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=os.environ.get(
-        'CORS_ORIGINS',
-        'https://brothersworkforcesolutions.in,https://brother-workforce-service.onrender.com',
-    ).split(','),
+    allow_origins=cors_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )

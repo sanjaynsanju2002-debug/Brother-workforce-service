@@ -122,6 +122,26 @@ async def test_admin_pin_migrates_to_hash_and_cookie_controls_access(monkeypatch
 
 
 @pytest.mark.asyncio
+async def test_attendance_login_uses_scoped_owner_bearer_session(monkeypatch):
+    fake = FakeDB()
+    monkeypatch.setattr(auth, "db", fake)
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="https://brothersworkforcesolutions.in") as client:
+        login = await client.post("/api/admin/attendance-login", json={"pin": "123456"})
+        assert login.status_code == 200
+        token = login.json()["token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
+        assert "set-cookie" not in login.headers
+        assert (await client.get("/api/admin/me")).status_code == 401
+        me = await client.get("/api/admin/me", headers=headers)
+        assert me.status_code == 200 and me.json()["role"] == "owner"
+        assert (await client.get("/api/admin/jobs", headers=headers)).status_code == 403
+        assert (await client.post("/api/admin/logout", headers=headers)).status_code == 200
+        assert (await client.get("/api/admin/me", headers=headers)).status_code == 401
+
+
+@pytest.mark.asyncio
 async def test_job_application_requires_consent_and_records_selected_role(monkeypatch):
     fake = FakeDB()
     monkeypatch.setattr(public, "db", fake)
