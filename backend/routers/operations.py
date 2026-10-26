@@ -183,6 +183,130 @@ async def attendance_register_data(company_id: str, month: str):
     }
 
 
+async def attendance_weekly_report_data(company_id: str, week_start: date):
+    """Build one Monday-Sunday report with draft visibility and approved totals."""
+    if week_start.weekday() != 0:
+        raise HTTPException(422, "Weekly reports must start on a Monday")
+    c = await company(company_id, active=False)
+    week_end = week_start + timedelta(days=6)
+    start, end = week_start.isoformat(), week_end.isoformat()
+    dates = [(week_start + timedelta(days=offset)).isoformat() for offset in range(7)]
+    sheets = await db.attendance.find(
+        {"company_id": company_id, "attendance_date": {"$gte": start, "$lte": end}},
+        {"_id": 0},
+    ).sort("attendance_date", 1).to_list(8)
+    assignments = await db.assignments.find({"client_id": company_id}, {"_id": 0}).to_list(2001)
+    if len(assignments) > 2000:
+        raise HTTPException(422, "Attendance supports up to 2000 employees per company")
+
+    people = {}
+    for row in assignments:
+        if any(active_on(row, day) for day in dates):
+            people[row["id"]] = {
+                "assignment_id": row["id"], "full_name": row["full_name"],
+                "worker_id": row.get("worker_id"), "employee_id": row.get("employee_id"),
+                "role": row.get("role") or "", "shift": row.get("shift") or "General",
+            }
+    for sheet in sheets:
+        for row in sheet.get("rows", []):
+            people.setdefault(row["assignment_id"], {
+                "assignment_id": row["assignment_id"], "full_name": row["full_name"],
+                "worker_id": row.get("worker_id"), "employee_id": row.get("employee_id"),
+                "role": row.get("role") or "", "shift": row.get("shift") or "General",
+            })
+
+    sheet_by_date = {sheet["attendance_date"]: sheet for sheet in sheets}
+    rows_by_date = {
+        day: {row["assignment_id"]: row for row in sheet.get("rows", [])}
+        for day, sheet in sheet_by_date.items()
+    }
+    paid_values = {
+        "Present": Decimal("1"), "Half-day": Decimal("0.5"),
+        "Paid leave": Decimal("1"), "Holiday": Decimal("1"), "Weekly off": Decimal("1"),
+    }
+    status_counts = {}
+    total_payable = Decimal("0")
+    total_overtime = Decimal("0")
+    report_rows = []
+    for person in sorted(people.values(), key=lambda row: row["full_name"].casefold()):
+        employee_counts = {}
+        employee_payable = Decimal("0")
+        employee_overtime = Decimal("0")
+        employee_days = []
+        for day in dates:
+            sheet = sheet_by_date.get(day)
+            attendance_row = rows_by_date.get(day, {}).get(person["assignment_id"])
+            status = attendance_row.get("status", "Unmarked") if attendance_row else "Unmarked"
+            if status == "Leave":
+                status = "Unpaid leave"
+            overtime = amount(attendance_row.get("overtime_hours")) if attendance_row else Decimal("0")
+            employee_days.append({
+                "date": day, "status": status,
+                "shift": attendance_row.get("shift", person["shift"]) if attendance_row else person["shift"],
+                "overtime_hours": money(overtime),
+                "sheet_status": sheet.get("status") if sheet else "Not saved",
+            })
+            if sheet and sheet.get("status") == "Approved" and status != "Unmarked":
+                employee_counts[status] = employee_counts.get(status, 0) + 1
+                status_counts[status] = status_counts.get(status, 0) + 1
+                employee_payable += paid_values.get(status, Decimal("0"))
+                employee_overtime += overtime
+        total_payable += employee_payable
+        total_overtime += employee_overtime
+        report_rows.append({
+            **person, "days": employee_days, "status_counts": employee_counts,
+            "payable_days": money(employee_payable), "overtime_hours": money(employee_overtime),
+        })
+
+    calendar_days = [{
+        "date": day,
+        "status": sheet_by_date[day]["status"] if day in sheet_by_date else "Not saved",
+        "notes": sheet_by_date[day].get("notes", "") if day in sheet_by_date else "",
+    } for day in dates]
+    approved_days = sum(sheet.get("status") == "Approved" for sheet in sheets)
+    return {
+        "company_id": company_id, "company_name": c["name"], "week_start": start, "week_end": end,
+        "calendar_days": calendar_days, "saved_days": len(sheets), "approved_days": approved_days,
+        "draft_days": len(sheets) - approved_days, "employees": report_rows, "status_counts": status_counts,
+        "totals": {"employees": len(report_rows), "payable_days": money(total_payable), "overtime_hours": money(total_overtime)},
+    }
+
+
+@router.get("/attendance-weekly-report")
+async def attendance_weekly_report(company_id: str, week_start: date):
+    return await attendance_weekly_report_data(company_id, week_start)
+
+
+@router.get("/attendance-weekly-report/download/{format}")
+async def download_attendance_weekly_report(format: str, company_id: str, week_start: date):
+    if format not in {"csv", "xlsx", "pdf"}:
+        raise HTTPException(404, "Choose CSV, Excel or PDF")
+    from lib.attendance_exports import (
+        export_attendance_weekly_csv,
+        export_attendance_weekly_pdf,
+        export_attendance_weekly_xlsx,
+    )
+    report = await attendance_weekly_report_data(company_id, week_start)
+    settings = await db.settings.find_one({"id": "invoice_profile"})
+    supplier = InvoiceProfile(**(settings or {}).get("profile", {}))
+    exporters = {
+        "csv": export_attendance_weekly_csv,
+        "xlsx": export_attendance_weekly_xlsx,
+        "pdf": export_attendance_weekly_pdf,
+    }
+    content = await run_in_threadpool(exporters[format], report, supplier)
+    company_name = re.sub(r"[^A-Za-z0-9]+", "-", report["company_name"]).strip("-")[:50] or "Company"
+    filename = f"BWS-Weekly-Attendance-{company_name}-{report['week_start']}-to-{report['week_end']}.{format}"
+    media = {
+        "csv": "text/csv; charset=utf-8",
+        "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "pdf": "application/pdf",
+    }[format]
+    return Response(content, media_type=media, headers={
+        "Content-Disposition": f'attachment; filename="{filename}"', "Cache-Control": "private, no-store",
+    })
+
+
 @router.get("/attendance-register")
 async def attendance_register(company_id: str, month: str = Query(pattern=MONTH_PATTERN)):
     """Return the complete monthly register for the private attendance application."""

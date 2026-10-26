@@ -4,12 +4,15 @@ import {
   BarChart3,
   Building2,
   CalendarDays,
+  CalendarRange,
   CheckCircle2,
+  ChevronLeft,
   ChevronRight,
   ClipboardCheck,
   Download,
   ExternalLink,
   FileSpreadsheet,
+  FileText,
   Loader2,
   Lock,
   LogOut,
@@ -94,9 +97,59 @@ type AttendanceRegister = {
   employees: (Omit<Employee, "id"> & { assignment_id: string })[];
   sheets: AttendanceSheet[];
 };
+type WeeklyCalendarDay = { date: string; status: "Approved" | "Draft" | "Not saved"; notes: string };
+type WeeklyEmployeeDay = {
+  date: string;
+  status: AttendanceStatus;
+  shift: ShiftName;
+  overtime_hours: string;
+  sheet_status: "Approved" | "Draft" | "Not saved";
+};
+type WeeklyEmployee = {
+  assignment_id: string;
+  full_name: string;
+  employee_id?: string | null;
+  role: string;
+  days: WeeklyEmployeeDay[];
+  status_counts: Record<string, number>;
+  payable_days: string;
+  overtime_hours: string;
+};
+type WeeklyReportData = {
+  company_id: string;
+  company_name: string;
+  week_start: string;
+  week_end: string;
+  calendar_days: WeeklyCalendarDay[];
+  saved_days: number;
+  approved_days: number;
+  draft_days: number;
+  employees: WeeklyEmployee[];
+  status_counts: Record<string, number>;
+  totals: { employees: number; payable_days: string; overtime_hours: string };
+};
 type Account = { ok: boolean; name: string; role: string };
 type AttendanceLogin = { ok: boolean; token: string; expires_in: number };
 type InstallPrompt = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: "accepted" | "dismissed" }> };
+
+function offsetDate(value: string, days: number) {
+  const [year, month, day] = value.split("-").map(Number);
+  const result = new Date(Date.UTC(year, month - 1, day + days));
+  return result.toISOString().slice(0, 10);
+}
+
+function mondayFor(value: string) {
+  const [year, month, day] = value.split("-").map(Number);
+  const current = new Date(Date.UTC(year, month - 1, day));
+  return offsetDate(value, -((current.getUTCDay() + 6) % 7));
+}
+
+function reportDate(value: string, weekday = false) {
+  const [year, month, day] = value.split("-").map(Number);
+  return new Intl.DateTimeFormat("en-IN", {
+    ...(weekday ? { weekday: "short" as const } : {}), day: "2-digit", month: "short", year: weekday ? undefined : "numeric", timeZone: "UTC",
+  }).format(new Date(Date.UTC(year, month - 1, day)));
+}
 
 function message(error: unknown) {
   if (error instanceof ApiError) {
@@ -233,9 +286,10 @@ function AttendanceSession() {
 }
 
 function AttendanceWorkspace({ account, onLogout }: { account: Account; onLogout: () => void }) {
-  const [view, setView] = useState<"daily" | "register">("daily");
+  const [view, setView] = useState<"daily" | "weekly" | "register">("daily");
   const [companyId, setCompanyId] = useState(() => localStorage.getItem("bws-attendance-company") ?? "");
   const [day, setDay] = useState(indiaToday());
+  const [weekStart, setWeekStart] = useState(() => mondayFor(indiaToday()));
   const [month, setMonth] = useState(indiaToday().slice(0, 7));
   const companies = useQuery({ queryKey: ["attendance-companies"], queryFn: () => apiGet<Company[]>(`${OPS}/attendance-companies`) });
   const selected = companies.data?.find((company) => company.id === companyId);
@@ -269,10 +323,10 @@ function AttendanceWorkspace({ account, onLogout }: { account: Account; onLogout
         <section className="mb-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex min-w-0 items-center gap-3"><span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-orange-50 text-[#EA580C]"><Building2 className="h-5 w-5" /></span><div className="min-w-0"><p className="text-xs text-slate-500">Selected company</p><h2 className="truncate text-lg font-semibold">{selected?.name ?? "Loading company…"}</h2></div></div>
-            <div className="inline-flex rounded-xl bg-slate-100 p-1"><button type="button" onClick={() => setView("daily")} className={`flex min-h-9 items-center gap-2 rounded-lg px-3 text-sm font-medium transition ${view === "daily" ? "bg-white text-[#0F2444] shadow-sm" : "text-slate-500"}`}><ClipboardCheck className="h-4 w-4" />Daily</button><button type="button" onClick={() => setView("register")} className={`flex min-h-9 items-center gap-2 rounded-lg px-3 text-sm font-medium transition ${view === "register" ? "bg-white text-[#0F2444] shadow-sm" : "text-slate-500"}`}><BarChart3 className="h-4 w-4" />Monthly</button></div>
+            <div className="inline-flex max-w-full overflow-x-auto rounded-xl bg-slate-100 p-1"><button type="button" onClick={() => setView("daily")} className={`flex min-h-9 shrink-0 items-center gap-2 rounded-lg px-3 text-sm font-medium transition ${view === "daily" ? "bg-white text-[#0F2444] shadow-sm" : "text-slate-500"}`}><ClipboardCheck className="h-4 w-4" />Daily</button><button type="button" onClick={() => setView("weekly")} className={`flex min-h-9 shrink-0 items-center gap-2 rounded-lg px-3 text-sm font-medium transition ${view === "weekly" ? "bg-white text-[#0F2444] shadow-sm" : "text-slate-500"}`}><CalendarRange className="h-4 w-4" />Weekly</button><button type="button" onClick={() => setView("register")} className={`flex min-h-9 shrink-0 items-center gap-2 rounded-lg px-3 text-sm font-medium transition ${view === "register" ? "bg-white text-[#0F2444] shadow-sm" : "text-slate-500"}`}><BarChart3 className="h-4 w-4" />Monthly</button></div>
           </div>
         </section>
-        {view === "daily" ? <DailyAttendance companyId={companyId} day={day} onDay={setDay} /> : <MonthlyRegister companyId={companyId} month={month} onMonth={setMonth} />}
+        {view === "daily" ? <DailyAttendance companyId={companyId} day={day} onDay={setDay} /> : view === "weekly" ? <WeeklyReport companyId={companyId} weekStart={weekStart} onWeekStart={setWeekStart} /> : <MonthlyRegister companyId={companyId} month={month} onMonth={setMonth} />}
       </>}
     </main>
   </div>;
@@ -359,6 +413,7 @@ function DailyEditor({ companyId, day, draft, reload }: { companyId: string; day
       setDirty(false);
       toast.success("Attendance draft saved");
       await queryClient.invalidateQueries({ queryKey: ["attendance-register", companyId] });
+      await queryClient.invalidateQueries({ queryKey: ["attendance-weekly-report", companyId] });
       await reload();
     },
     onError: (error) => setProblem(message(error)),
@@ -369,6 +424,7 @@ function DailyEditor({ companyId, day, draft, reload }: { companyId: string; day
       setDirty(false);
       toast.success(name === "approve" ? "Attendance approved and ready for payroll" : "Attendance reopened for correction");
       await queryClient.invalidateQueries({ queryKey: ["attendance-register", companyId] });
+      await queryClient.invalidateQueries({ queryKey: ["attendance-weekly-report", companyId] });
       await queryClient.invalidateQueries({ queryKey: ["payroll-draft", companyId] });
       await reload();
     },
@@ -412,6 +468,86 @@ function EmployeeAttendanceCard({ row, locked, onEdit }: { row: AttendanceRow; l
       <div><Label htmlFor={`overtime-${row.assignment_id}`} className="mb-1.5 block text-xs text-slate-500">Overtime hours</Label><Input id={`overtime-${row.assignment_id}`} aria-label={`Overtime hours for ${row.full_name}`} type="number" inputMode="decimal" min="0" max="24" step="0.01" disabled={locked || !["Present", "Half-day"].includes(normalizeStatus(row.status))} value={row.overtime_hours} onChange={(event) => onEdit({ overtime_hours: event.target.value })} /></div>
     </div>
   </article>;
+}
+
+function WeeklyReport({ companyId, weekStart, onWeekStart }: { companyId: string; weekStart: string; onWeekStart: (day: string) => void }) {
+  const [downloading, setDownloading] = useState<"csv" | "xlsx" | "pdf" | null>(null);
+  const query = useQuery({
+    queryKey: ["attendance-weekly-report", companyId, weekStart],
+    queryFn: () => apiGet<WeeklyReportData>(`${OPS}/attendance-weekly-report?company_id=${encodeURIComponent(companyId)}&week_start=${weekStart}`),
+  });
+  const download = async (format: "csv" | "xlsx" | "pdf") => {
+    try {
+      setDownloading(format);
+      await downloadAttendance(
+        `${OPS}/attendance-weekly-report/download/${format}?company_id=${encodeURIComponent(companyId)}&week_start=${weekStart}`,
+        `BWS-Weekly-Attendance-${weekStart}.${format}`,
+      );
+    } catch (error) {
+      toast.error(message(error));
+    } finally {
+      setDownloading(null);
+    }
+  };
+  if (query.isPending) return <LoadingCard label="Preparing weekly attendance report…" />;
+  if (query.isError) return <ErrorCard text={message(query.error)} retry={() => query.refetch()} />;
+  const report = query.data;
+  const empty = report.saved_days === 0;
+  const currentWeek = mondayFor(indiaToday());
+  return <section className="space-y-4">
+    <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <Label htmlFor="attendance-week" className="mb-2 flex items-center gap-2"><CalendarRange className="h-4 w-4 text-[#EA580C]" />Week starting Monday</Label>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="outline" size="sm" aria-label="Previous week" onClick={() => onWeekStart(offsetDate(weekStart, -7))}><ChevronLeft className="h-4 w-4" />Previous</Button>
+            <DateInput id="attendance-week" value={weekStart} onValueChange={(value) => value ? onWeekStart(mondayFor(value)) : false} />
+            <Button type="button" variant="outline" size="sm" aria-label="Next week" onClick={() => onWeekStart(offsetDate(weekStart, 7))}>Next<ChevronRight className="h-4 w-4" /></Button>
+            {weekStart !== currentWeek && <Button type="button" variant="ghost" size="sm" onClick={() => onWeekStart(currentWeek)}>This week</Button>}
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="outline" disabled={!!downloading || empty} onClick={() => void download("csv")}><FileText className="h-4 w-4" />{downloading === "csv" ? "Preparing…" : "CSV"}</Button>
+          <Button type="button" variant="outline" disabled={!!downloading || empty} onClick={() => void download("xlsx")}><FileSpreadsheet className="h-4 w-4" />{downloading === "xlsx" ? "Preparing…" : "Excel"}</Button>
+          <Button type="button" disabled={!!downloading || empty} onClick={() => void download("pdf")} className="bg-[#0F2444] text-white hover:bg-[#183A67]"><Download className="h-4 w-4" />{downloading === "pdf" ? "Preparing…" : "PDF"}</Button>
+        </div>
+      </div>
+    </section>
+
+    <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div className="border-b border-slate-200 p-4 sm:p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#EA580C]">Weekly report</p><h2 className="mt-1 text-xl font-semibold">{report.company_name}</h2><p className="mt-1 text-sm text-slate-500">{reportDate(report.week_start)} – {reportDate(report.week_end)}</p></div>
+          <div className="rounded-xl bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900"><strong>Report rule:</strong> the table and downloads show saved drafts, but all totals calculate approved days only.</div>
+        </div>
+        <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+          <WeeklyMetric label="Employees" value={String(report.totals.employees)} />
+          <WeeklyMetric label="Approved days" value={`${report.approved_days} / 7`} />
+          <WeeklyMetric label="Present" value={String(report.status_counts.Present ?? 0)} tone="emerald" />
+          <WeeklyMetric label="Absent" value={String(report.status_counts.Absent ?? 0)} tone="red" />
+          <WeeklyMetric label="Payable days" value={report.totals.payable_days} tone="orange" />
+          <WeeklyMetric label="OT hours" value={report.totals.overtime_hours} />
+        </div>
+      </div>
+
+      {empty ? <div className="p-10 text-center"><CalendarRange className="mx-auto h-9 w-9 text-slate-300" /><h3 className="mt-3 font-semibold">No attendance saved for this week</h3><p className="mt-1 text-sm text-slate-500">Open Daily attendance to create and approve records. Weekly downloads become available after the first saved day.</p></div> : <>
+        <div className="overflow-x-auto">
+          <table className="min-w-max text-left text-xs">
+            <thead className="bg-slate-50"><tr><th className="sticky left-0 z-10 min-w-60 border-r border-b bg-slate-50 p-3">Employee</th>{report.calendar_days.map((day) => <th key={day.date} className="min-w-24 border-r border-b p-2 text-center"><span className="block font-semibold">{reportDate(day.date, true)}</span><span className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[9px] font-semibold ${day.status === "Approved" ? "bg-emerald-100 text-emerald-800" : day.status === "Draft" ? "bg-amber-100 text-amber-800" : "bg-slate-200 text-slate-500"}`}>{day.status}</span></th>)}<th className="min-w-56 border-b p-3">Approved totals</th></tr></thead>
+            <tbody>{report.employees.map((employee) => <tr key={employee.assignment_id} className="border-b last:border-b-0"><th className="sticky left-0 z-[1] border-r bg-white p-3"><span className="block max-w-56 truncate font-semibold">{employee.full_name}</span><span className="mt-1 block max-w-56 truncate font-normal text-slate-500">{employee.employee_id || "No employee ID"}{employee.role ? ` · ${employee.role}` : ""}</span></th>{employee.days.map((day) => { const info = statusInfo(day.status); return <td key={day.date} className={`border-r p-2 text-center ${day.sheet_status === "Draft" ? "bg-amber-50/40" : ""}`}><span title={`${info.label} · ${day.shift}${Number(day.overtime_hours) ? ` · ${day.overtime_hours} OT hours` : ""}`} className={`inline-flex min-w-8 justify-center rounded-md px-1.5 py-1 font-bold ${info.tone}`}>{info.short}</span><span className="mt-1 block text-[9px] text-slate-500">{day.shift}</span></td>; })}<td className="p-3"><div className="flex max-w-56 flex-wrap gap-1">{STATUS_OPTIONS.slice(1).map((item) => (employee.status_counts[item.value] ?? 0) > 0 ? <span key={item.value} className={`rounded px-1.5 py-1 ${item.tone}`}>{item.short} {employee.status_counts[item.value]}</span> : null)}</div><p className="mt-2 text-[11px] text-slate-600"><strong>{employee.payable_days}</strong> payable days · <strong>{employee.overtime_hours}</strong> OT hours</p></td></tr>)}</tbody>
+          </table>
+        </div>
+        <div className="border-t bg-slate-50 p-4 text-xs text-slate-500"><div className="flex flex-wrap gap-x-4 gap-y-2">{STATUS_OPTIONS.slice(1).map((item) => <span key={item.value}><strong>{item.short}</strong> {item.label}</span>)}</div></div>
+      </>}
+    </section>
+
+    {report.calendar_days.some((day) => day.notes) && <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5"><h3 className="font-semibold">Daily notes</h3><div className="mt-3 divide-y divide-slate-100">{report.calendar_days.filter((day) => day.notes).map((day) => <div key={day.date} className="grid gap-1 py-3 sm:grid-cols-[9rem_1fr]"><p className="text-xs font-semibold text-slate-500">{reportDate(day.date, true)} · {day.status}</p><p className="text-sm text-slate-700">{day.notes}</p></div>)}</div></section>}
+  </section>;
+}
+
+function WeeklyMetric({ label, value, tone = "slate" }: { label: string; value: string; tone?: "slate" | "emerald" | "red" | "orange" }) {
+  const tones = { slate: "bg-slate-50 text-[#0F2444]", emerald: "bg-emerald-50 text-emerald-800", red: "bg-red-50 text-red-800", orange: "bg-orange-50 text-[#C2410C]" };
+  return <div className={`rounded-xl px-4 py-3 ${tones[tone]}`}><p className="text-[10px] font-semibold uppercase tracking-wider opacity-70">{label}</p><p className="mt-1 text-xl font-bold tabular-nums">{value}</p></div>;
 }
 
 function MonthlyRegister({ companyId, month, onMonth }: { companyId: string; month: string; onMonth: (month: string) => void }) {
