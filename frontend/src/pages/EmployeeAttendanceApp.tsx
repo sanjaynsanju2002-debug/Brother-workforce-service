@@ -7,12 +7,14 @@ import {
   CheckCircle2,
   Clock3,
   Download,
+  ExternalLink,
   KeyRound,
   Loader2,
   LogIn,
   LogOut,
   ShieldCheck,
   UserRound,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { ApiError } from "@/attendance/api";
@@ -82,7 +84,12 @@ function timeLabel(value: string | null) {
 
 export function InstallAppButton({ className = "" }: { className?: string }) {
   const [prompt, setPrompt] = useState<InstallPrompt | null>(null);
+  const [guideOpen, setGuideOpen] = useState(false);
   const [installed, setInstalled] = useState(() => window.matchMedia("(display-mode: standalone)").matches);
+  const userAgent = navigator.userAgent;
+  const android = /Android/i.test(userAgent);
+  const ios = /iPad|iPhone|iPod/i.test(userAgent);
+  const chromeIntent = `intent://${window.location.host}${window.location.pathname}${window.location.search}#Intent;scheme=https;package=com.android.chrome;S.browser_fallback_url=${encodeURIComponent(window.location.href)};end`;
 
   useEffect(() => {
     const available = (event: Event) => { event.preventDefault(); setPrompt(event as InstallPrompt); };
@@ -96,16 +103,31 @@ export function InstallAppButton({ className = "" }: { className?: string }) {
   }, []);
 
   if (installed) return null;
-  return <Button type="button" variant="outline" className={className} onClick={async () => {
+  const install = async () => {
     if (!prompt) {
-      toast.info("Open your browser menu and choose ‘Add to Home screen’ to install this app.");
+      setGuideOpen(true);
       return;
     }
     await prompt.prompt();
     const choice = await prompt.userChoice;
     if (choice.outcome === "accepted") toast.success("Attendance app installed");
+    else setGuideOpen(true);
     setPrompt(null);
-  }}><Download className="h-4 w-4" />Install app</Button>;
+  };
+  return <>
+    <Button type="button" variant="outline" className={className} onClick={() => void install()} data-testid="install-attendance-app"><Download className="h-4 w-4" />Install app</Button>
+    {guideOpen && <div className="fixed inset-0 z-[100] grid place-items-center bg-slate-950/70 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setGuideOpen(false); }}>
+      <section role="dialog" aria-modal="true" aria-labelledby="install-guide-title" className="w-full max-w-md rounded-2xl bg-white p-6 text-left text-[#0F2444] shadow-2xl sm:p-7">
+        <div className="flex items-start justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-[0.16em] text-[#EA580C]">Private attendance app</p><h2 id="install-guide-title" className="mt-1 text-xl font-bold">Install on this device</h2></div><Button type="button" size="icon" variant="ghost" aria-label="Close install instructions" onClick={() => setGuideOpen(false)}><X className="h-4 w-4" /></Button></div>
+        <p className="mt-3 text-sm leading-6 text-slate-600">This installs directly from the private link and adds the attendance app to your home screen. It does not download a separate APK file.</p>
+        {android ? <div className="mt-5 space-y-3 text-sm leading-6 text-slate-700">
+          <p><strong>Android:</strong> open the app in Chrome, then tap <strong>Install app</strong>. If Chrome does not show the prompt, tap the three-dot menu and choose <strong>Add to Home screen</strong>.</p>
+          <a href={chromeIntent} className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#EA580C] px-4 py-2 font-semibold text-white hover:bg-[#C2410C]">Open in Chrome <ExternalLink className="h-4 w-4" /></a>
+        </div> : ios ? <div className="mt-5 rounded-xl bg-sky-50 p-4 text-sm leading-6 text-slate-700"><strong>iPhone or iPad:</strong> open this link in Safari, tap the Share button, then choose <strong>Add to Home Screen</strong>.</div> : <div className="mt-5 rounded-xl bg-sky-50 p-4 text-sm leading-6 text-slate-700"><strong>Computer:</strong> open this page in Chrome or Microsoft Edge. Use the install icon in the address bar, or open the browser menu and choose <strong>Install Brothers Workforce Attendance</strong>.</div>}
+        <p className="mt-4 text-xs leading-5 text-slate-500">If you opened the link inside ChatGPT, WhatsApp, Instagram, or Facebook, first choose “Open in browser”. In-app browsers usually cannot install web apps.</p>
+      </section>
+    </div>}
+  </>;
 }
 
 export default function EmployeeAttendanceApp({ onOwner }: { onOwner: () => void }) {
