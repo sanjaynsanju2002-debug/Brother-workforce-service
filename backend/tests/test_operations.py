@@ -5,7 +5,7 @@ import csv
 import io
 import os
 import re
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from types import SimpleNamespace
 from uuid import uuid4
@@ -23,7 +23,7 @@ os.environ.setdefault("DB_NAME", "bws_operations_test")
 
 from lib import auth
 from lib.ledger import today
-from routers import admin, assignments, backups, clients, expenses, finance, invoices, operations, payments, payroll, public, team
+from routers import admin, assignments, backups, clients, employee_attendance, expenses, finance, invoices, operations, payments, payroll, public, team
 from server import app
 from tests.test_invoices import payload as invoice_payload
 from tests.test_site_improvements import BusinessCollection, Database as BaseDatabase
@@ -110,11 +110,11 @@ class Collection(BusinessCollection):
 @pytest.fixture
 def store(monkeypatch):
     db = BaseDatabase()
-    for name in set(backups.COLLECTIONS) | {"admin_sessions", "admin_users", "admin_login_attempts"}:
+    for name in set(backups.COLLECTIONS) | {"admin_sessions", "admin_users", "admin_login_attempts", "employee_attendance_sessions", "employee_login_attempts"}:
         initial = copy.deepcopy(getattr(db, name).records) if hasattr(db, name) else []
         setattr(db, name, Collection()); getattr(db, name).records = initial
     db.jobs.records = []; db.company_requests.records = []
-    for module in (auth, admin, assignments, backups, clients, expenses, finance, invoices, operations, payments, payroll, public, team): monkeypatch.setattr(module, "db", db)
+    for module in (auth, admin, assignments, backups, clients, employee_attendance, expenses, finance, invoices, operations, payments, payroll, public, team): monkeypatch.setattr(module, "db", db)
     return db
 
 
@@ -215,6 +215,66 @@ async def test_attendance_shifts_paid_statuses_and_monthly_register(store):
         assert "WEEKLY ATTENDANCE REPORT" in weekly_pdf and "QA Factory" in weekly_pdf
         assert (await c.get(f"{route}/attendance-weekly-report", params={"company_id": co["id"], "week_start": "2026-01-27"})).status_code == 422
         assert (await c.get(f"{route}/attendance-weekly-report/download/docx", params={"company_id": co["id"], "week_start": "2026-01-26"})).status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_employee_pin_check_in_check_out_is_private_and_payroll_ready(store):
+    async with session() as c:
+        await login(c)
+        co = await company(c)
+        worker = await person(c, co["id"], "Night Employee", employee_id="E-101", shift="Night")
+        access = "/api/admin/operations/attendance/access"
+
+        listed = await c.get(access, params={"company_id": co["id"]})
+        assert listed.status_code == 200 and listed.json()[0]["access_enabled"] is False
+        assert (await c.put(f"{access}/{worker['id']}", json={"pin": "12345"})).status_code == 422
+        enabled = await c.put(f"{access}/{worker['id']}", json={"pin": "654321"})
+        assert enabled.status_code == 200, enabled.text
+        assignment = store.assignments.records[0]
+        assert assignment["attendance_pin_hash"] != "654321" and assignment["attendance_pin_salt"]
+        backup = await c.get("/api/admin/backups/download")
+        with ZipFile(io.BytesIO(backup.content)) as archive:
+            saved_assignments = json_util.loads(archive.read("assignments.json"))
+            assert not ({"attendance_pin_hash", "attendance_pin_salt", "attendance_access_enabled"} & set(saved_assignments[0]))
+
+        assert (await c.post("/api/employee-attendance/login", json={"employee_id": "E-101", "pin": "000000"})).status_code == 401
+        signed_in = await c.post("/api/employee-attendance/login", json={"employee_id": "e-101", "pin": "654321"})
+        assert signed_in.status_code == 200, signed_in.text
+        employee_headers = {"Authorization": f"Bearer {signed_in.json()['token']}"}
+        dashboard = await c.get("/api/employee-attendance/me", headers=employee_headers)
+        assert dashboard.status_code == 200 and dashboard.json()["employee"]["full_name"] == "Night Employee"
+        assert dashboard.json()["today"]["state"] == "not_checked_in"
+
+        checked_in = await c.post("/api/employee-attendance/check-in", json={"shift": "Night"}, headers=employee_headers)
+        assert checked_in.status_code == 200, checked_in.text
+        assert checked_in.json()["today"]["state"] == "checked_in"
+        assert (await c.post("/api/employee-attendance/check-in", json={"shift": "Night"}, headers=employee_headers)).status_code == 409
+
+        operations_route = "/api/admin/operations"
+        before = (await c.get(f"{operations_route}/attendance-summary", params={"company_id": co["id"], "month": today()[:7]})).json()
+        assert before["approved_days"] == 0 and before["lines"] == []
+
+        checked_out = await c.post("/api/employee-attendance/check-out", headers=employee_headers)
+        assert checked_out.status_code == 200, checked_out.text
+        assert checked_out.json()["today"]["state"] == "completed" and checked_out.json()["today"]["payroll_ready"] is True
+        assert (await c.post("/api/employee-attendance/check-out", headers=employee_headers)).status_code == 409
+
+        summary = (await c.get(f"{operations_route}/attendance-summary", params={"company_id": co["id"], "month": today()[:7]})).json()
+        assert summary["approved_days"] == 1 and summary["lines"][0]["worked_days"] == "1.00"
+        monday = (date.fromisoformat(today()) - timedelta(days=date.fromisoformat(today()).weekday())).isoformat()
+        weekly = (await c.get(f"{operations_route}/attendance-weekly-report", params={"company_id": co["id"], "week_start": monday})).json()
+        report_row = next(row for row in weekly["employees"] if row["assignment_id"] == worker["id"])
+        assert weekly["payroll_ready_days"] == 1
+        assert next(day for day in weekly["calendar_days"] if day["date"] == today())["status"] == "Partially approved"
+        assert next(day for day in report_row["days"] if day["date"] == today())["sheet_status"] == "Approved"
+
+        assert (await c.put(f"{access}/{worker['id']}", json={"pin": "777777"})).status_code == 200
+        assert (await c.get("/api/employee-attendance/me", headers=employee_headers)).status_code == 401
+        assert (await c.post("/api/employee-attendance/login", json={"employee_id": "E-101", "pin": "654321"})).status_code == 401
+        replacement = await c.post("/api/employee-attendance/login", json={"employee_id": "E-101", "pin": "777777"})
+        replacement_headers = {"Authorization": f"Bearer {replacement.json()['token']}"}
+        assert (await c.delete(f"{access}/{worker['id']}")).status_code == 200
+        assert (await c.get("/api/employee-attendance/me", headers=replacement_headers)).status_code == 401
 
 
 @pytest.mark.asyncio

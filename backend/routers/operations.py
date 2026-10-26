@@ -72,6 +72,11 @@ async def roster(company_id, day):
     return [{**r, "shift": r.get("shift") or "General"} for r in records if active_on(r, day)]
 
 
+def attendance_row_payroll_ready(sheet: dict, row: dict) -> bool:
+    """A full owner approval or a completed employee check-out can feed payroll."""
+    return sheet.get("status") == "Approved" or bool(row.get("employee_approved_at"))
+
+
 @router.get("/attendance-companies")
 async def attendance_companies():
     """Minimal company list for the separately hosted attendance application."""
@@ -100,9 +105,19 @@ async def save_attendance(payload: AttendanceInput):
     people = {p["id"]: p for p in await roster(payload.company_id, day)}
     if set(people) != {r.assignment_id for r in payload.rows}:
         raise HTTPException(409, "The workforce changed. Reload attendance and review every employee for this date.")
-    rows = [{**row.model_dump(mode="json"), "full_name": people[row.assignment_id]["full_name"],
-             "worker_id": people[row.assignment_id].get("worker_id"), "employee_id": people[row.assignment_id].get("employee_id"),
-             "role": people[row.assignment_id].get("role") or ""} for row in payload.rows]
+    old_rows = {row["assignment_id"]: row for row in (existing or {}).get("rows", [])}
+    rows = []
+    for row in payload.rows:
+        saved = old_rows.get(row.assignment_id, {})
+        record = {**row.model_dump(mode="json"), "full_name": people[row.assignment_id]["full_name"],
+                  "worker_id": people[row.assignment_id].get("worker_id"), "employee_id": people[row.assignment_id].get("employee_id"),
+                  "role": people[row.assignment_id].get("role") or ""}
+        for field in ("check_in_at", "check_out_at", "attendance_source"):
+            if saved.get(field):
+                record[field] = saved[field]
+        if saved.get("employee_approved_at"):
+            record["employee_approved_at"] = saved["employee_approved_at"]
+        rows.append(record)
     return await write_record("attendance", sheet_id, {"company_id": payload.company_id, "company_name": c["name"],
         "attendance_date": day, "rows": rows, "notes": payload.notes, "status": "Draft", "approved_by": None, "approved_at": None}, payload.revision)
 
@@ -132,23 +147,30 @@ async def attendance_action(sheet_id: str, action: str, payload: VersionInput, r
 
 
 async def attendance_totals(company_id, month):
-    sheets = await db.attendance.find({"company_id": company_id, "status": "Approved", "attendance_date": {"$gte": month + "-01", "$lt": month + "-32"}}, {"_id": 0}).sort("attendance_date", 1).to_list(32)
+    sheets = await db.attendance.find({"company_id": company_id, "attendance_date": {"$gte": month + "-01", "$lt": month + "-32"}}, {"_id": 0}).sort("attendance_date", 1).to_list(32)
     people = {}
     status_counts = {}
+    contributing_sheets = []
     paid_values = {
         "Present": Decimal("1"), "Half-day": Decimal("0.5"),
         "Paid leave": Decimal("1"), "Holiday": Decimal("1"), "Weekly off": Decimal("1"),
     }
     for sheet in sheets:
+        contributes = False
         for row in sheet["rows"]:
+            if not attendance_row_payroll_ready(sheet, row):
+                continue
+            contributes = True
             summary = people.setdefault(row["assignment_id"], {"assignment_id": row["assignment_id"], "full_name": row["full_name"], "worked_days": Decimal("0"), "overtime_hours": Decimal("0"), "status_counts": {}})
             summary["worked_days"] += paid_values.get(row["status"], Decimal("0"))
             summary["overtime_hours"] += amount(row.get("overtime_hours"))
             summary["status_counts"][row["status"]] = summary["status_counts"].get(row["status"], 0) + 1
             status_counts[row["status"]] = status_counts.get(row["status"], 0) + 1
+        if contributes:
+            contributing_sheets.append(sheet)
     return {"lines": [{**r, "worked_days": money(r["worked_days"]), "overtime_hours": money(r["overtime_hours"])} for r in people.values()],
-            "sheets": [{"id": s["id"], "date": s["attendance_date"], "revision": s["revision"]} for s in sheets],
-            "approved_days": len(sheets), "status_counts": status_counts}
+            "sheets": [{"id": s["id"], "date": s["attendance_date"], "revision": s["revision"]} for s in contributing_sheets],
+            "approved_days": len(contributing_sheets), "status_counts": status_counts}
 
 
 @router.get("/attendance-summary")
@@ -240,13 +262,14 @@ async def attendance_weekly_report_data(company_id: str, week_start: date):
             if status == "Leave":
                 status = "Unpaid leave"
             overtime = amount(attendance_row.get("overtime_hours")) if attendance_row else Decimal("0")
+            payroll_ready = bool(sheet and attendance_row and attendance_row_payroll_ready(sheet, attendance_row))
             employee_days.append({
                 "date": day, "status": status,
                 "shift": attendance_row.get("shift", person["shift"]) if attendance_row else person["shift"],
                 "overtime_hours": money(overtime),
-                "sheet_status": sheet.get("status") if sheet else "Not saved",
+                "sheet_status": "Approved" if payroll_ready else sheet.get("status") if sheet else "Not saved",
             })
-            if sheet and sheet.get("status") == "Approved" and status != "Unmarked":
+            if payroll_ready and status != "Unmarked":
                 employee_counts[status] = employee_counts.get(status, 0) + 1
                 status_counts[status] = status_counts.get(status, 0) + 1
                 employee_payable += paid_values.get(status, Decimal("0"))
@@ -258,16 +281,25 @@ async def attendance_weekly_report_data(company_id: str, week_start: date):
             "payable_days": money(employee_payable), "overtime_hours": money(employee_overtime),
         })
 
-    calendar_days = [{
-        "date": day,
-        "status": sheet_by_date[day]["status"] if day in sheet_by_date else "Not saved",
-        "notes": sheet_by_date[day].get("notes", "") if day in sheet_by_date else "",
-    } for day in dates]
+    calendar_days = []
+    for day in dates:
+        sheet = sheet_by_date.get(day)
+        if not sheet:
+            status = "Not saved"
+        elif sheet.get("status") == "Approved":
+            status = "Approved"
+        elif any(attendance_row_payroll_ready(sheet, row) for row in sheet.get("rows", [])):
+            status = "Partially approved"
+        else:
+            status = "Draft"
+        calendar_days.append({"date": day, "status": status, "notes": sheet.get("notes", "") if sheet else ""})
     approved_days = sum(sheet.get("status") == "Approved" for sheet in sheets)
+    payroll_ready_days = sum(any(attendance_row_payroll_ready(sheet, row) for row in sheet.get("rows", [])) for sheet in sheets)
     return {
         "company_id": company_id, "company_name": c["name"], "week_start": start, "week_end": end,
         "calendar_days": calendar_days, "saved_days": len(sheets), "approved_days": approved_days,
-        "draft_days": len(sheets) - approved_days, "employees": report_rows, "status_counts": status_counts,
+        "draft_days": len(sheets) - approved_days, "payroll_ready_days": payroll_ready_days,
+        "employees": report_rows, "status_counts": status_counts,
         "totals": {"employees": len(report_rows), "payable_days": money(total_payable), "overtime_hours": money(total_overtime)},
     }
 

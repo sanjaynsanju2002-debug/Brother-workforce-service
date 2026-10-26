@@ -103,12 +103,12 @@ async def save_payroll(payload: PayrollSave):
         from routers.operations import attendance_totals
         summary = await attendance_totals(payload.company_id, payload.month)
         if payload.attendance_refs != {s["id"]: s["revision"] for s in summary["sheets"]}:
-            raise HTTPException(409, "Approved attendance changed. Import it again before saving payroll.")
+            raise HTTPException(409, "Payroll-ready attendance changed. Import it again before saving payroll.")
         by_id = {r["assignment_id"]: r for r in summary["lines"]}
         for line in payload.lines:
             imported = by_id.get(line.assignment_id)
             if imported and (line.worked_days != amount(imported["worked_days"]) or line.overtime_hours != amount(imported["overtime_hours"])):
-                raise HTTPException(422, "Attendance-linked payroll must match approved days and overtime. Re-import attendance or choose manual attendance.")
+                raise HTTPException(422, "Attendance-linked payroll must match payroll-ready days and overtime. Re-import attendance or choose manual attendance.")
     run_id = register_id(payload.company_id, payload.month)
     existing = await db.payroll.find_one({"_id": run_id})
     data = payload.model_dump(mode="json", exclude={"revision", "created_at"})
