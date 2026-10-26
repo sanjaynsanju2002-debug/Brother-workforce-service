@@ -27,6 +27,7 @@ import Expenses from "@/components/site/Expenses";
 import ProfitLoss from "@/components/site/ProfitLoss";
 import Payroll from "@/components/site/Payroll";
 import Staffing from "@/components/operations/Staffing";
+import Attendance from "@/components/operations/Attendance";
 import Recruitment from "@/components/operations/Recruitment";
 import SalaryPayments from "@/components/operations/Payments";
 import Documents from "@/components/operations/Documents";
@@ -195,7 +196,7 @@ function Dashboard({
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeTab, setActiveTab] = useState(() => {
     const requested = new URLSearchParams(window.location.search).get("tab");
-    return !requested || requested === "attendance" ? "overview" : requested;
+    return requested || "overview";
   });
 
   const shortlists = useQuery({
@@ -397,6 +398,7 @@ function Dashboard({
                 <TabsTrigger value="workers" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-workers">Worker Applications</TabsTrigger>
                 <TabsTrigger value="talents" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-talents">Talent Bank</TabsTrigger>
                 <TabsTrigger value="workforce" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-workforce">Company Workforce</TabsTrigger>
+                <TabsTrigger value="attendance" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-attendance">Attendance Tracker</TabsTrigger>
                 <TabsTrigger value="payroll" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-payroll">Payroll</TabsTrigger>
                 <TabsTrigger value="requests" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-requests">Company Enquiries</TabsTrigger>
                 <TabsTrigger value="clients" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-clients">Clients</TabsTrigger>
@@ -1045,6 +1047,16 @@ function Dashboard({
           <TabsContent value="expenses" className="mt-0"><Expenses /></TabsContent>
           <TabsContent value="profit-loss" className="mt-0"><ProfitLoss /></TabsContent>
           <TabsContent value="payroll" className="mt-0"><Payroll /></TabsContent>
+          <TabsContent value="attendance" className="mt-0">
+            <div className="mb-5 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-sky-200 bg-sky-50 p-4 sm:p-5">
+              <div>
+                <p className="font-semibold text-[#0F2444]">Website admin attendance</p>
+                <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-600">Select a company and date below to mark attendance using the same live employee and payroll records. Employees can continue checking in and out through the separate app.</p>
+              </div>
+              <a href="https://brothers-workforce-attendance.onrender.com/" target="_blank" rel="noreferrer" className="inline-flex min-h-10 items-center justify-center rounded-md bg-[#0F2444] px-4 py-2 text-sm font-semibold text-white hover:bg-[#183A67]">Open employee app</a>
+            </div>
+            <Attendance />
+          </TabsContent>
           <TabsContent value="requirements" className="mt-0"><Staffing /></TabsContent>
           <TabsContent value="recruitment" className="mt-0"><Recruitment /></TabsContent>
           <TabsContent value="salary-payments" className="mt-0"><SalaryPayments /></TabsContent>

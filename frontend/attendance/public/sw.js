@@ -1,7 +1,7 @@
-const CACHE = "bws-attendance-v3";
+const CACHE = "bws-attendance-v4";
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(["/", "/manifest.webmanifest"])));
+  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(["/", "/manifest.json"])));
   self.skipWaiting();
 });
 
