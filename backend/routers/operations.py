@@ -9,6 +9,7 @@ from pymongo.errors import DuplicateKeyError
 from starlette.concurrency import run_in_threadpool
 
 from lib.auth import require_admin, require_owner
+from lib.daily_attendance import daily_attendance_report_data
 from lib.db import db
 from lib.ledger import amount, money, received, salary_paid, today
 from lib.invoices import InvoiceProfile
@@ -92,6 +93,42 @@ async def attendance_draft(company_id: str, attendance_date: date):
     day = attendance_date.isoformat()
     saved = await db.attendance.find_one({"id": key("attendance", company_id, day)}, {"_id": 0})
     return {"company_name": c["name"], "employees": await roster(company_id, day), "sheet": saved}
+
+
+@router.get("/attendance-daily-report")
+async def attendance_daily_report(company_id: str, report_date: date):
+    """One company/day report with shifts, India-time punches and worked hours."""
+    return await daily_attendance_report_data(company_id, report_date)
+
+
+@router.get("/attendance-daily-report/download/{format}")
+async def download_attendance_daily_report(format: str, company_id: str, report_date: date):
+    if format not in {"csv", "xlsx", "pdf"}:
+        raise HTTPException(404, "Choose CSV, Excel or PDF")
+    from lib.attendance_exports import (
+        export_attendance_daily_csv,
+        export_attendance_daily_pdf,
+        export_attendance_daily_xlsx,
+    )
+    report = await daily_attendance_report_data(company_id, report_date)
+    settings = await db.settings.find_one({"id": "invoice_profile"})
+    supplier = InvoiceProfile(**(settings or {}).get("profile", {}))
+    exporters = {
+        "csv": export_attendance_daily_csv,
+        "xlsx": export_attendance_daily_xlsx,
+        "pdf": export_attendance_daily_pdf,
+    }
+    content = await run_in_threadpool(exporters[format], report, supplier)
+    company_name = re.sub(r"[^A-Za-z0-9]+", "-", report["company_name"]).strip("-")[:50] or "Company"
+    filename = f"BWS-Daily-Attendance-{company_name}-{report['report_date']}.{format}"
+    media = {
+        "csv": "text/csv; charset=utf-8",
+        "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "pdf": "application/pdf",
+    }[format]
+    return Response(content, media_type=media, headers={
+        "Content-Disposition": f'attachment; filename="{filename}"', "Cache-Control": "private, no-store",
+    })
 
 
 @router.put("/attendance", response_model=AttendanceRecord)

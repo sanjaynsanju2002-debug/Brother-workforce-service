@@ -1,5 +1,5 @@
 import asyncio
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
 from fastapi import FastAPI, APIRouter
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
@@ -71,7 +71,14 @@ async def lifespan(app: FastAPI):
         logging.getLogger(__name__).info("Workforce reconciliation: %s", result)
     except Exception:
         logging.getLogger(__name__).exception("Workforce reconciliation will retry on next startup")
+    from lib.attendance_report_email import attendance_report_scheduler
+    report_scheduler_enabled = os.environ.get("ATTENDANCE_REPORT_SCHEDULER_ENABLED", "true").lower() not in {"0", "false", "no"}
+    app.state.attendance_report_task = asyncio.create_task(attendance_report_scheduler()) if report_scheduler_enabled else None
     yield
+    if app.state.attendance_report_task:
+        app.state.attendance_report_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await app.state.attendance_report_task
     client.close()
 
 
