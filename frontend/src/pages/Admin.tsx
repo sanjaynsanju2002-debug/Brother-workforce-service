@@ -26,7 +26,6 @@ import Invoices from "@/components/site/Invoices";
 import Expenses from "@/components/site/Expenses";
 import ProfitLoss from "@/components/site/ProfitLoss";
 import Payroll from "@/components/site/Payroll";
-import Attendance from "@/components/operations/Attendance";
 import Staffing from "@/components/operations/Staffing";
 import Recruitment from "@/components/operations/Recruitment";
 import SalaryPayments from "@/components/operations/Payments";
@@ -194,7 +193,10 @@ function Dashboard({
   const [filters, setFilters] = useState(EMPTY_FILTERS);
   const [matchJobId, setMatchJobId] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState(() => new URLSearchParams(window.location.search).get("tab") || "overview");
+  const [activeTab, setActiveTab] = useState(() => {
+    const requested = new URLSearchParams(window.location.search).get("tab");
+    return !requested || requested === "attendance" ? "overview" : requested;
+  });
 
   const shortlists = useQuery({
     queryKey: ["admin-shortlists", pin],
@@ -372,9 +374,6 @@ function Dashboard({
           </div>
           <div className="ml-auto flex w-full gap-2 sm:w-auto">
             <DashboardThemeToggle />
-            <Link to="/attendance" className="flex-1 rounded-md border border-orange-200 bg-orange-50 px-3 py-2 text-center text-sm font-medium text-[#C2410C] hover:bg-orange-100 sm:flex-none sm:px-4">
-              Attendance App
-            </Link>
             <Link to="/" className="flex-1 rounded-md border border-slate-200 px-3 py-2 text-center text-sm text-slate-600 hover:text-[#0F2444] sm:flex-none sm:px-4">
               View Site
             </Link>
@@ -407,7 +406,6 @@ function Dashboard({
                 <TabsTrigger value="jobs" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-jobs">Job Postings</TabsTrigger>
                 <TabsTrigger value="email" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-email">Email Settings</TabsTrigger>
                 <TabsTrigger value="security" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-security">Security</TabsTrigger>
-                <TabsTrigger value="attendance" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-attendance">Attendance</TabsTrigger>
                 <TabsTrigger value="requirements" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-requirements">Staffing Requirements</TabsTrigger>
                 <TabsTrigger value="recruitment" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-recruitment">Recruitment Progress</TabsTrigger>
                 <TabsTrigger value="salary-payments" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-salary-payments">Salary Payments</TabsTrigger>
@@ -1047,7 +1045,6 @@ function Dashboard({
           <TabsContent value="expenses" className="mt-0"><Expenses /></TabsContent>
           <TabsContent value="profit-loss" className="mt-0"><ProfitLoss /></TabsContent>
           <TabsContent value="payroll" className="mt-0"><Payroll /></TabsContent>
-          <TabsContent value="attendance" className="mt-0"><Attendance /></TabsContent>
           <TabsContent value="requirements" className="mt-0"><Staffing /></TabsContent>
           <TabsContent value="recruitment" className="mt-0"><Recruitment /></TabsContent>
           <TabsContent value="salary-payments" className="mt-0"><SalaryPayments /></TabsContent>

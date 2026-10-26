@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link } from "react-router-dom";
 import {
   BarChart3,
   Building2,
@@ -26,11 +25,12 @@ import { DateInput } from "@/components/ui/date-input";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { ApiError, apiGet, apiPost, apiPut } from "@/lib/api";
+import { ApiError, apiGet, apiPost, apiPut, attendanceFetch, clearAttendanceToken, setAttendanceToken } from "@/attendance/api";
 import { BRAND } from "@/lib/brand";
 import { indiaToday, monthLabel } from "@/lib/finance";
 
 const OPS = "/admin/operations";
+const WEBSITE = "https://brothersworkforcesolutions.in";
 const SHIFTS = ["All", "General", "Morning", "Afternoon", "Night"] as const;
 type ShiftName = Exclude<(typeof SHIFTS)[number], "All">;
 type ShiftFilter = (typeof SHIFTS)[number];
@@ -95,6 +95,8 @@ type AttendanceRegister = {
   sheets: AttendanceSheet[];
 };
 type Account = { ok: boolean; name: string; role: string };
+type AttendanceLogin = { ok: boolean; token: string; expires_in: number };
+type InstallPrompt = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: "accepted" | "dismissed" }> };
 
 function message(error: unknown) {
   if (error instanceof ApiError) {
@@ -115,7 +117,7 @@ function statusInfo(status: AttendanceStatus) {
 }
 
 async function downloadAttendance(path: string, fallback: string) {
-  const response = await fetch(`/api${path}`);
+  const response = await attendanceFetch(path);
   if (!response.ok) throw new ApiError(response.status, await response.json().catch(() => null));
   const url = URL.createObjectURL(await response.blob());
   const link = document.createElement("a");
@@ -134,7 +136,7 @@ export default function AttendanceApp() {
     const oldManifest = manifest?.href;
     document.title = "Attendance Tracker | Brothers Workforce Solutions";
     if (robots) robots.content = "noindex, nofollow, noarchive";
-    if (manifest) manifest.href = "/attendance.webmanifest";
+    if (manifest) manifest.href = "/manifest.webmanifest";
     return () => {
       document.title = oldTitle;
       if (robots && oldRobots) robots.content = oldRobots;
@@ -144,14 +146,51 @@ export default function AttendanceApp() {
   return <AttendanceSession />;
 }
 
+function InstallAppButton({ className = "" }: { className?: string }) {
+  const [prompt, setPrompt] = useState<InstallPrompt | null>(null);
+  const [installed, setInstalled] = useState(() => window.matchMedia("(display-mode: standalone)").matches);
+
+  useEffect(() => {
+    const available = (event: Event) => {
+      event.preventDefault();
+      setPrompt(event as InstallPrompt);
+    };
+    const complete = () => setInstalled(true);
+    window.addEventListener("beforeinstallprompt", available);
+    window.addEventListener("appinstalled", complete);
+    return () => {
+      window.removeEventListener("beforeinstallprompt", available);
+      window.removeEventListener("appinstalled", complete);
+    };
+  }, []);
+
+  if (installed) return null;
+  return <Button type="button" variant="outline" className={className} onClick={async () => {
+    if (!prompt) {
+      toast.info("Open your browser menu and choose ‘Add to Home screen’ to install this app.");
+      return;
+    }
+    await prompt.prompt();
+    const choice = await prompt.userChoice;
+    if (choice.outcome === "accepted") toast.success("Attendance app installed");
+    setPrompt(null);
+  }}><Download className="h-4 w-4" />Install app</Button>;
+}
+
 function AttendanceSession() {
   const queryClient = useQueryClient();
   const [pin, setPin] = useState("");
   const [loggedOut, setLoggedOut] = useState(false);
+  useEffect(() => {
+    const expired = () => setLoggedOut(true);
+    window.addEventListener("attendance-session-expired", expired);
+    return () => window.removeEventListener("attendance-session-expired", expired);
+  }, []);
   const session = useQuery({ queryKey: ["attendance-account"], queryFn: () => apiGet<Account>("/admin/me"), retry: false });
   const login = useMutation({
-    mutationFn: () => apiPost<Account>("/admin/login", { pin }),
-    onSuccess: async () => {
+    mutationFn: () => apiPost<AttendanceLogin>("/admin/attendance-login", { pin }),
+    onSuccess: async (data) => {
+      setAttendanceToken(data.token);
       setPin("");
       setLoggedOut(false);
       await session.refetch();
@@ -177,7 +216,8 @@ function AttendanceSession() {
             <div><Label htmlFor="attendance-pin" className="mb-2 block">Owner security PIN</Label><Input id="attendance-pin" type="password" inputMode="numeric" autoComplete="current-password" value={pin} onChange={(event) => setPin(event.target.value)} placeholder="Enter your dashboard PIN" autoFocus /></div>
             <Button type="submit" disabled={!pin || login.isPending} className="h-11 w-full bg-[#EA580C] text-white hover:bg-[#C2410C]">{login.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Lock className="h-4 w-4" />}Open attendance</Button>
           </form>
-          <Link to="/" className="mt-6 block text-center text-xs text-slate-500 hover:text-[#0F2444]">Return to business website</Link>
+          <InstallAppButton className="mt-3 w-full" />
+          <a href={WEBSITE} className="mt-6 block text-center text-xs text-slate-500 hover:text-[#0F2444]">Open business website</a>
         </CardContent>
       </Card>
     </main>;
@@ -185,6 +225,7 @@ function AttendanceSession() {
 
   return <AttendanceWorkspace account={session.data} onLogout={async () => {
     try { await apiPost("/admin/logout"); } finally {
+      clearAttendanceToken();
       queryClient.clear();
       setLoggedOut(true);
     }
@@ -196,7 +237,7 @@ function AttendanceWorkspace({ account, onLogout }: { account: Account; onLogout
   const [companyId, setCompanyId] = useState(() => localStorage.getItem("bws-attendance-company") ?? "");
   const [day, setDay] = useState(indiaToday());
   const [month, setMonth] = useState(indiaToday().slice(0, 7));
-  const companies = useQuery({ queryKey: ["attendance-companies"], queryFn: () => apiGet<Company[]>("/admin/clients") });
+  const companies = useQuery({ queryKey: ["attendance-companies"], queryFn: () => apiGet<Company[]>(`${OPS}/attendance-companies`) });
   const selected = companies.data?.find((company) => company.id === companyId);
 
   useEffect(() => {
@@ -212,7 +253,8 @@ function AttendanceWorkspace({ account, onLogout }: { account: Account; onLogout
       <div className="mx-auto flex max-w-[1500px] items-center gap-3 px-4 py-3 sm:px-6">
         <img src={BRAND.logo} alt="" className="h-10 w-10 shrink-0 object-contain" />
         <div className="min-w-0 flex-1"><p className="truncate text-sm font-bold sm:text-base">Brothers Workforce Solutions</p><p className="text-xs text-slate-500">Private attendance tracker</p></div>
-        <a href="/admin?tab=workforce" className="hidden min-h-10 items-center gap-2 rounded-lg border border-slate-200 px-3 text-sm font-medium hover:bg-slate-50 sm:flex">Website dashboard<ExternalLink className="h-3.5 w-3.5" /></a>
+        <InstallAppButton className="hidden sm:inline-flex" />
+        <a href={`${WEBSITE}/admin?tab=workforce`} className="hidden min-h-10 items-center gap-2 rounded-lg border border-slate-200 px-3 text-sm font-medium hover:bg-slate-50 lg:flex">Website dashboard<ExternalLink className="h-3.5 w-3.5" /></a>
         <Button type="button" variant="outline" size="sm" onClick={onLogout}><LogOut className="h-4 w-4" /><span className="hidden sm:inline">Sign out</span></Button>
       </div>
     </header>
@@ -241,7 +283,7 @@ function CompanyChooser({ companies, pending, error, onChoose }: { companies: Co
     <div className="flex items-center gap-3"><span className="grid h-11 w-11 place-items-center rounded-xl bg-orange-50 text-[#EA580C]"><Building2 className="h-5 w-5" /></span><div><h2 className="text-lg font-semibold">Choose a company or factory</h2><p className="text-sm text-slate-500">Employees assigned to that company will appear automatically.</p></div></div>
     {pending && <p className="mt-6 flex items-center gap-2 text-sm text-slate-500"><Loader2 className="h-4 w-4 animate-spin" />Loading your companies…</p>}
     {error && <p className="mt-6 text-sm text-red-700">Companies could not be loaded. Refresh and try again.</p>}
-    {!pending && !error && !companies.length && <div className="mt-6 rounded-xl border border-dashed p-6 text-center"><p className="text-sm text-slate-600">No active companies are available.</p><a href="/admin?tab=workforce" className="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-[#EA580C]">Add a company in Company Workforce<ChevronRight className="h-4 w-4" /></a></div>}
+    {!pending && !error && !companies.length && <div className="mt-6 rounded-xl border border-dashed p-6 text-center"><p className="text-sm text-slate-600">No active companies are available.</p><a href={`${WEBSITE}/admin?tab=workforce`} className="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-[#EA580C]">Add a company in Company Workforce<ChevronRight className="h-4 w-4" /></a></div>}
     <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{companies.map((company) => <button key={company.id} type="button" onClick={() => onChoose(company.id)} className="group flex min-h-24 items-center gap-4 rounded-xl border border-slate-200 p-4 text-left transition hover:-translate-y-0.5 hover:border-orange-300 hover:shadow-md"><span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-[#0F2444] text-white"><Building2 className="h-5 w-5" /></span><span className="min-w-0 flex-1"><span className="block truncate font-semibold">{company.name}</span><span className="mt-1 block text-xs text-slate-500">Open employee attendance</span></span><ChevronRight className="h-5 w-5 text-slate-300 transition group-hover:translate-x-1 group-hover:text-[#EA580C]" /></button>)}</div>
   </section>;
 }
@@ -334,7 +376,7 @@ function DailyEditor({ companyId, day, draft, reload }: { companyId: string; day
   });
   const busy = save.isPending || action.isPending;
 
-  if (!rows.length) return <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center"><Users className="mx-auto h-8 w-8 text-slate-300" /><h3 className="mt-3 font-semibold">No employees for this date</h3><p className="mt-1 text-sm text-slate-500">Add employees or review their joining and leaving dates in Company Workforce.</p><a href="/admin?tab=workforce" className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-[#EA580C]">Open Company Workforce<ExternalLink className="h-4 w-4" /></a></div>;
+  if (!rows.length) return <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center"><Users className="mx-auto h-8 w-8 text-slate-300" /><h3 className="mt-3 font-semibold">No employees for this date</h3><p className="mt-1 text-sm text-slate-500">Add employees or review their joining and leaving dates in Company Workforce.</p><a href={`${WEBSITE}/admin?tab=workforce`} className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-[#EA580C]">Open Company Workforce<ExternalLink className="h-4 w-4" /></a></div>;
 
   return <>
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">{STATUS_OPTIONS.slice(1).map((item) => <div key={item.value} className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm"><div className={`inline-flex min-w-7 justify-center rounded-md px-2 py-1 text-xs font-bold ${item.tone}`}>{item.short}</div><p className="mt-2 text-xl font-bold tabular-nums">{counts[item.value] ?? 0}</p><p className="mt-0.5 truncate text-[11px] text-slate-500">{item.label}</p></div>)}</div>
@@ -404,7 +446,7 @@ function MonthlyRegister({ companyId, month, onMonth }: { companyId: string; mon
   return <section className="space-y-4">
     <div className="flex flex-wrap items-end justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5"><div><Label htmlFor="attendance-month" className="mb-2 flex items-center gap-2"><CalendarDays className="h-4 w-4 text-[#EA580C]" />Register month</Label><DateInput id="attendance-month" type="month" value={month} onValueChange={(value) => value ? onMonth(value) : false} /></div><div className="flex flex-wrap gap-3 text-sm"><Metric label="Saved days" value={String(sheets.length)} /><Metric label="Approved" value={String(approved.length)} /><Metric label="Employees" value={String(data.employees.length)} /></div></div>
     <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-      <div className="flex flex-wrap items-start justify-between gap-3 border-b p-4 sm:p-5"><div><h2 className="text-lg font-semibold">{data.company_name} · {monthLabel(month)}</h2><p className="mt-1 text-sm text-slate-500">Only approved days are included in payroll totals. Draft days are marked below.</p></div><div className="flex flex-wrap gap-2"><Button type="button" variant="outline" disabled={!!downloading} onClick={() => void download("pdf")}><Download className="h-4 w-4" />{downloading === "pdf" ? "Preparing…" : "PDF"}</Button><Button type="button" variant="outline" disabled={!!downloading} onClick={() => void download("xlsx")}><FileSpreadsheet className="h-4 w-4" />{downloading === "xlsx" ? "Preparing…" : "Excel"}</Button><Button type="button" variant="outline" onClick={() => window.print()}>Print</Button><a href="/admin?tab=payroll" className="inline-flex min-h-9 items-center gap-2 rounded-md bg-[#0F2444] px-3 text-sm font-medium text-white hover:bg-[#183A67]">Open Payroll<ExternalLink className="h-3.5 w-3.5" /></a></div></div>
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b p-4 sm:p-5"><div><h2 className="text-lg font-semibold">{data.company_name} · {monthLabel(month)}</h2><p className="mt-1 text-sm text-slate-500">Only approved days are included in payroll totals. Draft days are marked below.</p></div><div className="flex flex-wrap gap-2"><Button type="button" variant="outline" disabled={!!downloading} onClick={() => void download("pdf")}><Download className="h-4 w-4" />{downloading === "pdf" ? "Preparing…" : "PDF"}</Button><Button type="button" variant="outline" disabled={!!downloading} onClick={() => void download("xlsx")}><FileSpreadsheet className="h-4 w-4" />{downloading === "xlsx" ? "Preparing…" : "Excel"}</Button><Button type="button" variant="outline" onClick={() => window.print()}>Print</Button><a href={`${WEBSITE}/admin?tab=payroll`} className="inline-flex min-h-9 items-center gap-2 rounded-md bg-[#0F2444] px-3 text-sm font-medium text-white hover:bg-[#183A67]">Open Payroll<ExternalLink className="h-3.5 w-3.5" /></a></div></div>
       {!sheets.length ? <div className="p-10 text-center"><CalendarDays className="mx-auto h-8 w-8 text-slate-300" /><p className="mt-3 font-medium">No attendance saved for this month</p><p className="mt-1 text-sm text-slate-500">Open Daily attendance and save the first date.</p></div> : <div className="overflow-x-auto"><table className="min-w-max text-left text-xs"><thead className="sticky top-0 bg-slate-50"><tr><th className="sticky left-0 z-10 min-w-56 border-r border-b bg-slate-50 p-3">Employee</th>{dates.map((date) => <th key={date} className="min-w-14 border-r border-b p-2 text-center"><span className="block text-slate-500">{date.slice(8)}</span><span className={`mt-1 block text-[9px] ${sheets.find((sheet) => sheet.attendance_date === date)?.status === "Approved" ? "text-emerald-700" : "text-amber-700"}`}>{sheets.find((sheet) => sheet.attendance_date === date)?.status === "Approved" ? "OK" : "Draft"}</span></th>)}<th className="min-w-48 border-b p-3">Approved totals</th></tr></thead><tbody>{data.employees.map((employee) => <tr key={employee.assignment_id} className="border-b"><th className="sticky left-0 z-[1] border-r bg-white p-3"><span className="block max-w-52 truncate font-semibold">{employee.full_name}</span><span className="mt-1 block font-normal text-slate-500">{employee.employee_id || employee.role || "—"}</span></th>{dates.map((date) => { const row = byDate.get(date)?.get(employee.assignment_id); const info = statusInfo(row?.status ?? "Unmarked"); return <td key={date} className="border-r p-2 text-center"><span title={`${info.label}${row?.shift ? ` · ${row.shift}` : ""}`} className={`inline-flex min-w-8 justify-center rounded-md px-1.5 py-1 font-bold ${info.tone}`}>{info.short}</span></td>; })}<td className="p-3"><div className="flex max-w-48 flex-wrap gap-1">{STATUS_OPTIONS.slice(1).map((item) => (totals.get(employee.assignment_id)?.[item.value] ?? 0) > 0 ? <span key={item.value} className={`rounded px-1.5 py-1 ${item.tone}`}>{item.short} {totals.get(employee.assignment_id)?.[item.value]}</span> : null)}</div></td></tr>)}</tbody></table></div>}
       <div className="border-t bg-slate-50 p-4 text-xs text-slate-500"><div className="flex flex-wrap gap-x-4 gap-y-2">{STATUS_OPTIONS.slice(1).map((item) => <span key={item.value}><strong>{item.short}</strong> {item.label}</span>)}</div></div>
     </section>

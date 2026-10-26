@@ -15,6 +15,7 @@ COOKIE_NAME = "bws_admin_session"
 SESSION_SECONDS = 8 * 60 * 60
 MAX_LOGIN_ATTEMPTS = 8
 LOGIN_WINDOW = timedelta(minutes=15)
+ATTENDANCE_SCOPE = "attendance"
 
 
 def env_pin() -> str:
@@ -68,7 +69,7 @@ async def set_pin(new_pin: str) -> None:
     await db.admin_sessions.delete_many({})
 
 
-async def login_with_pin(pin: str, request: Request, response: Response, username: str | None = None) -> None:
+async def _create_session(pin: str, request: Request, username: str | None = None, scope: str = "admin") -> str:
     now = datetime.now(timezone.utc)
     ip = request.client.host if request.client else "unknown"
     await db.admin_login_attempts.delete_many({"id": ip, "expires_at": {"$lte": now}})
@@ -96,17 +97,45 @@ async def login_with_pin(pin: str, request: Request, response: Response, usernam
     await db.admin_sessions.insert_one({
         "token_hash": _session_hash(token),
         **principal,
+        "scope": scope,
         "created_at": now,
         "expires_at": now + timedelta(seconds=SESSION_SECONDS),
     })
+    return token
+
+
+async def login_with_pin(pin: str, request: Request, response: Response, username: str | None = None) -> None:
+    token = await _create_session(pin, request, username)
     response.set_cookie(
         COOKIE_NAME, token, max_age=SESSION_SECONDS, path="/api",
         secure=request.url.hostname not in {"localhost", "127.0.0.1"}, httponly=True, samesite="strict",
     )
 
 
+async def login_for_attendance(pin: str, request: Request) -> str:
+    """Issue an owner-only bearer session for the separately hosted attendance app."""
+    return await _create_session(pin, request, scope=ATTENDANCE_SCOPE)
+
+
+def _request_token(request: Request) -> tuple[str | None, bool]:
+    authorization = request.headers.get("authorization", "")
+    scheme, _, value = authorization.partition(" ")
+    if scheme.lower() == "bearer" and value:
+        return value.strip(), True
+    return request.cookies.get(COOKIE_NAME), False
+
+
+def _attendance_path_allowed(request: Request) -> bool:
+    path = request.url.path
+    if request.method in {"GET", "HEAD", "OPTIONS"}:
+        return path == "/api/admin/me" or path.startswith("/api/admin/operations/attendance")
+    if request.method == "POST" and path == "/api/admin/logout":
+        return True
+    return path == "/api/admin/operations/attendance" or path.startswith("/api/admin/operations/attendance/")
+
+
 async def require_admin(request: Request) -> None:
-    token = request.cookies.get(COOKIE_NAME)
+    token, bearer = _request_token(request)
     if not token:
         raise HTTPException(status_code=401, detail="Please sign in again")
     now = datetime.now(timezone.utc)
@@ -115,6 +144,11 @@ async def require_admin(request: Request) -> None:
     })
     if not session:
         raise HTTPException(status_code=401, detail="Session expired. Please sign in again")
+    attendance_session = session.get("scope") == ATTENDANCE_SCOPE
+    if bearer != attendance_session:
+        raise HTTPException(status_code=401, detail="Please sign in again")
+    if attendance_session and (session.get("role") != "owner" or not _attendance_path_allowed(request)):
+        raise HTTPException(status_code=403, detail="This attendance session cannot access that record")
     if session.get("user_id"):
         staff = await db.admin_users.find_one({"id": session["user_id"], "disabled": False})
         if not staff:
@@ -134,6 +168,8 @@ async def require_admin(request: Request) -> None:
     if request.method not in {"GET", "HEAD", "OPTIONS"}:
         if principal["role"] == "viewer":
             raise HTTPException(403, "This account has view-only access")
+        if attendance_session:
+            return
         origin = request.headers.get("origin")
         host = request.headers.get("host", "")
         if origin and origin not in {f"https://{host}", f"http://{host}"}:
@@ -143,10 +179,11 @@ async def require_admin(request: Request) -> None:
 
 
 async def logout(request: Request, response: Response) -> None:
-    token = request.cookies.get(COOKIE_NAME)
+    token, bearer = _request_token(request)
     if token:
         await db.admin_sessions.delete_one({"token_hash": _session_hash(token)})
-    response.delete_cookie(COOKIE_NAME, path="/api")
+    if not bearer:
+        response.delete_cookie(COOKIE_NAME, path="/api")
 
 
 async def require_owner(request: Request) -> None:

@@ -72,6 +72,15 @@ async def roster(company_id, day):
     return [{**r, "shift": r.get("shift") or "General"} for r in records if active_on(r, day)]
 
 
+@router.get("/attendance-companies")
+async def attendance_companies():
+    """Minimal company list for the separately hosted attendance application."""
+    docs = await db.clients.find(
+        {"archived": {"$ne": True}}, {"_id": 0, "id": 1, "name": 1},
+    ).sort("sort_order", 1).to_list(200)
+    return [{"id": row["id"], "name": row["name"]} for row in docs]
+
+
 @router.get("/attendance")
 async def attendance_draft(company_id: str, attendance_date: date):
     c = await company(company_id, active=False)
