@@ -18,6 +18,10 @@ export function setAttendanceToken(token: string) {
   localStorage.setItem(TOKEN_KEY, token);
 }
 
+export function hasAttendanceToken() {
+  return Boolean(localStorage.getItem(TOKEN_KEY));
+}
+
 export function clearAttendanceToken() {
   localStorage.removeItem(TOKEN_KEY);
 }
@@ -49,3 +53,4 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
 export const apiGet = <T>(path: string) => request<T>("GET", path);
 export const apiPost = <T>(path: string, body?: unknown) => request<T>("POST", path, body ?? null);
 export const apiPut = <T>(path: string, body?: unknown) => request<T>("PUT", path, body ?? null);
+export const apiDelete = <T>(path: string) => request<T>("DELETE", path);

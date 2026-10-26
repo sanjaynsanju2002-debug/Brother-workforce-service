@@ -50,6 +50,10 @@ class AttendanceSnapshot(AttendanceRow):
     worker_id: str | None = None
     employee_id: str | None = None
     role: str = ""
+    check_in_at: datetime | None = None
+    check_out_at: datetime | None = None
+    employee_approved_at: datetime | None = None
+    attendance_source: Literal["Owner", "Employee self-service"] | None = None
 
 
 class AttendanceRecord(OperationalModel):

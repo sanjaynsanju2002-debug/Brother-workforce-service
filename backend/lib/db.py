@@ -81,6 +81,15 @@ INDEXES: dict[str, list[IndexModel]] = {
         IndexModel([("id", ASCENDING)], name="id", unique=True),
         IndexModel([("expires_at", ASCENDING)], name="expires_ttl", expireAfterSeconds=0),
     ],
+    "employee_attendance_sessions": [
+        IndexModel([("token_hash", ASCENDING)], name="token_hash", unique=True),
+        IndexModel([("expires_at", ASCENDING)], name="expires_ttl", expireAfterSeconds=0),
+        IndexModel([("assignment_id", ASCENDING)], name="assignment_id"),
+    ],
+    "employee_login_attempts": [
+        IndexModel([("id", ASCENDING)], name="id", unique=True),
+        IndexModel([("expires_at", ASCENDING)], name="expires_ttl", expireAfterSeconds=0),
+    ],
     "visits": [IndexModel([("created_at", DESCENDING)], name="created_desc")],
     "cron_runs": [
         IndexModel([("run_id", ASCENDING)], name="run_id", unique=True),

@@ -31,20 +31,27 @@ def month_label(month: str) -> str:
 def register_rows(register: dict):
     year, number = int(register["month"][:4]), int(register["month"][5:])
     days = calendar.monthrange(year, number)[1]
-    sheets = {sheet["attendance_date"]: sheet for sheet in register["sheets"] if sheet.get("status") == "Approved"}
+    sheets = {sheet["attendance_date"]: sheet for sheet in register["sheets"]}
     lookups = {day: {row["assignment_id"]: row for row in sheet.get("rows", [])} for day, sheet in sheets.items()}
+    payroll_ready_days = sum(
+        sheet.get("status") == "Approved" or any(row.get("employee_approved_at") for row in sheet.get("rows", []))
+        for sheet in sheets.values()
+    )
     rows = []
     for employee in register["employees"]:
         statuses, counts, payable = [], {}, Decimal("0")
         for day in range(1, days + 1):
             key = f"{register['month']}-{day:02d}"
-            status = lookups.get(key, {}).get(employee["assignment_id"], {}).get("status", "Unmarked")
+            attendance_row = lookups.get(key, {}).get(employee["assignment_id"])
+            sheet = sheets.get(key)
+            payroll_ready = bool(attendance_row and sheet and (sheet.get("status") == "Approved" or attendance_row.get("employee_approved_at")))
+            status = attendance_row.get("status", "Unmarked") if payroll_ready else "Unmarked"
             statuses.append(STATUS_SHORT.get(status, "-"))
             if status != "Unmarked":
                 counts[status] = counts.get(status, 0) + 1
             payable += PAID_VALUE.get(status, Decimal("0"))
         rows.append({**employee, "statuses": statuses, "counts": counts, "payable_days": payable})
-    return days, rows, len(sheets)
+    return days, rows, payroll_ready_days
 
 
 def export_attendance_xlsx(register: dict, supplier: InvoiceProfile) -> bytes:
@@ -70,7 +77,7 @@ def export_attendance_xlsx(register: dict, supplier: InvoiceProfile) -> bytes:
     sheet.merge_cells(start_row=5, start_column=1, end_row=5, end_column=last_column)
     sheet["A6"] = f"Company: {register['company_name']}"
     sheet.merge_cells(start_row=6, start_column=1, end_row=6, end_column=3 + days)
-    sheet.cell(6, 4 + days, f"Month: {month_label(register['month'])} | Approved days: {approved}")
+    sheet.cell(6, 4 + days, f"Month: {month_label(register['month'])} | Payroll-ready days: {approved}")
     sheet.merge_cells(start_row=6, start_column=4 + days, end_row=6, end_column=last_column)
     headers = ["No.", "Employee ID", "Employee name", *range(1, days + 1), "P", "A", "HD", "PL", "UL", "H", "WO", "Payable days"]
     for column, value in enumerate(headers, 1):
@@ -151,7 +158,7 @@ def export_attendance_pdf(register: dict, supplier: InvoiceProfile) -> bytes:
     header = Table([[logo, brand]], colWidths=[95, doc.width - 95])
     header.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 0)]))
     story = [header, Spacer(1, 4), p("MONTHLY ATTENDANCE REGISTER", heading), Spacer(1, 5),
-             p(f"Company: {register['company_name']}   |   Month: {month_label(register['month'])}   |   Approved days: {approved}"), Spacer(1, 8)]
+             p(f"Company: {register['company_name']}   |   Month: {month_label(register['month'])}   |   Payroll-ready days: {approved}"), Spacer(1, 8)]
     headers = ["No.", "ID", "Employee", *[str(day) for day in range(1, days + 1)], "P", "A", "HD", "PL", "UL", "H", "WO", "Pay"]
     data = [[p(value, bold) for value in headers]]
     for index, row in enumerate(rows, 1):
@@ -259,7 +266,7 @@ def export_attendance_weekly_xlsx(report: dict, supplier: InvoiceProfile) -> byt
     sheet.merge_cells(start_row=6, start_column=1, end_row=6, end_column=11)
     write_text(sheet["A6"], f"Company: {report['company_name']}")
     sheet.merge_cells(start_row=6, start_column=12, end_row=6, end_column=last_column)
-    sheet.cell(6, 12, f"Week: {report['week_start']} to {report['week_end']} | Approved: {report['approved_days']} of 7")
+    sheet.cell(6, 12, f"Week: {report['week_start']} to {report['week_end']} | Payroll-ready: {report['payroll_ready_days']} of 7")
 
     for column, value in enumerate(headers, 1):
         cell = sheet.cell(8, column, value)
@@ -365,12 +372,12 @@ def export_attendance_weekly_pdf(report: dict, supplier: InvoiceProfile) -> byte
     header.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 0)]))
     story = [
         header, Spacer(1, 3), p("WEEKLY ATTENDANCE REPORT", heading), Spacer(1, 4),
-        p(f"Company: {report['company_name']}   |   Week: {report['week_start']} to {report['week_end']}   |   Approved days: {report['approved_days']} of 7"),
+        p(f"Company: {report['company_name']}   |   Week: {report['week_start']} to {report['week_end']}   |   Payroll-ready days: {report['payroll_ready_days']} of 7"),
         Spacer(1, 7),
     ]
-    summary_labels = ("Employees", "Approved days", "Present", "Absent", "Half days", "Payable days", "OT hours")
+    summary_labels = ("Employees", "Payroll-ready days", "Present", "Absent", "Half days", "Payable days", "OT hours")
     summary_values = (
-        report["totals"]["employees"], report["approved_days"], report["status_counts"].get("Present", 0),
+        report["totals"]["employees"], report["payroll_ready_days"], report["status_counts"].get("Present", 0),
         report["status_counts"].get("Absent", 0), report["status_counts"].get("Half-day", 0),
         report["totals"]["payable_days"], report["totals"]["overtime_hours"],
     )
@@ -419,7 +426,7 @@ def export_attendance_weekly_pdf(report: dict, supplier: InvoiceProfile) -> byte
         story.extend(p(f"{_weekly_day_label(day['date'])} ({day['status']}): {day['notes']}", small) for day in notes)
     story.extend([Spacer(1, 6), p(
         "Legend: P Present | A Absent | HD Half day | PL Paid leave | UL Unpaid leave | H Government holiday | WO Weekly off. "
-        "Shift: G General | M Morning | AF Afternoon | N Night. Totals include approved days only.", small,
+        "Shift: G General | M Morning | AF Afternoon | N Night. Totals include owner-approved rows and completed employee check-outs.", small,
     )])
 
     def footer(canvas, document):

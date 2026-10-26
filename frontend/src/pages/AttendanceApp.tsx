@@ -16,9 +16,11 @@ import {
   Loader2,
   Lock,
   LogOut,
+  KeyRound,
   RefreshCw,
   Save,
   Search,
+  ShieldCheck,
   Users,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -28,7 +30,9 @@ import { DateInput } from "@/components/ui/date-input";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { ApiError, apiGet, apiPost, apiPut, attendanceFetch, clearAttendanceToken, setAttendanceToken } from "@/attendance/api";
+import { ApiError, apiDelete, apiGet, apiPost, apiPut, attendanceFetch, clearAttendanceToken, hasAttendanceToken, setAttendanceToken } from "@/attendance/api";
+import { hasEmployeeAttendanceToken } from "@/attendance/employeeApi";
+import EmployeeAttendanceApp, { InstallAppButton } from "@/pages/EmployeeAttendanceApp";
 import { BRAND } from "@/lib/brand";
 import { indiaToday, monthLabel } from "@/lib/finance";
 
@@ -76,6 +80,10 @@ type AttendanceRow = {
   shift: ShiftName;
   status: AttendanceStatus;
   overtime_hours: string;
+  check_in_at?: string | null;
+  check_out_at?: string | null;
+  employee_approved_at?: string | null;
+  attendance_source?: "Owner" | "Employee self-service" | null;
 };
 type AttendanceSheet = {
   id: string;
@@ -97,7 +105,7 @@ type AttendanceRegister = {
   employees: (Omit<Employee, "id"> & { assignment_id: string })[];
   sheets: AttendanceSheet[];
 };
-type WeeklyCalendarDay = { date: string; status: "Approved" | "Draft" | "Not saved"; notes: string };
+type WeeklyCalendarDay = { date: string; status: "Approved" | "Partially approved" | "Draft" | "Not saved"; notes: string };
 type WeeklyEmployeeDay = {
   date: string;
   status: AttendanceStatus;
@@ -123,6 +131,7 @@ type WeeklyReportData = {
   calendar_days: WeeklyCalendarDay[];
   saved_days: number;
   approved_days: number;
+  payroll_ready_days: number;
   draft_days: number;
   employees: WeeklyEmployee[];
   status_counts: Record<string, number>;
@@ -130,7 +139,14 @@ type WeeklyReportData = {
 };
 type Account = { ok: boolean; name: string; role: string };
 type AttendanceLogin = { ok: boolean; token: string; expires_in: number };
-type InstallPrompt = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: "accepted" | "dismissed" }> };
+type EmployeeAccessRow = {
+  assignment_id: string;
+  full_name: string;
+  employee_id?: string | null;
+  role: string;
+  shift: ShiftName;
+  access_enabled: boolean;
+};
 
 function offsetDate(value: string, days: number) {
   const [year, month, day] = value.split("-").map(Number);
@@ -169,6 +185,10 @@ function statusInfo(status: AttendanceStatus) {
   return STATUS_OPTIONS.find((item) => item.value === normalizeStatus(status)) ?? STATUS_OPTIONS[0];
 }
 
+function attendanceRowPayrollReady(sheet: AttendanceSheet, row?: AttendanceRow) {
+  return Boolean(row && (sheet.status === "Approved" || row.employee_approved_at));
+}
+
 async function downloadAttendance(path: string, fallback: string) {
   const response = await attendanceFetch(path);
   if (!response.ok) throw new ApiError(response.status, await response.json().catch(() => null));
@@ -196,41 +216,23 @@ export default function AttendanceApp() {
       if (manifest && oldManifest) manifest.href = oldManifest;
     };
   }, []);
-  return <AttendanceSession />;
+  const [portal, setPortal] = useState<"employee" | "owner">(() => {
+    const saved = localStorage.getItem("bws-attendance-portal");
+    if (saved === "employee" || saved === "owner") return saved;
+    if (hasAttendanceToken()) return "owner";
+    if (hasEmployeeAttendanceToken()) return "employee";
+    return "employee";
+  });
+  const open = (next: "employee" | "owner") => {
+    localStorage.setItem("bws-attendance-portal", next);
+    setPortal(next);
+  };
+  return portal === "employee"
+    ? <EmployeeAttendanceApp onOwner={() => open("owner")} />
+    : <AttendanceSession onEmployee={() => open("employee")} />;
 }
 
-function InstallAppButton({ className = "" }: { className?: string }) {
-  const [prompt, setPrompt] = useState<InstallPrompt | null>(null);
-  const [installed, setInstalled] = useState(() => window.matchMedia("(display-mode: standalone)").matches);
-
-  useEffect(() => {
-    const available = (event: Event) => {
-      event.preventDefault();
-      setPrompt(event as InstallPrompt);
-    };
-    const complete = () => setInstalled(true);
-    window.addEventListener("beforeinstallprompt", available);
-    window.addEventListener("appinstalled", complete);
-    return () => {
-      window.removeEventListener("beforeinstallprompt", available);
-      window.removeEventListener("appinstalled", complete);
-    };
-  }, []);
-
-  if (installed) return null;
-  return <Button type="button" variant="outline" className={className} onClick={async () => {
-    if (!prompt) {
-      toast.info("Open your browser menu and choose ‘Add to Home screen’ to install this app.");
-      return;
-    }
-    await prompt.prompt();
-    const choice = await prompt.userChoice;
-    if (choice.outcome === "accepted") toast.success("Attendance app installed");
-    setPrompt(null);
-  }}><Download className="h-4 w-4" />Install app</Button>;
-}
-
-function AttendanceSession() {
+function AttendanceSession({ onEmployee }: { onEmployee: () => void }) {
   const queryClient = useQueryClient();
   const [pin, setPin] = useState("");
   const [loggedOut, setLoggedOut] = useState(false);
@@ -269,14 +271,14 @@ function AttendanceSession() {
             <div><Label htmlFor="attendance-pin" className="mb-2 block">Owner security PIN</Label><Input id="attendance-pin" type="password" inputMode="numeric" autoComplete="current-password" value={pin} onChange={(event) => setPin(event.target.value)} placeholder="Enter your dashboard PIN" autoFocus /></div>
             <Button type="submit" disabled={!pin || login.isPending} className="h-11 w-full bg-[#EA580C] text-white hover:bg-[#C2410C]">{login.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Lock className="h-4 w-4" />}Open attendance</Button>
           </form>
-          <InstallAppButton className="mt-3 w-full" />
+          <div className="mt-3 grid gap-2 sm:grid-cols-2"><InstallAppButton className="w-full" /><Button type="button" variant="ghost" onClick={onEmployee} className="w-full"><Users className="h-4 w-4" />Employee sign in</Button></div>
           <a href={WEBSITE} className="mt-6 block text-center text-xs text-slate-500 hover:text-[#0F2444]">Open business website</a>
         </CardContent>
       </Card>
     </main>;
   }
 
-  return <AttendanceWorkspace account={session.data} onLogout={async () => {
+  return <AttendanceWorkspace account={session.data} onEmployee={onEmployee} onLogout={async () => {
     try { await apiPost("/admin/logout"); } finally {
       clearAttendanceToken();
       queryClient.clear();
@@ -285,8 +287,8 @@ function AttendanceSession() {
   }} />;
 }
 
-function AttendanceWorkspace({ account, onLogout }: { account: Account; onLogout: () => void }) {
-  const [view, setView] = useState<"daily" | "weekly" | "register">("daily");
+function AttendanceWorkspace({ account, onEmployee, onLogout }: { account: Account; onEmployee: () => void; onLogout: () => void }) {
+  const [view, setView] = useState<"daily" | "weekly" | "register" | "access">("daily");
   const [companyId, setCompanyId] = useState(() => localStorage.getItem("bws-attendance-company") ?? "");
   const [day, setDay] = useState(indiaToday());
   const [weekStart, setWeekStart] = useState(() => mondayFor(indiaToday()));
@@ -308,6 +310,7 @@ function AttendanceWorkspace({ account, onLogout }: { account: Account; onLogout
         <img src={BRAND.logo} alt="" className="h-10 w-10 shrink-0 object-contain" />
         <div className="min-w-0 flex-1"><p className="truncate text-sm font-bold sm:text-base">Brothers Workforce Solutions</p><p className="text-xs text-slate-500">Private attendance tracker</p></div>
         <InstallAppButton className="hidden sm:inline-flex" />
+        <Button type="button" variant="outline" size="sm" onClick={onEmployee} aria-label="Open employee portal"><Users className="h-4 w-4" /><span className="hidden md:inline">Employee portal</span></Button>
         <a href={`${WEBSITE}/admin?tab=workforce`} className="hidden min-h-10 items-center gap-2 rounded-lg border border-slate-200 px-3 text-sm font-medium hover:bg-slate-50 lg:flex">Website dashboard<ExternalLink className="h-3.5 w-3.5" /></a>
         <Button type="button" variant="outline" size="sm" onClick={onLogout}><LogOut className="h-4 w-4" /><span className="hidden sm:inline">Sign out</span></Button>
       </div>
@@ -323,10 +326,10 @@ function AttendanceWorkspace({ account, onLogout }: { account: Account; onLogout
         <section className="mb-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex min-w-0 items-center gap-3"><span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-orange-50 text-[#EA580C]"><Building2 className="h-5 w-5" /></span><div className="min-w-0"><p className="text-xs text-slate-500">Selected company</p><h2 className="truncate text-lg font-semibold">{selected?.name ?? "Loading company…"}</h2></div></div>
-            <div className="inline-flex max-w-full overflow-x-auto rounded-xl bg-slate-100 p-1"><button type="button" onClick={() => setView("daily")} className={`flex min-h-9 shrink-0 items-center gap-2 rounded-lg px-3 text-sm font-medium transition ${view === "daily" ? "bg-white text-[#0F2444] shadow-sm" : "text-slate-500"}`}><ClipboardCheck className="h-4 w-4" />Daily</button><button type="button" onClick={() => setView("weekly")} className={`flex min-h-9 shrink-0 items-center gap-2 rounded-lg px-3 text-sm font-medium transition ${view === "weekly" ? "bg-white text-[#0F2444] shadow-sm" : "text-slate-500"}`}><CalendarRange className="h-4 w-4" />Weekly</button><button type="button" onClick={() => setView("register")} className={`flex min-h-9 shrink-0 items-center gap-2 rounded-lg px-3 text-sm font-medium transition ${view === "register" ? "bg-white text-[#0F2444] shadow-sm" : "text-slate-500"}`}><BarChart3 className="h-4 w-4" />Monthly</button></div>
+            <div className="inline-flex max-w-full overflow-x-auto rounded-xl bg-slate-100 p-1"><button type="button" onClick={() => setView("daily")} className={`flex min-h-9 shrink-0 items-center gap-2 rounded-lg px-3 text-sm font-medium transition ${view === "daily" ? "bg-white text-[#0F2444] shadow-sm" : "text-slate-500"}`}><ClipboardCheck className="h-4 w-4" />Daily</button><button type="button" onClick={() => setView("weekly")} className={`flex min-h-9 shrink-0 items-center gap-2 rounded-lg px-3 text-sm font-medium transition ${view === "weekly" ? "bg-white text-[#0F2444] shadow-sm" : "text-slate-500"}`}><CalendarRange className="h-4 w-4" />Weekly</button><button type="button" onClick={() => setView("register")} className={`flex min-h-9 shrink-0 items-center gap-2 rounded-lg px-3 text-sm font-medium transition ${view === "register" ? "bg-white text-[#0F2444] shadow-sm" : "text-slate-500"}`}><BarChart3 className="h-4 w-4" />Monthly</button><button type="button" onClick={() => setView("access")} className={`flex min-h-9 shrink-0 items-center gap-2 rounded-lg px-3 text-sm font-medium transition ${view === "access" ? "bg-white text-[#0F2444] shadow-sm" : "text-slate-500"}`}><KeyRound className="h-4 w-4" />Employee access</button></div>
           </div>
         </section>
-        {view === "daily" ? <DailyAttendance companyId={companyId} day={day} onDay={setDay} /> : view === "weekly" ? <WeeklyReport companyId={companyId} weekStart={weekStart} onWeekStart={setWeekStart} /> : <MonthlyRegister companyId={companyId} month={month} onMonth={setMonth} />}
+        {view === "daily" ? <DailyAttendance companyId={companyId} day={day} onDay={setDay} /> : view === "weekly" ? <WeeklyReport companyId={companyId} weekStart={weekStart} onWeekStart={setWeekStart} /> : view === "register" ? <MonthlyRegister companyId={companyId} month={month} onMonth={setMonth} /> : <EmployeeAccess companyId={companyId} companyName={selected?.name ?? "Company"} />}
       </>}
     </main>
   </div>;
@@ -339,6 +342,56 @@ function CompanyChooser({ companies, pending, error, onChoose }: { companies: Co
     {error && <p className="mt-6 text-sm text-red-700">Companies could not be loaded. Refresh and try again.</p>}
     {!pending && !error && !companies.length && <div className="mt-6 rounded-xl border border-dashed p-6 text-center"><p className="text-sm text-slate-600">No active companies are available.</p><a href={`${WEBSITE}/admin?tab=workforce`} className="mt-3 inline-flex items-center gap-2 text-sm font-semibold text-[#EA580C]">Add a company in Company Workforce<ChevronRight className="h-4 w-4" /></a></div>}
     <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{companies.map((company) => <button key={company.id} type="button" onClick={() => onChoose(company.id)} className="group flex min-h-24 items-center gap-4 rounded-xl border border-slate-200 p-4 text-left transition hover:-translate-y-0.5 hover:border-orange-300 hover:shadow-md"><span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-[#0F2444] text-white"><Building2 className="h-5 w-5" /></span><span className="min-w-0 flex-1"><span className="block truncate font-semibold">{company.name}</span><span className="mt-1 block text-xs text-slate-500">Open employee attendance</span></span><ChevronRight className="h-5 w-5 text-slate-300 transition group-hover:translate-x-1 group-hover:text-[#EA580C]" /></button>)}</div>
+  </section>;
+}
+
+function EmployeeAccess({ companyId, companyName }: { companyId: string; companyName: string }) {
+  const [pins, setPins] = useState<Record<string, string>>({});
+  const [pendingId, setPendingId] = useState("");
+  const query = useQuery({
+    queryKey: ["employee-attendance-access", companyId],
+    queryFn: () => apiGet<EmployeeAccessRow[]>(`${OPS}/attendance/access?company_id=${encodeURIComponent(companyId)}`),
+  });
+  const enable = useMutation({
+    mutationFn: ({ assignmentId, pin }: { assignmentId: string; pin: string }) => apiPut(`${OPS}/attendance/access/${assignmentId}`, { pin }),
+    onMutate: ({ assignmentId }) => setPendingId(assignmentId),
+    onSuccess: async (_, { assignmentId }) => {
+      setPins((current) => ({ ...current, [assignmentId]: "" }));
+      toast.success("Employee attendance PIN saved");
+      await query.refetch();
+    },
+    onError: (error) => toast.error(message(error)),
+    onSettled: () => setPendingId(""),
+  });
+  const disable = useMutation({
+    mutationFn: (assignmentId: string) => apiDelete(`${OPS}/attendance/access/${assignmentId}`),
+    onMutate: (assignmentId) => setPendingId(assignmentId),
+    onSuccess: async () => {
+      toast.success("Employee attendance access disabled");
+      await query.refetch();
+    },
+    onError: (error) => toast.error(message(error)),
+    onSettled: () => setPendingId(""),
+  });
+
+  if (query.isPending) return <LoadingCard label="Loading employee access…" />;
+  if (query.isError) return <ErrorCard text={message(query.error)} retry={() => query.refetch()} />;
+  return <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+    <div className="flex flex-wrap items-start justify-between gap-4 border-b p-4 sm:p-5">
+      <div><div className="flex items-center gap-2"><ShieldCheck className="h-5 w-5 text-[#EA580C]" /><h2 className="text-lg font-semibold">Employee portal access</h2></div><p className="mt-1 max-w-2xl text-sm leading-6 text-slate-500">Create a private 6-digit PIN for each employee at {companyName}. Employees sign in with their employee ID and this PIN. Resetting or disabling access signs that employee out everywhere.</p></div>
+      <a href={`${WEBSITE}/admin?tab=workforce`} className="inline-flex min-h-9 items-center gap-2 rounded-md border border-slate-200 px-3 text-sm font-medium hover:bg-slate-50">Company Workforce<ExternalLink className="h-3.5 w-3.5" /></a>
+    </div>
+    {!query.data.length ? <div className="p-10 text-center"><Users className="mx-auto h-8 w-8 text-slate-300" /><p className="mt-3 font-medium">No active employees</p><p className="mt-1 text-sm text-slate-500">Add employees in Company Workforce first.</p></div> : <div className="divide-y divide-slate-100">{query.data.map((employee) => {
+      const pin = pins[employee.assignment_id] ?? "";
+      const busy = pendingId === employee.assignment_id;
+      return <article key={employee.assignment_id} className="grid gap-4 p-4 sm:p-5 lg:grid-cols-[minmax(15rem,1fr)_minmax(12rem,18rem)_auto] lg:items-end">
+        <div className="flex min-w-0 items-center gap-3"><span className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${employee.access_enabled ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>{employee.access_enabled ? <ShieldCheck className="h-5 w-5" /> : <KeyRound className="h-5 w-5" />}</span><div className="min-w-0"><h3 className="truncate font-semibold">{employee.full_name}</h3><p className="mt-1 truncate text-xs text-slate-500">{employee.employee_id || "Employee ID required"}{employee.role ? ` · ${employee.role}` : ""} · {employee.shift}</p><p className={`mt-1 text-xs font-semibold ${employee.access_enabled ? "text-emerald-700" : "text-slate-500"}`}>{employee.access_enabled ? "Portal access enabled" : "Portal access not enabled"}</p></div></div>
+        <div><Label htmlFor={`access-pin-${employee.assignment_id}`} className="mb-1.5 block text-xs text-slate-500">{employee.access_enabled ? "New PIN to reset access" : "Create 6-digit PIN"}</Label><Input id={`access-pin-${employee.assignment_id}`} type="password" inputMode="numeric" autoComplete="new-password" maxLength={6} disabled={!employee.employee_id || busy} value={pin} onChange={(event) => setPins((current) => ({ ...current, [employee.assignment_id]: event.target.value.replace(/\D/g, "").slice(0, 6) }))} placeholder="6 digits" /></div>
+        <div className="flex flex-wrap gap-2 lg:justify-end"><Button type="button" disabled={!employee.employee_id || pin.length !== 6 || busy} onClick={() => enable.mutate({ assignmentId: employee.assignment_id, pin })} className="bg-[#EA580C] text-white hover:bg-[#C2410C]">{busy && enable.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <KeyRound className="h-4 w-4" />}{employee.access_enabled ? "Reset PIN" : "Enable access"}</Button>{employee.access_enabled && <Button type="button" variant="outline" disabled={busy} onClick={() => { if (window.confirm(`Disable attendance access for ${employee.full_name}?`)) disable.mutate(employee.assignment_id); }}>Disable</Button>}</div>
+        {!employee.employee_id && <p className="text-xs text-amber-700 lg:col-start-2 lg:col-span-2">Add a unique employee ID in Company Workforce before enabling portal access.</p>}
+      </article>;
+    })}</div>}
+    <div className="border-t bg-slate-50 p-4 text-xs leading-5 text-slate-500"><strong>Security:</strong> Existing PINs are never displayed. Give each employee a different PIN and share it privately.</div>
   </section>;
 }
 
@@ -367,6 +420,10 @@ function DailyEditor({ companyId, day, draft, reload }: { companyId: string; day
       shift: old?.shift ?? employee.shift ?? "General",
       status: normalizeStatus(old?.status ?? "Unmarked"),
       overtime_hours: old?.overtime_hours ?? "0",
+      check_in_at: old?.check_in_at,
+      check_out_at: old?.check_out_at,
+      employee_approved_at: old?.employee_approved_at,
+      attendance_source: old?.attendance_source,
     };
   });
   const [rows, setRows] = useState(initialRows);
@@ -462,7 +519,7 @@ function EmployeeAttendanceCard({ row, locked, onEdit }: { row: AttendanceRow; l
   const info = statusInfo(row.status);
   return <article className="p-4 sm:p-5">
     <div className="grid gap-4 xl:grid-cols-[minmax(220px,1fr)_170px_220px_140px] xl:items-end">
-      <div className="flex min-w-0 items-start gap-3"><span className={`mt-0.5 grid h-10 w-10 shrink-0 place-items-center rounded-xl text-xs font-bold ${info.tone}`}>{info.short}</span><div className="min-w-0"><h3 className="truncate font-semibold">{row.full_name}</h3><p className="mt-1 truncate text-xs text-slate-500">{row.employee_id || "No employee ID"}{row.role ? ` · ${row.role}` : ""}</p></div></div>
+      <div className="flex min-w-0 items-start gap-3"><span className={`mt-0.5 grid h-10 w-10 shrink-0 place-items-center rounded-xl text-xs font-bold ${info.tone}`}>{info.short}</span><div className="min-w-0"><h3 className="truncate font-semibold">{row.full_name}</h3><p className="mt-1 truncate text-xs text-slate-500">{row.employee_id || "No employee ID"}{row.role ? ` · ${row.role}` : ""}</p>{row.attendance_source === "Employee self-service" && <p className="mt-1 text-[11px] font-medium text-sky-700">Employee check-in{row.check_out_at ? " and check-out completed" : " active"}</p>}</div></div>
       <div><Label htmlFor={`shift-${row.assignment_id}`} className="mb-1.5 block text-xs text-slate-500">Shift</Label><select id={`shift-${row.assignment_id}`} disabled={locked} value={row.shift} onChange={(event) => onEdit({ shift: event.target.value as ShiftName })} className="min-h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm disabled:bg-slate-50">{SHIFTS.slice(1).map((item) => <option key={item}>{item}</option>)}</select></div>
       <div><Label htmlFor={`status-${row.assignment_id}`} className="mb-1.5 block text-xs text-slate-500">Attendance</Label><select id={`status-${row.assignment_id}`} aria-label={`Attendance for ${row.full_name}`} disabled={locked} value={normalizeStatus(row.status)} onChange={(event) => { const status = event.target.value as Exclude<AttendanceStatus, "Leave">; onEdit({ status, ...(status === "Present" || status === "Half-day" ? {} : { overtime_hours: "0" }) }); }} className="min-h-10 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium disabled:bg-slate-50">{STATUS_OPTIONS.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></div>
       <div><Label htmlFor={`overtime-${row.assignment_id}`} className="mb-1.5 block text-xs text-slate-500">Overtime hours</Label><Input id={`overtime-${row.assignment_id}`} aria-label={`Overtime hours for ${row.full_name}`} type="number" inputMode="decimal" min="0" max="24" step="0.01" disabled={locked || !["Present", "Half-day"].includes(normalizeStatus(row.status))} value={row.overtime_hours} onChange={(event) => onEdit({ overtime_hours: event.target.value })} /></div>
@@ -518,11 +575,11 @@ function WeeklyReport({ companyId, weekStart, onWeekStart }: { companyId: string
       <div className="border-b border-slate-200 p-4 sm:p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#EA580C]">Weekly report</p><h2 className="mt-1 text-xl font-semibold">{report.company_name}</h2><p className="mt-1 text-sm text-slate-500">{reportDate(report.week_start)} – {reportDate(report.week_end)}</p></div>
-          <div className="rounded-xl bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900"><strong>Report rule:</strong> the table and downloads show saved drafts, but all totals calculate approved days only.</div>
+          <div className="rounded-xl bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-900"><strong>Report rule:</strong> totals include owner-approved days and attendance completed by employee check-out.</div>
         </div>
         <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
           <WeeklyMetric label="Employees" value={String(report.totals.employees)} />
-          <WeeklyMetric label="Approved days" value={`${report.approved_days} / 7`} />
+          <WeeklyMetric label="Payroll-ready days" value={`${report.payroll_ready_days} / 7`} />
           <WeeklyMetric label="Present" value={String(report.status_counts.Present ?? 0)} tone="emerald" />
           <WeeklyMetric label="Absent" value={String(report.status_counts.Absent ?? 0)} tone="red" />
           <WeeklyMetric label="Payable days" value={report.totals.payable_days} tone="orange" />
@@ -533,7 +590,7 @@ function WeeklyReport({ companyId, weekStart, onWeekStart }: { companyId: string
       {empty ? <div className="p-10 text-center"><CalendarRange className="mx-auto h-9 w-9 text-slate-300" /><h3 className="mt-3 font-semibold">No attendance saved for this week</h3><p className="mt-1 text-sm text-slate-500">Open Daily attendance to create and approve records. Weekly downloads become available after the first saved day.</p></div> : <>
         <div className="overflow-x-auto">
           <table className="min-w-max text-left text-xs">
-            <thead className="bg-slate-50"><tr><th className="sticky left-0 z-10 min-w-60 border-r border-b bg-slate-50 p-3">Employee</th>{report.calendar_days.map((day) => <th key={day.date} className="min-w-24 border-r border-b p-2 text-center"><span className="block font-semibold">{reportDate(day.date, true)}</span><span className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[9px] font-semibold ${day.status === "Approved" ? "bg-emerald-100 text-emerald-800" : day.status === "Draft" ? "bg-amber-100 text-amber-800" : "bg-slate-200 text-slate-500"}`}>{day.status}</span></th>)}<th className="min-w-56 border-b p-3">Approved totals</th></tr></thead>
+            <thead className="bg-slate-50"><tr><th className="sticky left-0 z-10 min-w-60 border-r border-b bg-slate-50 p-3">Employee</th>{report.calendar_days.map((day) => <th key={day.date} className="min-w-24 border-r border-b p-2 text-center"><span className="block font-semibold">{reportDate(day.date, true)}</span><span className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[9px] font-semibold ${day.status === "Approved" ? "bg-emerald-100 text-emerald-800" : day.status === "Partially approved" ? "bg-sky-100 text-sky-800" : day.status === "Draft" ? "bg-amber-100 text-amber-800" : "bg-slate-200 text-slate-500"}`}>{day.status}</span></th>)}<th className="min-w-56 border-b p-3">Payroll-ready totals</th></tr></thead>
             <tbody>{report.employees.map((employee) => <tr key={employee.assignment_id} className="border-b last:border-b-0"><th className="sticky left-0 z-[1] border-r bg-white p-3"><span className="block max-w-56 truncate font-semibold">{employee.full_name}</span><span className="mt-1 block max-w-56 truncate font-normal text-slate-500">{employee.employee_id || "No employee ID"}{employee.role ? ` · ${employee.role}` : ""}</span></th>{employee.days.map((day) => { const info = statusInfo(day.status); return <td key={day.date} className={`border-r p-2 text-center ${day.sheet_status === "Draft" ? "bg-amber-50/40" : ""}`}><span title={`${info.label} · ${day.shift}${Number(day.overtime_hours) ? ` · ${day.overtime_hours} OT hours` : ""}`} className={`inline-flex min-w-8 justify-center rounded-md px-1.5 py-1 font-bold ${info.tone}`}>{info.short}</span><span className="mt-1 block text-[9px] text-slate-500">{day.shift}</span></td>; })}<td className="p-3"><div className="flex max-w-56 flex-wrap gap-1">{STATUS_OPTIONS.slice(1).map((item) => (employee.status_counts[item.value] ?? 0) > 0 ? <span key={item.value} className={`rounded px-1.5 py-1 ${item.tone}`}>{item.short} {employee.status_counts[item.value]}</span> : null)}</div><p className="mt-2 text-[11px] text-slate-600"><strong>{employee.payable_days}</strong> payable days · <strong>{employee.overtime_hours}</strong> OT hours</p></td></tr>)}</tbody>
           </table>
         </div>
@@ -558,13 +615,15 @@ function MonthlyRegister({ companyId, month, onMonth }: { companyId: string; mon
   const data = query.data;
   const sheets = data.sheets;
   const dates = sheets.map((sheet) => sheet.attendance_date);
-  const approved = sheets.filter((sheet) => sheet.status === "Approved");
+  const payrollReady = sheets.filter((sheet) => sheet.rows.some((row) => attendanceRowPayrollReady(sheet, row)));
   const byDate = new Map(sheets.map((sheet) => [sheet.attendance_date, new Map(sheet.rows.map((row) => [row.assignment_id, row]))]));
   const totals = new Map<string, Record<string, number>>();
   for (const employee of data.employees) {
     const counts: Record<string, number> = {};
-    for (const sheet of approved) {
-      const status = normalizeStatus(sheet.rows.find((row) => row.assignment_id === employee.assignment_id)?.status ?? "Unmarked");
+    for (const sheet of sheets) {
+      const row = sheet.rows.find((item) => item.assignment_id === employee.assignment_id);
+      if (!attendanceRowPayrollReady(sheet, row)) continue;
+      const status = normalizeStatus(row?.status ?? "Unmarked");
       counts[status] = (counts[status] ?? 0) + 1;
     }
     totals.set(employee.assignment_id, counts);
@@ -580,10 +639,10 @@ function MonthlyRegister({ companyId, month, onMonth }: { companyId: string; mon
     }
   };
   return <section className="space-y-4">
-    <div className="flex flex-wrap items-end justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5"><div><Label htmlFor="attendance-month" className="mb-2 flex items-center gap-2"><CalendarDays className="h-4 w-4 text-[#EA580C]" />Register month</Label><DateInput id="attendance-month" type="month" value={month} onValueChange={(value) => value ? onMonth(value) : false} /></div><div className="flex flex-wrap gap-3 text-sm"><Metric label="Saved days" value={String(sheets.length)} /><Metric label="Approved" value={String(approved.length)} /><Metric label="Employees" value={String(data.employees.length)} /></div></div>
+    <div className="flex flex-wrap items-end justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5"><div><Label htmlFor="attendance-month" className="mb-2 flex items-center gap-2"><CalendarDays className="h-4 w-4 text-[#EA580C]" />Register month</Label><DateInput id="attendance-month" type="month" value={month} onValueChange={(value) => value ? onMonth(value) : false} /></div><div className="flex flex-wrap gap-3 text-sm"><Metric label="Saved days" value={String(sheets.length)} /><Metric label="Payroll-ready" value={String(payrollReady.length)} /><Metric label="Employees" value={String(data.employees.length)} /></div></div>
     <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-      <div className="flex flex-wrap items-start justify-between gap-3 border-b p-4 sm:p-5"><div><h2 className="text-lg font-semibold">{data.company_name} · {monthLabel(month)}</h2><p className="mt-1 text-sm text-slate-500">Only approved days are included in payroll totals. Draft days are marked below.</p></div><div className="flex flex-wrap gap-2"><Button type="button" variant="outline" disabled={!!downloading} onClick={() => void download("pdf")}><Download className="h-4 w-4" />{downloading === "pdf" ? "Preparing…" : "PDF"}</Button><Button type="button" variant="outline" disabled={!!downloading} onClick={() => void download("xlsx")}><FileSpreadsheet className="h-4 w-4" />{downloading === "xlsx" ? "Preparing…" : "Excel"}</Button><Button type="button" variant="outline" onClick={() => window.print()}>Print</Button><a href={`${WEBSITE}/admin?tab=payroll`} className="inline-flex min-h-9 items-center gap-2 rounded-md bg-[#0F2444] px-3 text-sm font-medium text-white hover:bg-[#183A67]">Open Payroll<ExternalLink className="h-3.5 w-3.5" /></a></div></div>
-      {!sheets.length ? <div className="p-10 text-center"><CalendarDays className="mx-auto h-8 w-8 text-slate-300" /><p className="mt-3 font-medium">No attendance saved for this month</p><p className="mt-1 text-sm text-slate-500">Open Daily attendance and save the first date.</p></div> : <div className="overflow-x-auto"><table className="min-w-max text-left text-xs"><thead className="sticky top-0 bg-slate-50"><tr><th className="sticky left-0 z-10 min-w-56 border-r border-b bg-slate-50 p-3">Employee</th>{dates.map((date) => <th key={date} className="min-w-14 border-r border-b p-2 text-center"><span className="block text-slate-500">{date.slice(8)}</span><span className={`mt-1 block text-[9px] ${sheets.find((sheet) => sheet.attendance_date === date)?.status === "Approved" ? "text-emerald-700" : "text-amber-700"}`}>{sheets.find((sheet) => sheet.attendance_date === date)?.status === "Approved" ? "OK" : "Draft"}</span></th>)}<th className="min-w-48 border-b p-3">Approved totals</th></tr></thead><tbody>{data.employees.map((employee) => <tr key={employee.assignment_id} className="border-b"><th className="sticky left-0 z-[1] border-r bg-white p-3"><span className="block max-w-52 truncate font-semibold">{employee.full_name}</span><span className="mt-1 block font-normal text-slate-500">{employee.employee_id || employee.role || "—"}</span></th>{dates.map((date) => { const row = byDate.get(date)?.get(employee.assignment_id); const info = statusInfo(row?.status ?? "Unmarked"); return <td key={date} className="border-r p-2 text-center"><span title={`${info.label}${row?.shift ? ` · ${row.shift}` : ""}`} className={`inline-flex min-w-8 justify-center rounded-md px-1.5 py-1 font-bold ${info.tone}`}>{info.short}</span></td>; })}<td className="p-3"><div className="flex max-w-48 flex-wrap gap-1">{STATUS_OPTIONS.slice(1).map((item) => (totals.get(employee.assignment_id)?.[item.value] ?? 0) > 0 ? <span key={item.value} className={`rounded px-1.5 py-1 ${item.tone}`}>{item.short} {totals.get(employee.assignment_id)?.[item.value]}</span> : null)}</div></td></tr>)}</tbody></table></div>}
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b p-4 sm:p-5"><div><h2 className="text-lg font-semibold">{data.company_name} · {monthLabel(month)}</h2><p className="mt-1 text-sm text-slate-500">Payroll totals include owner-approved rows and attendance completed by employee check-out.</p></div><div className="flex flex-wrap gap-2"><Button type="button" variant="outline" disabled={!!downloading} onClick={() => void download("pdf")}><Download className="h-4 w-4" />{downloading === "pdf" ? "Preparing…" : "PDF"}</Button><Button type="button" variant="outline" disabled={!!downloading} onClick={() => void download("xlsx")}><FileSpreadsheet className="h-4 w-4" />{downloading === "xlsx" ? "Preparing…" : "Excel"}</Button><Button type="button" variant="outline" onClick={() => window.print()}>Print</Button><a href={`${WEBSITE}/admin?tab=payroll`} className="inline-flex min-h-9 items-center gap-2 rounded-md bg-[#0F2444] px-3 text-sm font-medium text-white hover:bg-[#183A67]">Open Payroll<ExternalLink className="h-3.5 w-3.5" /></a></div></div>
+      {!sheets.length ? <div className="p-10 text-center"><CalendarDays className="mx-auto h-8 w-8 text-slate-300" /><p className="mt-3 font-medium">No attendance saved for this month</p><p className="mt-1 text-sm text-slate-500">Open Daily attendance and save the first date.</p></div> : <div className="overflow-x-auto"><table className="min-w-max text-left text-xs"><thead className="sticky top-0 bg-slate-50"><tr><th className="sticky left-0 z-10 min-w-56 border-r border-b bg-slate-50 p-3">Employee</th>{dates.map((date) => { const sheet = sheets.find((item) => item.attendance_date === date)!; const ready = sheet.rows.some((row) => attendanceRowPayrollReady(sheet, row)); const label = sheet.status === "Approved" ? "OK" : ready ? "Mixed" : "Draft"; return <th key={date} className="min-w-14 border-r border-b p-2 text-center"><span className="block text-slate-500">{date.slice(8)}</span><span className={`mt-1 block text-[9px] ${label === "OK" ? "text-emerald-700" : label === "Mixed" ? "text-sky-700" : "text-amber-700"}`}>{label}</span></th>; })}<th className="min-w-48 border-b p-3">Payroll-ready totals</th></tr></thead><tbody>{data.employees.map((employee) => <tr key={employee.assignment_id} className="border-b"><th className="sticky left-0 z-[1] border-r bg-white p-3"><span className="block max-w-52 truncate font-semibold">{employee.full_name}</span><span className="mt-1 block font-normal text-slate-500">{employee.employee_id || employee.role || "—"}</span></th>{dates.map((date) => { const row = byDate.get(date)?.get(employee.assignment_id); const info = statusInfo(row?.status ?? "Unmarked"); return <td key={date} className="border-r p-2 text-center"><span title={`${info.label}${row?.shift ? ` · ${row.shift}` : ""}`} className={`inline-flex min-w-8 justify-center rounded-md px-1.5 py-1 font-bold ${info.tone}`}>{info.short}</span></td>; })}<td className="p-3"><div className="flex max-w-48 flex-wrap gap-1">{STATUS_OPTIONS.slice(1).map((item) => (totals.get(employee.assignment_id)?.[item.value] ?? 0) > 0 ? <span key={item.value} className={`rounded px-1.5 py-1 ${item.tone}`}>{item.short} {totals.get(employee.assignment_id)?.[item.value]}</span> : null)}</div></td></tr>)}</tbody></table></div>}
       <div className="border-t bg-slate-50 p-4 text-xs text-slate-500"><div className="flex flex-wrap gap-x-4 gap-y-2">{STATUS_OPTIONS.slice(1).map((item) => <span key={item.value}><strong>{item.short}</strong> {item.label}</span>)}</div></div>
     </section>
   </section>;

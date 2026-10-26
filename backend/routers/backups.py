@@ -67,6 +67,9 @@ def read_archive(raw):
             for row in rows:
                 if not isinstance(row, dict):
                     raise ValueError("Invalid record")
+                if name == "assignments":
+                    for secret in ("attendance_pin_hash", "attendance_pin_salt", "attendance_access_enabled", "attendance_access_version"):
+                        row.pop(secret, None)
                 key = str(identity(name, row))
                 if key in seen:
                     raise ValueError("Duplicate record in backup")
@@ -129,6 +132,9 @@ async def download_backup():
     for worker in data["workers"]:
         for key in ("upload_token_hash", "upload_expires_at"):
             worker.pop(key, None)
+    for assignment in data["assignments"]:
+        for key in ("attendance_pin_hash", "attendance_pin_salt", "attendance_access_enabled", "attendance_access_version"):
+            assignment.pop(key, None)
     missing = []
     resumes = {row["worker_id"] for row in data["resume_files"]}
     for worker in data["workers"]:
@@ -141,7 +147,7 @@ async def download_backup():
         raise HTTPException(413, "This backup has too many records. Ask your website maintainer for a database export.")
     manifest = {"format": "bws-business-backup", "version": 2, "created_at": datetime.now(timezone.utc),
                 "counts": {name: len(rows) for name, rows in data.items()}, "missing_resume_ids": missing,
-                "excludes": ["login credentials", "sessions", "email credentials", "analytics", "hosting configuration"],
+                "excludes": ["login credentials", "employee attendance PINs", "sessions", "email credentials", "analytics", "hosting configuration"],
                 "restore": "Adds missing records only; never replaces existing records. Keep a separate database backup for disaster recovery."}
     output = io.BytesIO()
     total = 0
