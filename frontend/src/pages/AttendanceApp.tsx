@@ -9,6 +9,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ClipboardCheck,
+  Clock3,
   Download,
   ExternalLink,
   FileSpreadsheet,
@@ -16,6 +17,7 @@ import {
   Loader2,
   Lock,
   LogOut,
+  Mail,
   KeyRound,
   RefreshCw,
   Save,
@@ -136,6 +138,35 @@ type WeeklyReportData = {
   employees: WeeklyEmployee[];
   status_counts: Record<string, number>;
   totals: { employees: number; payable_days: string; overtime_hours: string };
+};
+type DailyReportRow = {
+  assignment_id: string;
+  employee_id?: string | null;
+  full_name: string;
+  role: string;
+  shift: ShiftName;
+  status: AttendanceStatus;
+  check_in_time?: string | null;
+  check_out_time?: string | null;
+  worked_hours?: string | null;
+  overtime_hours: string;
+  record_state: string;
+  payroll_ready: boolean;
+  attendance_source: string;
+};
+type DailyShiftSummary = { shift: ShiftName; employees: number; worked: number; completed: number; missing_check_out: number };
+type DailyReportData = {
+  company_id: string;
+  company_name: string;
+  report_date: string;
+  sheet_status: "Draft" | "Approved" | "Not saved";
+  notes: string;
+  rows: DailyReportRow[];
+  shifts: DailyShiftSummary[];
+  status_counts: Record<string, number>;
+  totals: { employees: number; worked: number; completed: number; missing_check_out: number; payroll_ready: number; worked_hours: string };
+  email_delivery: { status: "scheduled" | "sending" | "sent" | "failed"; sent_at?: string | null; detail?: string | null };
+  email_schedule: string;
 };
 type Account = { ok: boolean; name: string; role: string };
 type AttendanceLogin = { ok: boolean; token: string; expires_in: number };
@@ -288,9 +319,10 @@ function AttendanceSession({ onEmployee }: { onEmployee: () => void }) {
 }
 
 function AttendanceWorkspace({ account, onEmployee, onLogout }: { account: Account; onEmployee: () => void; onLogout: () => void }) {
-  const [view, setView] = useState<"daily" | "weekly" | "register" | "access">("daily");
+  const [view, setView] = useState<"daily" | "report" | "weekly" | "register" | "access">("daily");
   const [companyId, setCompanyId] = useState(() => localStorage.getItem("bws-attendance-company") ?? "");
   const [day, setDay] = useState(indiaToday());
+  const [reportDay, setReportDay] = useState(() => offsetDate(indiaToday(), -1));
   const [weekStart, setWeekStart] = useState(() => mondayFor(indiaToday()));
   const [month, setMonth] = useState(indiaToday().slice(0, 7));
   const companies = useQuery({ queryKey: ["attendance-companies"], queryFn: () => apiGet<Company[]>(`${OPS}/attendance-companies`) });
@@ -326,10 +358,10 @@ function AttendanceWorkspace({ account, onEmployee, onLogout }: { account: Accou
         <section className="mb-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex min-w-0 items-center gap-3"><span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-orange-50 text-[#EA580C]"><Building2 className="h-5 w-5" /></span><div className="min-w-0"><p className="text-xs text-slate-500">Selected company</p><h2 className="truncate text-lg font-semibold">{selected?.name ?? "Loading company…"}</h2></div></div>
-            <div className="inline-flex max-w-full overflow-x-auto rounded-xl bg-slate-100 p-1"><button type="button" onClick={() => setView("daily")} className={`flex min-h-9 shrink-0 items-center gap-2 rounded-lg px-3 text-sm font-medium transition ${view === "daily" ? "bg-white text-[#0F2444] shadow-sm" : "text-slate-500"}`}><ClipboardCheck className="h-4 w-4" />Daily</button><button type="button" onClick={() => setView("weekly")} className={`flex min-h-9 shrink-0 items-center gap-2 rounded-lg px-3 text-sm font-medium transition ${view === "weekly" ? "bg-white text-[#0F2444] shadow-sm" : "text-slate-500"}`}><CalendarRange className="h-4 w-4" />Weekly</button><button type="button" onClick={() => setView("register")} className={`flex min-h-9 shrink-0 items-center gap-2 rounded-lg px-3 text-sm font-medium transition ${view === "register" ? "bg-white text-[#0F2444] shadow-sm" : "text-slate-500"}`}><BarChart3 className="h-4 w-4" />Monthly</button><button type="button" onClick={() => setView("access")} className={`flex min-h-9 shrink-0 items-center gap-2 rounded-lg px-3 text-sm font-medium transition ${view === "access" ? "bg-white text-[#0F2444] shadow-sm" : "text-slate-500"}`}><KeyRound className="h-4 w-4" />Employee access</button></div>
+            <div className="inline-flex max-w-full overflow-x-auto rounded-xl bg-slate-100 p-1"><button type="button" onClick={() => setView("daily")} className={`flex min-h-9 shrink-0 items-center gap-2 rounded-lg px-3 text-sm font-medium transition ${view === "daily" ? "bg-white text-[#0F2444] shadow-sm" : "text-slate-500"}`}><ClipboardCheck className="h-4 w-4" />Attendance</button><button type="button" onClick={() => setView("report")} className={`flex min-h-9 shrink-0 items-center gap-2 rounded-lg px-3 text-sm font-medium transition ${view === "report" ? "bg-white text-[#0F2444] shadow-sm" : "text-slate-500"}`}><Clock3 className="h-4 w-4" />Daily report</button><button type="button" onClick={() => setView("weekly")} className={`flex min-h-9 shrink-0 items-center gap-2 rounded-lg px-3 text-sm font-medium transition ${view === "weekly" ? "bg-white text-[#0F2444] shadow-sm" : "text-slate-500"}`}><CalendarRange className="h-4 w-4" />Weekly</button><button type="button" onClick={() => setView("register")} className={`flex min-h-9 shrink-0 items-center gap-2 rounded-lg px-3 text-sm font-medium transition ${view === "register" ? "bg-white text-[#0F2444] shadow-sm" : "text-slate-500"}`}><BarChart3 className="h-4 w-4" />Monthly</button><button type="button" onClick={() => setView("access")} className={`flex min-h-9 shrink-0 items-center gap-2 rounded-lg px-3 text-sm font-medium transition ${view === "access" ? "bg-white text-[#0F2444] shadow-sm" : "text-slate-500"}`}><KeyRound className="h-4 w-4" />Employee access</button></div>
           </div>
         </section>
-        {view === "daily" ? <DailyAttendance companyId={companyId} day={day} onDay={setDay} /> : view === "weekly" ? <WeeklyReport companyId={companyId} weekStart={weekStart} onWeekStart={setWeekStart} /> : view === "register" ? <MonthlyRegister companyId={companyId} month={month} onMonth={setMonth} /> : <EmployeeAccess companyId={companyId} companyName={selected?.name ?? "Company"} />}
+        {view === "daily" ? <DailyAttendance companyId={companyId} day={day} onDay={setDay} /> : view === "report" ? <DailyReport companyId={companyId} reportDay={reportDay} onReportDay={setReportDay} /> : view === "weekly" ? <WeeklyReport companyId={companyId} weekStart={weekStart} onWeekStart={setWeekStart} /> : view === "register" ? <MonthlyRegister companyId={companyId} month={month} onMonth={setMonth} /> : <EmployeeAccess companyId={companyId} companyName={selected?.name ?? "Company"} />}
       </>}
     </main>
   </div>;
@@ -525,6 +557,83 @@ function EmployeeAttendanceCard({ row, locked, onEdit }: { row: AttendanceRow; l
       <div><Label htmlFor={`overtime-${row.assignment_id}`} className="mb-1.5 block text-xs text-slate-500">Overtime hours</Label><Input id={`overtime-${row.assignment_id}`} aria-label={`Overtime hours for ${row.full_name}`} type="number" inputMode="decimal" min="0" max="24" step="0.01" disabled={locked || !["Present", "Half-day"].includes(normalizeStatus(row.status))} value={row.overtime_hours} onChange={(event) => onEdit({ overtime_hours: event.target.value })} /></div>
     </div>
   </article>;
+}
+
+function DailyReport({ companyId, reportDay, onReportDay }: { companyId: string; reportDay: string; onReportDay: (day: string) => void }) {
+  const [downloading, setDownloading] = useState<"csv" | "xlsx" | "pdf" | null>(null);
+  const today = indiaToday();
+  const yesterday = offsetDate(today, -1);
+  const query = useQuery({
+    queryKey: ["attendance-daily-report", companyId, reportDay],
+    queryFn: () => apiGet<DailyReportData>(`${OPS}/attendance-daily-report?company_id=${encodeURIComponent(companyId)}&report_date=${reportDay}`),
+    refetchInterval: reportDay >= yesterday ? 60_000 : false,
+  });
+  const download = async (format: "csv" | "xlsx" | "pdf") => {
+    try {
+      setDownloading(format);
+      await downloadAttendance(
+        `${OPS}/attendance-daily-report/download/${format}?company_id=${encodeURIComponent(companyId)}&report_date=${reportDay}`,
+        `BWS-Daily-Attendance-${reportDay}.${format}`,
+      );
+    } catch (error) {
+      toast.error(message(error));
+    } finally {
+      setDownloading(null);
+    }
+  };
+  if (query.isPending) return <LoadingCard label="Preparing daily attendance report…" />;
+  if (query.isError) return <ErrorCard text={message(query.error)} retry={() => query.refetch()} />;
+  const report = query.data;
+  const delivery = report.email_delivery.status;
+  const deliveryTone = delivery === "sent" ? "bg-emerald-50 text-emerald-800" : delivery === "failed" ? "bg-red-50 text-red-800" : "bg-sky-50 text-sky-800";
+  const deliveryLabel = delivery === "sent" ? "Email sent" : delivery === "failed" ? "Email delivery needs attention" : delivery === "sending" ? "Email sending" : "Email scheduled";
+  return <section className="space-y-4">
+    <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <Label htmlFor="daily-report-day" className="mb-2 flex items-center gap-2"><Clock3 className="h-4 w-4 text-[#EA580C]" />Report date</Label>
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="outline" size="sm" aria-label="Previous report day" onClick={() => onReportDay(offsetDate(reportDay, -1))}><ChevronLeft className="h-4 w-4" />Previous</Button>
+            <DateInput id="daily-report-day" value={reportDay} max={today} onValueChange={(value) => value ? onReportDay(value) : false} />
+            <Button type="button" variant="outline" size="sm" aria-label="Next report day" disabled={reportDay >= today} onClick={() => onReportDay(offsetDate(reportDay, 1))}>Next<ChevronRight className="h-4 w-4" /></Button>
+            {reportDay !== yesterday && <Button type="button" variant="ghost" size="sm" onClick={() => onReportDay(yesterday)}>Yesterday</Button>}
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="outline" disabled={!!downloading} onClick={() => void download("csv")}><FileText className="h-4 w-4" />{downloading === "csv" ? "Preparing…" : "CSV"}</Button>
+          <Button type="button" variant="outline" disabled={!!downloading} onClick={() => void download("xlsx")}><FileSpreadsheet className="h-4 w-4" />{downloading === "xlsx" ? "Preparing…" : "Excel"}</Button>
+          <Button type="button" disabled={!!downloading} onClick={() => void download("pdf")} className="bg-[#0F2444] text-white hover:bg-[#183A67]"><Download className="h-4 w-4" />{downloading === "pdf" ? "Preparing…" : "PDF"}</Button>
+          <Button type="button" variant="outline" size="icon" aria-label="Refresh report" disabled={query.isFetching} onClick={() => void query.refetch()}><RefreshCw className={`h-4 w-4 ${query.isFetching ? "animate-spin" : ""}`} /></Button>
+        </div>
+      </div>
+      <div className={`mt-4 flex flex-wrap items-center gap-2 rounded-xl px-3 py-2 text-xs leading-5 ${deliveryTone}`}><Mail className="h-4 w-4 shrink-0" /><strong>{deliveryLabel}</strong><span>· Previous-day reports are emailed separately for each company at 8:00 AM IST.</span></div>
+    </section>
+
+    <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div className="border-b border-slate-200 p-4 sm:p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#EA580C]">Daily report</p><h2 className="mt-1 text-xl font-semibold">{report.company_name}</h2><p className="mt-1 text-sm text-slate-500">{reportDate(report.report_date, true)} · {report.sheet_status}</p></div><div className="rounded-xl bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600">Actual check-in and check-out times are shown in <strong>IST</strong>. Overnight night shifts remain attached to their check-in date.</div></div>
+        <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+          <WeeklyMetric label="Employees" value={String(report.totals.employees)} />
+          <WeeklyMetric label="Worked" value={String(report.totals.worked)} tone="emerald" />
+          <WeeklyMetric label="Completed" value={String(report.totals.completed)} />
+          <WeeklyMetric label="Missing checkout" value={String(report.totals.missing_check_out)} tone="red" />
+          <WeeklyMetric label="Payroll-ready" value={String(report.totals.payroll_ready)} tone="orange" />
+          <WeeklyMetric label="Worked hours" value={report.totals.worked_hours} />
+        </div>
+      </div>
+
+      <div className="grid gap-3 border-b bg-slate-50 p-4 sm:grid-cols-2 xl:grid-cols-4">{report.shifts.map((shift) => <div key={shift.shift} className="rounded-xl border border-slate-200 bg-white p-3"><div className="flex items-center justify-between gap-3"><p className="font-semibold">{shift.shift} shift</p><span className="rounded-full bg-orange-50 px-2 py-0.5 text-xs font-bold text-[#C2410C]">{shift.worked} worked</span></div><p className="mt-2 text-xs text-slate-500">{shift.employees} assigned · {shift.completed} completed{shift.missing_check_out ? ` · ${shift.missing_check_out} missing checkout` : ""}</p></div>)}</div>
+
+      {!report.rows.length ? <div className="p-10 text-center"><Clock3 className="mx-auto h-9 w-9 text-slate-300" /><h3 className="mt-3 font-semibold">No employees for this date</h3><p className="mt-1 text-sm text-slate-500">The automatic email will still identify that no attendance was recorded for this company.</p></div> : <div className="overflow-x-auto">
+        <table className="min-w-[1050px] w-full text-left text-xs">
+          <thead className="bg-slate-50"><tr><th className="border-b p-3">Employee</th><th className="border-b p-3">Role</th><th className="border-b p-3">Shift</th><th className="border-b p-3">Check in</th><th className="border-b p-3">Check out</th><th className="border-b p-3">Hours</th><th className="border-b p-3">Attendance</th><th className="border-b p-3">Record</th><th className="border-b p-3">Payroll</th></tr></thead>
+          <tbody>{report.rows.map((row) => { const info = statusInfo(row.status); return <tr key={row.assignment_id} className="border-b last:border-b-0"><td className="p-3"><span className="block font-semibold">{row.full_name}</span><span className="mt-1 block text-slate-500">{row.employee_id || "No employee ID"}</span></td><td className="p-3 text-slate-600">{row.role || "—"}</td><td className="p-3 font-medium">{row.shift}</td><td className="p-3 tabular-nums">{row.check_in_time || "—"}</td><td className="p-3 tabular-nums">{row.check_out_time || "—"}</td><td className="p-3 font-semibold tabular-nums">{row.worked_hours ?? "—"}</td><td className="p-3"><span className={`inline-flex rounded-md px-2 py-1 font-semibold ${info.tone}`}>{info.label}</span></td><td className={`p-3 font-medium ${row.record_state === "Missing check-out" ? "text-red-700" : "text-slate-600"}`}>{row.record_state}</td><td className="p-3"><span className={`rounded-full px-2 py-1 font-semibold ${row.payroll_ready ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-600"}`}>{row.payroll_ready ? "Ready" : "Pending"}</span></td></tr>; })}</tbody>
+        </table>
+      </div>}
+      {report.notes && <div className="border-t bg-amber-50 p-4 text-xs text-amber-900"><strong>Day notes:</strong> {report.notes}</div>}
+      <div className="border-t bg-slate-50 p-4 text-xs leading-5 text-slate-500">Worked hours are calculated only from completed employee check-in and check-out times. Manual attendance stays visible without inventing a time.</div>
+    </section>
+  </section>;
 }
 
 function WeeklyReport({ companyId, weekStart, onWeekStart }: { companyId: string; weekStart: string; onWeekStart: (day: string) => void }) {

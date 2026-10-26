@@ -90,6 +90,10 @@ INDEXES: dict[str, list[IndexModel]] = {
         IndexModel([("id", ASCENDING)], name="id", unique=True),
         IndexModel([("expires_at", ASCENDING)], name="expires_ttl", expireAfterSeconds=0),
     ],
+    "attendance_report_deliveries": [
+        IndexModel([("id", ASCENDING)], name="id", unique=True),
+        IndexModel([("report_date", DESCENDING), ("status", ASCENDING)], name="date_status"),
+    ],
     "visits": [IndexModel([("created_at", DESCENDING)], name="created_desc")],
     "cron_runs": [
         IndexModel([("run_id", ASCENDING)], name="run_id", unique=True),

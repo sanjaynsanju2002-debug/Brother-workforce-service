@@ -5,7 +5,7 @@ import csv
 import io
 import os
 import re
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from types import SimpleNamespace
 from uuid import uuid4
@@ -21,7 +21,7 @@ from pymongo.errors import DuplicateKeyError
 os.environ.setdefault("MONGO_URL", "mongodb://localhost:27017")
 os.environ.setdefault("DB_NAME", "bws_operations_test")
 
-from lib import auth
+from lib import attendance_report_email, auth, daily_attendance
 from lib.ledger import today
 from routers import admin, assignments, backups, clients, employee_attendance, expenses, finance, invoices, operations, payments, payroll, public, team
 from server import app
@@ -110,11 +110,11 @@ class Collection(BusinessCollection):
 @pytest.fixture
 def store(monkeypatch):
     db = BaseDatabase()
-    for name in set(backups.COLLECTIONS) | {"admin_sessions", "admin_users", "admin_login_attempts", "employee_attendance_sessions", "employee_login_attempts"}:
+    for name in set(backups.COLLECTIONS) | {"admin_sessions", "admin_users", "admin_login_attempts", "employee_attendance_sessions", "employee_login_attempts", "attendance_report_deliveries"}:
         initial = copy.deepcopy(getattr(db, name).records) if hasattr(db, name) else []
         setattr(db, name, Collection()); getattr(db, name).records = initial
     db.jobs.records = []; db.company_requests.records = []
-    for module in (auth, admin, assignments, backups, clients, employee_attendance, expenses, finance, invoices, operations, payments, payroll, public, team): monkeypatch.setattr(module, "db", db)
+    for module in (attendance_report_email, auth, daily_attendance, admin, assignments, backups, clients, employee_attendance, expenses, finance, invoices, operations, payments, payroll, public, team): monkeypatch.setattr(module, "db", db)
     return db
 
 
@@ -215,6 +215,95 @@ async def test_attendance_shifts_paid_statuses_and_monthly_register(store):
         assert "WEEKLY ATTENDANCE REPORT" in weekly_pdf and "QA Factory" in weekly_pdf
         assert (await c.get(f"{route}/attendance-weekly-report", params={"company_id": co["id"], "week_start": "2026-01-27"})).status_code == 422
         assert (await c.get(f"{route}/attendance-weekly-report/download/docx", params={"company_id": co["id"], "week_start": "2026-01-26"})).status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_daily_attendance_report_times_shifts_downloads_and_safe_email(store):
+    async with session() as c:
+        await login(c); co = await company(c)
+        night = await person(c, co["id"], "Night Worker", employee_id="N-1", shift="Night")
+        morning = await person(c, co["id"], "Morning Worker", employee_id="M-1", shift="Morning")
+        route = "/api/admin/operations"
+        saved = await c.put(f"{route}/attendance", json={
+            "company_id": co["id"], "attendance_date": "2026-01-26",
+            "rows": [
+                {"assignment_id": night["id"], "shift": "Night", "status": "Present"},
+                {"assignment_id": morning["id"], "shift": "Morning", "status": "Absent"},
+            ],
+        })
+        assert saved.status_code == 200, saved.text
+        sheet = store.attendance.records[0]
+        night_row = next(row for row in sheet["rows"] if row["assignment_id"] == night["id"])
+        night_row.update({
+            "check_in_at": "2026-01-26T16:30:00+00:00",
+            "check_out_at": "2026-01-27T01:00:00+00:00",
+            "employee_approved_at": "2026-01-27T01:00:00+00:00",
+            "attendance_source": "Employee self-service",
+        })
+
+        response = await c.get(f"{route}/attendance-daily-report", params={"company_id": co["id"], "report_date": "2026-01-26"})
+        assert response.status_code == 200, response.text
+        report = response.json()
+        assert report["totals"] == {"employees": 2, "worked": 1, "completed": 1, "missing_check_out": 0, "payroll_ready": 1, "worked_hours": "8.50"}
+        rows = {row["full_name"]: row for row in report["rows"]}
+        assert rows["Night Worker"]["check_in_time"] == "10:00 PM"
+        assert rows["Night Worker"]["check_out_time"] == "06:30 AM"
+        assert rows["Night Worker"]["record_state"] == "Completed"
+        assert next(item for item in report["shifts"] if item["shift"] == "Night")["worked"] == 1
+        assert report["email_delivery"]["status"] == "scheduled"
+
+        downloads = {}
+        for format in ("csv", "xlsx", "pdf"):
+            downloaded = await c.get(f"{route}/attendance-daily-report/download/{format}", params={"company_id": co["id"], "report_date": "2026-01-26"})
+            assert downloaded.status_code == 200, downloaded.text
+            assert f"BWS-Daily-Attendance-QA-Factory-2026-01-26.{format}" in downloaded.headers["content-disposition"]
+            downloads[format] = downloaded.content
+        csv_rows = list(csv.DictReader(io.StringIO(downloads["csv"].decode("utf-8-sig"))))
+        assert {row["Employee Name"] for row in csv_rows} == {"Morning Worker", "Night Worker"}
+        assert next(row for row in csv_rows if row["Employee Name"] == "Night Worker")["Worked Hours"] == "8.50"
+        assert load_workbook(io.BytesIO(downloads["xlsx"]), read_only=True)["Daily Report"]["A5"].value == "DAILY ATTENDANCE REPORT"
+        pdf_text = " ".join(page.extract_text() for page in PdfReader(io.BytesIO(downloads["pdf"])).pages)
+        assert "DAILY ATTENDANCE REPORT" in pdf_text and "Night Worker" in pdf_text
+        assert (await c.get(f"{route}/attendance-daily-report/download/docx", params={"company_id": co["id"], "report_date": "2026-01-26"})).status_code == 404
+
+        report["rows"][0]["full_name"] = "<b>Unsafe Employee</b>"
+        html = attendance_report_email.daily_report_email_html(report)
+        assert "&lt;b&gt;Unsafe Employee&lt;/b&gt;" in html and "<b>Unsafe Employee</b>" not in html
+
+
+@pytest.mark.asyncio
+async def test_daily_report_email_is_separate_per_company_and_idempotent(store, monkeypatch):
+    async with session() as c:
+        await login(c)
+        first = await company(c, "First Factory")
+        second = await company(c, "Second Factory")
+        await person(c, first["id"], "First Employee", employee_id="F-1")
+        await person(c, second["id"], "Second Employee", employee_id="S-1")
+
+    sent = []
+
+    async def settings():
+        return {"sender": "reports@example.com", "recipients": ["owner@example.com"]}
+
+    async def send(subject, html, sender, recipients):
+        sent.append({"subject": subject, "html": html, "sender": sender, "recipients": recipients})
+        return f"email-{len(sent)}"
+
+    monkeypatch.setattr(attendance_report_email, "email_configured", lambda: True)
+    monkeypatch.setattr(attendance_report_email, "get_email_settings", settings)
+    monkeypatch.setattr(attendance_report_email, "send_email", send)
+    now = datetime(2026, 1, 27, 3, 0, tzinfo=timezone.utc)
+    first_run = await attendance_report_email.send_previous_day_attendance_reports(now)
+    second_run = await attendance_report_email.send_previous_day_attendance_reports(now)
+    assert first_run == {"report_date": "2026-01-26", "sent": 2, "skipped": 0, "failed": 0}
+    assert second_run == {"report_date": "2026-01-26", "sent": 0, "skipped": 2, "failed": 0}
+    assert len(sent) == 2
+    assert {item["subject"] for item in sent} == {
+        "Attendance Report — First Factory — 26 Jan 2026",
+        "Attendance Report — Second Factory — 26 Jan 2026",
+    }
+    assert all(item["recipients"] == ["owner@example.com"] for item in sent)
+    assert {row["status"] for row in store.attendance_report_deliveries.records} == {"sent"}
 
 
 @pytest.mark.asyncio

@@ -207,6 +207,185 @@ def _safe_spreadsheet(value) -> str:
     return "'" + text if text.startswith(("=", "+", "-", "@")) else text
 
 
+def export_attendance_daily_csv(report: dict, supplier: InvoiceProfile) -> bytes:
+    """Return an Excel-friendly daily report with one row per employee."""
+    output = StringIO(newline="")
+    output.write("\ufeff")
+    writer = csv.writer(output)
+    writer.writerow([
+        "Organisation", "Company", "Attendance Date", "Employee ID", "Employee Name", "Role",
+        "Shift", "Check In (IST)", "Check Out (IST)", "Worked Hours", "Attendance",
+        "Record Status", "Payroll Ready", "Attendance Source", "Overtime Hours",
+    ])
+    for row in report["rows"]:
+        writer.writerow([
+            _safe_spreadsheet(supplier.name), _safe_spreadsheet(report["company_name"]), report["report_date"],
+            _safe_spreadsheet(row.get("employee_id")), _safe_spreadsheet(row["full_name"]),
+            _safe_spreadsheet(row.get("role")), row["shift"], row.get("check_in_time") or "",
+            row.get("check_out_time") or "", row.get("worked_hours") or "", row["status"],
+            row["record_state"], "Yes" if row["payroll_ready"] else "No",
+            row.get("attendance_source") or "", row.get("overtime_hours") or "0",
+        ])
+    return output.getvalue().encode("utf-8")
+
+
+def export_attendance_daily_xlsx(report: dict, supplier: InvoiceProfile) -> bytes:
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+    from openpyxl.utils import get_column_letter
+
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Daily Report"
+    navy, orange, border = "0F2444", "EA580C", "CBD5E1"
+    headers = [
+        "No.", "Employee ID", "Employee name", "Role", "Shift", "Check in (IST)", "Check out (IST)",
+        "Worked hours", "Attendance", "Record status", "Payroll ready", "OT hours",
+    ]
+    last_column = len(headers)
+
+    def write_text(cell, value):
+        cell.value = str(value or "")
+        cell.data_type = "s"
+
+    sheet.merge_cells(start_row=1, start_column=1, end_row=1, end_column=last_column)
+    write_text(sheet["A1"], supplier.name)
+    sheet["A1"].font = Font(bold=True, size=16, color=navy)
+    sheet.merge_cells(start_row=2, start_column=1, end_row=2, end_column=last_column)
+    write_text(sheet["A2"], supplier.address)
+    sheet.merge_cells(start_row=3, start_column=1, end_row=3, end_column=last_column)
+    write_text(sheet["A3"], " | ".join(filter(None, (supplier.phone, supplier.email, supplier.website))))
+    sheet.merge_cells(start_row=5, start_column=1, end_row=5, end_column=last_column)
+    sheet["A5"] = "DAILY ATTENDANCE REPORT"
+    sheet["A5"].font = Font(bold=True, size=14, color=orange)
+    sheet.merge_cells(start_row=6, start_column=1, end_row=6, end_column=7)
+    write_text(sheet["A6"], f"Company: {report['company_name']} | Date: {report['report_date']}")
+    sheet.merge_cells(start_row=6, start_column=8, end_row=6, end_column=last_column)
+    totals = report["totals"]
+    write_text(sheet.cell(6, 8), f"Worked: {totals['worked']} | Completed: {totals['completed']} | Missing checkout: {totals['missing_check_out']}")
+    for column, value in enumerate(headers, 1):
+        cell = sheet.cell(8, column, value)
+        cell.fill = PatternFill("solid", fgColor=navy)
+        cell.font = Font(bold=True, color="FFFFFF", size=9)
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    thin = Side(style="thin", color=border)
+    for index, row in enumerate(report["rows"], 1):
+        excel_row = 8 + index
+        values = [
+            index, row.get("employee_id"), row["full_name"], row.get("role"), row["shift"],
+            row.get("check_in_time"), row.get("check_out_time"), row.get("worked_hours"), row["status"],
+            row["record_state"], "Yes" if row["payroll_ready"] else "No", row.get("overtime_hours") or "0",
+        ]
+        for column, value in enumerate(values, 1):
+            cell = sheet.cell(excel_row, column)
+            if column == 1:
+                cell.value = value
+            else:
+                write_text(cell, value)
+            cell.border = Border(bottom=thin)
+            cell.alignment = Alignment(horizontal="left" if column in {3, 4, 9, 10} else "center", vertical="center")
+            if index % 2 == 0:
+                cell.fill = PatternFill("solid", fgColor="F8FAFC")
+    sheet.freeze_panes = "A9"
+    sheet.auto_filter.ref = f"A8:{get_column_letter(last_column)}{8 + len(report['rows'])}"
+    widths = [6, 15, 28, 20, 13, 15, 15, 14, 16, 19, 14, 11]
+    for column, width in enumerate(widths, 1):
+        sheet.column_dimensions[get_column_letter(column)].width = width
+    sheet.sheet_view.showGridLines = False
+    sheet.page_setup.orientation = "landscape"
+    sheet.page_setup.paperSize = sheet.PAPERSIZE_A4
+    sheet.page_setup.fitToWidth = 1
+    sheet.page_setup.fitToHeight = 0
+    sheet.sheet_properties.pageSetUpPr.fitToPage = True
+    sheet.print_title_rows = "1:8"
+    sheet.print_area = f"A1:{get_column_letter(last_column)}{8 + len(report['rows'])}"
+    sheet.oddFooter.center.text = f"{supplier.name} | Daily attendance {report['report_date']} | Page &P of &N"
+    output = BytesIO()
+    workbook.save(output)
+    return output.getvalue()
+
+
+def export_attendance_daily_pdf(report: dict, supplier: InvoiceProfile) -> bytes:
+    import reportlab
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+    from reportlab.platypus import Image, LongTable, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
+    fonts = Path(reportlab.__file__).parent / "fonts"
+    for name, filename in (("DailySans", "Vera.ttf"), ("DailyBold", "VeraBd.ttf")):
+        if name not in pdfmetrics.getRegisteredFontNames():
+            pdfmetrics.registerFont(TTFont(name, str(fonts / filename)))
+    output = BytesIO()
+    page = landscape(A4)
+    doc = SimpleDocTemplate(output, pagesize=page, leftMargin=20, rightMargin=20, topMargin=24, bottomMargin=26,
+                            title=f"Daily Attendance - {report['company_name']} - {report['report_date']}", author=supplier.name)
+    navy, orange, muted = (colors.HexColor(value) for value in ("#0F2444", "#EA580C", "#64748B"))
+    body = ParagraphStyle("DailyBody", fontName="DailySans", fontSize=6.2, leading=8, textColor=navy)
+    bold = ParagraphStyle("DailyBold", parent=body, fontName="DailyBold")
+    heading = ParagraphStyle("DailyHeading", parent=bold, fontSize=13, leading=16)
+    small = ParagraphStyle("DailySmall", parent=body, fontSize=5.5, leading=7, textColor=muted)
+    table_header = ParagraphStyle("DailyTableHeader", parent=bold, textColor=colors.white)
+
+    def p(value, style=body):
+        return Paragraph(escape(str(value if value not in (None, "") else "—")).replace("\n", "<br/>"), style)
+
+    with ZipFile(ASSETS / "invoice-template.xlsx") as archive:
+        logo = Image(BytesIO(archive.read("xl/media/image.png")), width=72, height=49)
+    brand = [p(supplier.name, heading), p(supplier.address), p(" | ".join(filter(None, (supplier.phone, supplier.email, supplier.website))), small)]
+    header = Table([[logo, brand]], colWidths=[84, doc.width - 84])
+    header.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 0)]))
+    totals = report["totals"]
+    story = [
+        header, Spacer(1, 3), p("DAILY ATTENDANCE REPORT", heading), Spacer(1, 4),
+        p(f"Company: {report['company_name']}   |   Date: {report['report_date']}   |   Sheet: {report['sheet_status']}"), Spacer(1, 7),
+    ]
+    summary_labels = ("Employees", "Worked", "Completed", "Missing checkout", "Payroll-ready", "Worked hours")
+    summary_values = (totals["employees"], totals["worked"], totals["completed"], totals["missing_check_out"], totals["payroll_ready"], totals["worked_hours"])
+    summary = Table([[p(value, small) for value in summary_labels], [p(value, bold) for value in summary_values]], colWidths=[doc.width / 6] * 6)
+    summary.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#F8FAFC")),
+        ("GRID", (0, 0), (-1, -1), .25, colors.HexColor("#CBD5E1")),
+        ("ALIGN", (0, 0), (-1, -1), "CENTER"), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+    ]))
+    story.extend([summary, Spacer(1, 7)])
+    headers = ["No.", "ID", "Employee", "Role", "Shift", "Check in", "Check out", "Hours", "Attendance", "Record", "Payroll", "OT"]
+    data = [[p(value, table_header) for value in headers]]
+    for index, row in enumerate(report["rows"], 1):
+        values = [
+            index, row.get("employee_id") or "-", row["full_name"], row.get("role") or "-", row["shift"],
+            row.get("check_in_time") or "-", row.get("check_out_time") or "-", row.get("worked_hours") or "-",
+            row["status"], row["record_state"], "Ready" if row["payroll_ready"] else "Pending", row.get("overtime_hours") or "0",
+        ]
+        data.append([p(value, bold if column == 2 else body) for column, value in enumerate(values)])
+    widths = [23, 52, 105, 66, 47, 55, 55, 38, 58, 78, 45, 28]
+    table = LongTable(data, colWidths=widths, repeatRows=1, hAlign="LEFT")
+    table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), navy), ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F8FAFC")]),
+        ("GRID", (0, 0), (-1, -1), .25, colors.HexColor("#CBD5E1")),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("ALIGN", (4, 0), (-1, -1), "CENTER"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 2), ("RIGHTPADDING", (0, 0), (-1, -1), 2),
+        ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+    ]))
+    story.append(table)
+    if report.get("notes"):
+        story.extend([Spacer(1, 7), p(f"Day notes: {report['notes']}", small)])
+    story.extend([Spacer(1, 6), p("Check-in and check-out times are shown in India Standard Time. Worked hours use the elapsed time between employee punches; manual attendance rows do not invent times.", small)])
+
+    def footer(canvas, document):
+        canvas.saveState(); canvas.setFont("DailySans", 6); canvas.setFillColor(muted)
+        canvas.drawString(20, 13, f"{supplier.name[:65]} | Daily attendance {report['report_date']}")
+        canvas.drawRightString(page[0] - 20, 13, f"Page {document.page}")
+        canvas.restoreState()
+
+    doc.build(story, onFirstPage=footer, onLaterPages=footer)
+    return output.getvalue()
+
+
 def export_attendance_weekly_csv(report: dict, supplier: InvoiceProfile) -> bytes:
     """Return an Excel-friendly UTF-8 CSV with one row per employee."""
     output = StringIO(newline="")
