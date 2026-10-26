@@ -1,6 +1,7 @@
 """Isolated integration coverage for attendance, financial ledgers and operations."""
 import asyncio
 import copy
+import csv
 import io
 import os
 import re
@@ -13,6 +14,7 @@ from zipfile import ZipFile, ZIP_DEFLATED
 import httpx
 import pytest
 from bson import json_util
+from openpyxl import load_workbook
 from pypdf import PdfReader
 from pymongo.errors import DuplicateKeyError
 
@@ -189,6 +191,30 @@ async def test_attendance_shifts_paid_statuses_and_monthly_register(store):
         excel = await c.get(f"{route}/attendance-register/download/xlsx", params={"company_id": co["id"], "month": "2026-01"})
         assert pdf.content.startswith(b"%PDF-") and excel.content.startswith(b"PK")
         assert "BWS-Attendance-QA-Factory-2026-01" in pdf.headers["content-disposition"]
+
+        weekly = await c.get(f"{route}/attendance-weekly-report", params={"company_id": co["id"], "week_start": "2026-01-26"})
+        assert weekly.status_code == 200, weekly.text
+        report = weekly.json()
+        assert report["week_end"] == "2026-02-01" and report["approved_days"] == 1 and report["draft_days"] == 0
+        assert report["totals"] == {"employees": 2, "payable_days": "2.00", "overtime_hours": "0.00"}
+        assert report["status_counts"] == {"Holiday": 1, "Paid leave": 1}
+        weekly_rows = {row["full_name"]: row for row in report["employees"]}
+        assert weekly_rows["Morning Worker"]["days"][0]["status"] == "Holiday"
+        assert weekly_rows["Night Worker"]["days"][0]["shift"] == "Night"
+
+        downloads = {}
+        for format in ("csv", "xlsx", "pdf"):
+            response = await c.get(f"{route}/attendance-weekly-report/download/{format}", params={"company_id": co["id"], "week_start": "2026-01-26"})
+            assert response.status_code == 200, response.text
+            assert f"BWS-Weekly-Attendance-QA-Factory-2026-01-26-to-2026-02-01.{format}" in response.headers["content-disposition"]
+            downloads[format] = response.content
+        csv_rows = list(csv.DictReader(io.StringIO(downloads["csv"].decode("utf-8-sig"))))
+        assert {row["Employee Name"] for row in csv_rows} == {"Morning Worker", "Night Worker"}
+        assert load_workbook(io.BytesIO(downloads["xlsx"]), read_only=True)["Weekly Report"]["A5"].value == "WEEKLY ATTENDANCE REPORT"
+        weekly_pdf = " ".join(page.extract_text() for page in PdfReader(io.BytesIO(downloads["pdf"])).pages)
+        assert "WEEKLY ATTENDANCE REPORT" in weekly_pdf and "QA Factory" in weekly_pdf
+        assert (await c.get(f"{route}/attendance-weekly-report", params={"company_id": co["id"], "week_start": "2026-01-27"})).status_code == 422
+        assert (await c.get(f"{route}/attendance-weekly-report/download/docx", params={"company_id": co["id"], "week_start": "2026-01-26"})).status_code == 404
 
 
 @pytest.mark.asyncio
