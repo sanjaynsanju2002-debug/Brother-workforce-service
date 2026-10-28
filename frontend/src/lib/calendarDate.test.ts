@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calendarInputError, formatCalendarValue, parseCalendarValue } from "./calendarDate";
+import { calendarInputError, formatCalendarValue, formatIndianDate, formatIndianDateTime, parseCalendarValue } from "./calendarDate";
 
 describe("shared calendar dates", () => {
   it("accepts older dates across months and years without swapping day and month", () => {
@@ -38,5 +38,11 @@ describe("shared calendar dates", () => {
     expect(calendarInputError("09/01/2020", "date", "2020-01-10")).toContain("on or after 10/01/2020");
     expect(calendarInputError("12/2020", "month", undefined, "2020-11")).toContain("on or before 11/2020");
     expect(calendarInputError("31/02/2020", "date")).toContain("valid date");
+  });
+  it("formats saved dates and timestamps in Indian order", () => {
+    expect(formatIndianDate("2026-10-28")).toBe("28/10/2026");
+    expect(formatIndianDateTime("2026-10-28T12:00:00Z")).toMatch(/^28\/10\/2026, 05:30 pm$/i);
+    expect(formatIndianDate("")).toBe("");
+    expect(formatIndianDate("not-a-date")).toBe("");
   });
 });

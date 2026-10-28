@@ -100,6 +100,10 @@ class InvoiceInput(InvoiceModel):
     supplier: InvoiceProfile = Field(default_factory=InvoiceProfile)
     lines: list[InvoiceLine] = Field(default_factory=default_lines, min_length=2, max_length=8)
     service_percentage: Percentage = Decimal("0")
+    # Statutory contribution percentages are editable because the applicable
+    # rate and wage basis can differ between client agreements.
+    esi_percentage: Percentage = Decimal("0")
+    pf_percentage: Percentage = Decimal("0")
     cgst_percentage: Percentage | None = None
     sgst_percentage: Percentage | None = None
     # Retain the recorded amount on invoices saved before percentage GST existed.
@@ -125,6 +129,11 @@ class InvoiceInput(InvoiceModel):
             self.billing_period = month_label(self.service_month)
         # A stable order keeps saved invoices and both exports aligned with the template.
         self.lines.sort(key=lambda line: list(self.line_labels).index(line.key))
+        if self.billing_mode == "services_only":
+            # Wages are only a service-charge reference in this mode, so wage
+            # reimbursements and statutory contributions are not receivable.
+            self.esi_percentage = Decimal("0")
+            self.pf_percentage = Decimal("0")
         if self.uses_gst_percentages:
             self.cgst_percentage = self.cgst_percentage if self.cgst_percentage is not None else Decimal("0")
             self.sgst_percentage = self.sgst_percentage if self.sgst_percentage is not None else Decimal("0")
@@ -144,6 +153,8 @@ class InvoiceTotals(InvoiceModel):
     line_amounts: dict[str, Decimal]
     base_amount: Decimal
     service_charge: Decimal
+    esi_amount: Decimal = Decimal("0")
+    pf_amount: Decimal = Decimal("0")
     subtotal: Decimal
     cgst_amount: Decimal = Decimal("0")
     sgst_amount: Decimal = Decimal("0")
@@ -172,13 +183,15 @@ def calculate_invoice(invoice: InvoiceInput) -> InvoiceTotals:
     amounts = {line.key: round_money(line.quantity * line.rate) for line in invoice.lines}
     base = sum(amounts.values(), Decimal("0.00"))
     service = round_money(base * invoice.service_percentage / Decimal("100"))
+    esi = round_money(base * invoice.esi_percentage / Decimal("100"))
+    pf = round_money(base * invoice.pf_percentage / Decimal("100"))
     # Services-only wages are a calculation reference, never an amount receivable.
-    subtotal = service if invoice.billing_mode == "services_only" else base + service
+    subtotal = service if invoice.billing_mode == "services_only" else base + esi + pf + service
     cgst = round_money(subtotal * (invoice.cgst_percentage or Decimal("0")) / Decimal("100"))
     sgst = round_money(subtotal * (invoice.sgst_percentage or Decimal("0")) / Decimal("100"))
     gst = cgst + sgst if invoice.uses_gst_percentages else invoice.gst_amount
     return InvoiceTotals(
-        line_amounts=amounts, base_amount=base, service_charge=service,
+        line_amounts=amounts, base_amount=base, service_charge=service, esi_amount=esi, pf_amount=pf,
         subtotal=subtotal, cgst_amount=cgst, sgst_amount=sgst, gst_amount=gst,
         total=subtotal + gst,
     )

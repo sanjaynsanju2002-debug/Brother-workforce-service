@@ -40,7 +40,6 @@ it("saves and edits historical dates, then displays the expense in its new month
   const click = (selector: string) => act(() => document.querySelector<HTMLButtonElement>(selector)!.click());
   try {
     act(() => root.render(<QueryClientProvider client={qc}><Expenses /></QueryClientProvider>));
-    click("button[aria-controls='expense-date']");
     enter("expense-date", "29/02/2024"); enter("expense-amount", "0.01"); enter("expense-description", "Historical office bill");
     expect((document.getElementById("expense-date") as HTMLInputElement).value).toBe("29/02/2024");
     expect((document.getElementById("expense-amount") as HTMLInputElement).value).toBe("0.01");
@@ -53,14 +52,14 @@ it("saves and edits historical dates, then displays the expense in its new month
       expect(document.querySelector("[data-testid='expenses-table']")?.textContent).toContain("Historical office bill");
     });
     expect(requests).toEqual([{ method: "POST", date: "2024-02-29" }]);
-    expect((document.getElementById("expenses-month") as HTMLInputElement).value).toBe("2024-02");
+    expect((document.getElementById("expenses-month") as HTMLInputElement).value).toBe("02/2024");
     expect(document.querySelector("[data-testid='expenses-total']")?.textContent).toContain("0.01");
     click("button[aria-label='Edit Historical office bill']");
     expect((document.getElementById("expense-date") as HTMLInputElement).value).toBe("29/02/2024");
     enter("expense-date", "31/12/2023"); click("[data-testid='expense-save']");
     await vi.waitFor(async () => {
       await act(async () => {});
-      expect((document.getElementById("expenses-month") as HTMLInputElement).value).toBe("2023-12");
+      expect((document.getElementById("expenses-month") as HTMLInputElement).value).toBe("12/2023");
       expect(document.querySelector("[data-testid='expenses-table']")?.textContent).toContain("31/12/2023");
     });
     expect(requests[1]).toEqual({ method: "PUT", date: "2023-12-31" });

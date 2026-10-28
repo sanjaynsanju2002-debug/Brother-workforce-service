@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ApiError, apiDelete, apiGet, apiPatch, apiPost, apiPut } from "@/lib/api";
 import { BRAND } from "@/lib/brand";
+import { formatIndianDate } from "@/lib/calendarDate";
 import { monthLabel, previousMonth } from "@/lib/finance";
 import { refreshCompanyQueries } from "@/lib/companyQueries";
 import { INVOICE_BILLING_OPTIONS, invoiceBillingLabel, invoiceRows, type InvoiceBillingMode } from "@/lib/invoice";
@@ -21,8 +22,8 @@ type CompanyInput = { name: string; address: string; gstin: string };
 type Company = CompanyInput & { id: string; created_at: string };
 type PaymentStatus = "Pending" | "Partially Paid" | "Paid";
 type Line = { key: string; quantity: string; rate: string };
-type Form = { billing_mode: InvoiceBillingMode; company_id: string | null; invoice_number: string; client_name: string; client_address: string; client_gstin: string; invoice_date: string; due_date: string; service_month: string; billing_period: string; supplier: Profile; lines: Line[]; service_percentage: string; cgst_percentage: string | null; sgst_percentage: string | null; gst_amount: string; notes: string };
-type Totals = { line_amounts: Record<string, string>; base_amount: string; service_charge: string; subtotal: string; cgst_amount: string; sgst_amount: string; gst_amount: string; total: string };
+type Form = { billing_mode: InvoiceBillingMode; company_id: string | null; invoice_number: string; client_name: string; client_address: string; client_gstin: string; invoice_date: string; due_date: string; service_month: string; billing_period: string; supplier: Profile; lines: Line[]; service_percentage: string; esi_percentage: string; pf_percentage: string; cgst_percentage: string | null; sgst_percentage: string | null; gst_amount: string; notes: string };
+type Totals = { line_amounts: Record<string, string>; base_amount: string; service_charge: string; esi_amount: string; pf_amount: string; subtotal: string; cgst_amount: string; sgst_amount: string; gst_amount: string; total: string };
 type Invoice = Omit<Form, "due_date" | "service_month"> & { due_date: string | null; service_month: string | null; id: string; invoice_number: string; revision: number; totals: Totals; payment_status: PaymentStatus; opening_paid_amount?: string | null; payments?: PaymentEntry[]; follow_up_date?: string | null; created_at: string; updated_at: string };
 type InvoicePage = { items: Invoice[]; total: number; page: number; page_size: number };
 
@@ -35,16 +36,16 @@ const normalizedName = (name: string) => name.trim().replace(/\s+/g, " ").toLoca
 function emptyForm(supplier: Profile, company?: Company, billingMode: InvoiceBillingMode = "managed_services"): Form {
   const invoiceDate = today();
   const serviceMonth = previousMonth(invoiceDate);
-  return { billing_mode: billingMode, company_id: company?.id || null, invoice_number: "", client_name: company?.name || "", client_address: company?.address || "", client_gstin: company?.gstin || "", invoice_date: invoiceDate, due_date: "", service_month: serviceMonth, billing_period: monthLabel(serviceMonth), supplier: { ...supplier }, lines: invoiceRows(billingMode).map(([key]) => ({ key, quantity: "0", rate: "0" })), service_percentage: "", cgst_percentage: "", sgst_percentage: "", gst_amount: "0", notes: "" };
+  return { billing_mode: billingMode, company_id: company?.id || null, invoice_number: "", client_name: company?.name || "", client_address: company?.address || "", client_gstin: company?.gstin || "", invoice_date: invoiceDate, due_date: "", service_month: serviceMonth, billing_period: monthLabel(serviceMonth), supplier: { ...supplier }, lines: invoiceRows(billingMode).map(([key]) => ({ key, quantity: "0", rate: "0" })), service_percentage: "", esi_percentage: "", pf_percentage: "", cgst_percentage: "", sgst_percentage: "", gst_amount: "0", notes: "" };
 }
 
 function formData(form: Form) {
-  return { ...form, due_date: form.due_date || null, service_month: form.service_month || null, service_percentage: form.service_percentage || "0", cgst_percentage: form.cgst_percentage === null ? null : form.cgst_percentage || "0", sgst_percentage: form.sgst_percentage === null ? null : form.sgst_percentage || "0", gst_amount: form.gst_amount || "0", lines: form.lines.map((line) => ({ ...line, quantity: line.quantity || "0", rate: line.rate || "0" })) };
+  return { ...form, due_date: form.due_date || null, service_month: form.service_month || null, service_percentage: form.service_percentage || "0", esi_percentage: form.esi_percentage || "0", pf_percentage: form.pf_percentage || "0", cgst_percentage: form.cgst_percentage === null ? null : form.cgst_percentage || "0", sgst_percentage: form.sgst_percentage === null ? null : form.sgst_percentage || "0", gst_amount: form.gst_amount || "0", lines: form.lines.map((line) => ({ ...line, quantity: line.quantity || "0", rate: line.rate || "0" })) };
 }
 
 function fromInvoice(invoice: Invoice): Form {
-  const { company_id, invoice_number, client_name, client_address, client_gstin, invoice_date, due_date, service_month, billing_period, supplier, lines, service_percentage, cgst_percentage, sgst_percentage, gst_amount, notes } = invoice;
-  return { billing_mode: invoice.billing_mode || "managed_services", company_id: company_id || null, invoice_number, client_name, client_address, client_gstin, invoice_date, due_date: due_date || "", service_month: service_month || "", billing_period, supplier: { ...supplier }, lines: lines.map((line) => ({ ...line })), service_percentage, cgst_percentage: cgst_percentage ?? null, sgst_percentage: sgst_percentage ?? null, gst_amount, notes };
+  const { company_id, invoice_number, client_name, client_address, client_gstin, invoice_date, due_date, service_month, billing_period, supplier, lines, service_percentage, esi_percentage = "0", pf_percentage = "0", cgst_percentage, sgst_percentage, gst_amount, notes } = invoice;
+  return { billing_mode: invoice.billing_mode || "managed_services", company_id: company_id || null, invoice_number, client_name, client_address, client_gstin, invoice_date, due_date: due_date || "", service_month: service_month || "", billing_period, supplier: { ...supplier }, lines: lines.map((line) => ({ ...line })), service_percentage, esi_percentage, pf_percentage, cgst_percentage: cgst_percentage ?? null, sgst_percentage: sgst_percentage ?? null, gst_amount, notes };
 }
 
 function errorMessage(error: unknown) {
@@ -305,6 +306,13 @@ export default function Invoices() {
             <div className="mt-5 grid gap-5 sm:grid-cols-2">
               <div className="space-y-4">
                 <div><Label htmlFor="invoice-service" className="mb-2 block">Service charge (%)</Label><Input className="text-center tabular-nums" id="invoice-service" type="number" inputMode="decimal" min="0" max="100" step="0.01" value={form.service_percentage} onChange={(e) => edit({ service_percentage: e.target.value })} data-testid="invoice-service" /><p className="mt-1 text-xs text-slate-500">{servicesOnly ? "Enter 10 for 10%. Applied to the wage subtotal for Men and Women." : "Enter 10 for 10%. Applied to worker, overtime and other charges before GST."}</p></div>
+                {!servicesOnly && <div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div><Label htmlFor="invoice-esi" className="mb-2 block">ESI (%)</Label><Input className="text-center tabular-nums" id="invoice-esi" type="number" inputMode="decimal" min="0" max="100" step="0.01" value={form.esi_percentage} onChange={(e) => edit({ esi_percentage: e.target.value })} data-testid="invoice-esi" aria-describedby="invoice-statutory-help" /></div>
+                    <div><Label htmlFor="invoice-pf" className="mb-2 block">PF (%)</Label><Input className="text-center tabular-nums" id="invoice-pf" type="number" inputMode="decimal" min="0" max="100" step="0.01" value={form.pf_percentage} onChange={(e) => edit({ pf_percentage: e.target.value })} data-testid="invoice-pf" aria-describedby="invoice-statutory-help" /></div>
+                  </div>
+                  <p id="invoice-statutory-help" className="mt-2 text-xs text-slate-500">Enter the ESI and PF rates agreed for this invoice. Each percentage is applied to charges before the service fee, then included in the GST subtotal.</p>
+                </div>}
                 <div>
                   <div className="grid grid-cols-2 gap-3">
                     <div><Label htmlFor="invoice-cgst" className="mb-2 block">CGST (%)</Label><Input className="text-center tabular-nums" id="invoice-cgst" type="number" inputMode="decimal" min="0" max="100" step="0.01" value={form.cgst_percentage ?? ""} onChange={(e) => editTax("cgst_percentage", e.target.value)} data-testid="invoice-cgst" aria-describedby="invoice-tax-help" /></div>
@@ -317,7 +325,9 @@ export default function Invoices() {
               <div className="space-y-3 rounded-lg bg-slate-50 p-4 text-sm" aria-live="polite" data-testid="invoice-totals">
                 {!totals && <p className="text-slate-500">{preview.isError && previewCurrent ? errorMessage(preview.error) : "Calculating totals..."}</p>}
                 {([
-                  [servicesOnly ? "Wage subtotal (reference only)" : "Charges before service fee", "base_amount"], ["Service charge", "service_charge"], ...(!servicesOnly ? [["Subtotal before GST", "subtotal"] as const] : []),
+                  [servicesOnly ? "Wage subtotal (reference only)" : "Charges before ESI, PF and service fee", "base_amount"],
+                  ...(!servicesOnly ? [[`ESI (${form.esi_percentage || "0"}%)`, "esi_amount"] as const, [`PF (${form.pf_percentage || "0"}%)`, "pf_amount"] as const] : []),
+                  ["Service charge", "service_charge"], ...(!servicesOnly ? [["Subtotal before GST", "subtotal"] as const] : []),
                   ...(legacyGst ? [["GST (recorded amount)", "gst_amount"] as const] : [[`CGST (${form.cgst_percentage || "0"}%)`, "cgst_amount"] as const, [`SGST (${form.sgst_percentage || "0"}%)`, "sgst_amount"] as const]),
                   ["Total", "total"],
                 ] as const).map(([label, key]) => <div key={key} className={`grid grid-cols-[minmax(0,1fr)_minmax(7rem,auto)] items-center gap-3 ${key === "total" ? "border-t border-slate-200 pt-3 text-lg font-bold text-[#0F2444]" : ""}`}><span>{label}</span><span className="text-center tabular-nums" data-testid={`invoice-${key}`}>{totals ? money(totals[key]) : "—"}</span></div>)}
@@ -352,7 +362,7 @@ export default function Invoices() {
         {history.isError && <p role="alert" className="text-sm text-red-700">Could not load saved invoices. <button type="button" className="underline" onClick={() => history.refetch()}>Try again</button></p>}
         {history.data?.items.length === 0 && <p className="text-sm text-slate-500">No invoices found.</p>}
         <div className="space-y-3" data-testid="invoice-history">{history.data?.items.map((invoice) => <div key={invoice.id} className="grid items-center gap-4 rounded-lg border border-slate-200 p-4 text-center sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(7rem,auto)_8rem_10rem]" data-testid={`invoice-row-${invoice.id}`}>
-          <div className="min-w-0"><p className="break-words text-center font-medium text-[#0F2444]" data-testid={`invoice-number-${invoice.id}`}>{invoice.invoice_number}</p><p className="mt-1 break-words text-xs text-slate-500">{invoice.client_name}</p><p className="mt-1 text-xs font-medium text-[#C2410C]">{invoiceBillingLabel(invoice.billing_mode)}</p><p className="mt-1 text-xs text-slate-500">{invoice.invoice_date}{invoice.service_month ? ` · Services: ${monthLabel(invoice.service_month)}` : invoice.billing_period && ` · ${invoice.billing_period}`}</p>{!invoice.service_month && <p className="mt-1 text-xs font-medium text-amber-700">Open this invoice to set its service month.</p>}</div>
+          <div className="min-w-0"><p className="break-words text-center font-medium text-[#0F2444]" data-testid={`invoice-number-${invoice.id}`}>{invoice.invoice_number}</p><p className="mt-1 break-words text-xs text-slate-500">{invoice.client_name}</p><p className="mt-1 text-xs font-medium text-[#C2410C]">{invoiceBillingLabel(invoice.billing_mode)}</p><p className="mt-1 text-xs text-slate-500">{formatIndianDate(invoice.invoice_date)}{invoice.service_month ? ` · Services: ${monthLabel(invoice.service_month)}` : invoice.billing_period && ` · ${invoice.billing_period}`}</p>{!invoice.service_month && <p className="mt-1 text-xs font-medium text-amber-700">Open this invoice to set its service month.</p>}</div>
           <div><p className="mb-1 text-xs text-slate-500">Total</p><p className="text-center text-sm font-semibold tabular-nums">{money(invoice.totals.total)}</p></div>
           <div><Label htmlFor={`invoice-status-${invoice.id}`} className="mb-1 block text-xs text-slate-500">Payment status</Label><select id={`invoice-status-${invoice.id}`} className={`${selectStyle} text-center font-medium ${invoice.payment_status === "Paid" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-amber-200 bg-amber-50 text-amber-800"}`} value={invoice.payment_status} disabled={busy || !!invoice.payments?.length} data-testid={`invoice-status-${invoice.id}`} onChange={(event) => changeStatus.mutate({ invoice, status: event.target.value as PaymentStatus })}><option value="Pending">Pending</option>{invoice.payment_status === "Partially Paid" && <option value="Partially Paid">Partially Paid</option>}<option value="Paid">Paid</option></select><p className="mt-1 text-xs text-slate-500">Balance {money(invoiceBalance(invoice))}</p></div>
           <div className="flex flex-wrap justify-center gap-2">

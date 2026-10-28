@@ -103,9 +103,7 @@ it("links recruitment to an existing candidate and saves interview and follow-up
   try {
     await waitFor(() => expect(document.querySelector('[aria-label="Recruitment candidate"]')?.textContent).toContain("QA Candidate"));
     enter("Recruitment candidate", "worker"); enter("Recruitment company", "company"); enter("Recruitment stage", "Interview");
-    // The date control supports typing via the shared manual-entry toggle.
-    const date = document.querySelector<HTMLInputElement>('[aria-label="Interview date"]')!;
-    act(() => document.querySelector<HTMLButtonElement>(`button[aria-controls="${date.id}"]`)!.click());
+    // Dates are shown and entered in Indian DD/MM/YYYY format by default.
     enter("Interview date", "12/11/2026"); clickText("Save progress");
     await waitFor(() => expect(write).toMatchObject({ worker_id: "worker", company_id: "company", stage: "Interview", interview_date: "2026-11-12", follow_up_date: null }));
     expect(write).not.toHaveProperty("worker_name");

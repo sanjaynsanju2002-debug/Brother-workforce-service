@@ -39,21 +39,23 @@ afterEach(() => { act(() => root.unmount()); document.body.innerHTML = ""; });
 describe("calendar and manual entry", () => {
   it("allows a date in an older year through either mode and preserves it when switching", () => {
     act(() => root.render(<Example required />));
-    enter("2020-01-09");
+    expect(field().type).toBe("text");
+    expect(field().value).toBe("23/10/2026");
+    enter("09/01/2020");
     expect(output()).toBe("2020-01-09");
     toggle();
-    expect(field().value).toBe("09/01/2020");
-    enter("29/02/2024");
-    expect(output()).toBe("2024-02-29");
-    toggle();
     expect(field().type).toBe("date");
-    expect(field().value).toBe("2024-02-29");
+    expect(field().value).toBe("2020-01-09");
+    enter("2024-02-29");
+    expect(output()).toBe("2024-02-29");
+    expect(field().type).toBe("text");
+    expect(field().value).toBe("29/02/2024");
     expect(valid()).toBe(true);
   });
 
   it("lets payroll and report filters select an older month manually", () => {
     act(() => root.render(<Example type="month" value="2026-10" />));
-    toggle(); enter("01/2020");
+    enter("01/2020");
     expect(output()).toBe("2020-01");
     toggle();
     expect(field().value).toBe("2020-01");
@@ -62,7 +64,7 @@ describe("calendar and manual entry", () => {
 
   it("blocks invalid manual dates instead of submitting the previous saved value", () => {
     act(() => root.render(<Example required />));
-    toggle(); enter("29/02/2025");
+    enter("29/02/2025");
     expect(changed).not.toHaveBeenCalled();
     expect(output()).toBe("2026-10-23");
     expect(valid()).toBe(false);
@@ -74,7 +76,7 @@ describe("calendar and manual entry", () => {
 
   it("supports clearing an optional date and keeps required dates required", () => {
     act(() => root.render(<Example />));
-    toggle(); enter("");
+    enter("");
     expect(output()).toBe(""); expect(valid()).toBe(true);
     act(() => root.render(<Example required />));
     expect(valid()).toBe(false);
@@ -82,7 +84,7 @@ describe("calendar and manual entry", () => {
 
   it("resets a partial manual entry when another record is opened", () => {
     act(() => root.render(<Example />));
-    toggle(); enter("15/0");
+    enter("15/0");
     expect(valid()).toBe(false);
     act(() => document.querySelector<HTMLButtonElement>("#reset")!.click());
     expect(field().value).toBe("29/02/2024");
@@ -91,7 +93,7 @@ describe("calendar and manual entry", () => {
 
   it("restores the displayed month when an unsaved-changes prompt rejects a change", () => {
     act(() => root.render(<Example type="month" value="2026-10" reject />));
-    toggle(); enter("01/2020");
+    enter("01/2020");
     expect(output()).toBe("2026-10");
     expect(field().value).toBe("10/2026");
     expect(valid()).toBe(true);
@@ -99,7 +101,7 @@ describe("calendar and manual entry", () => {
 
   it("enforces the same payment date bounds in both modes", () => {
     act(() => root.render(<Example min="2026-10-01" />));
-    toggle(); enter("30/09/2026");
+    enter("30/09/2026");
     expect(valid()).toBe(false);
     expect(changed).not.toHaveBeenCalled();
     enter("01/10/2026");

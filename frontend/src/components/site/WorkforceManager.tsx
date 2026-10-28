@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { DateInput } from "@/components/ui/date-input";
 import { Label } from "@/components/ui/label";
 import { ApiError, apiDelete, apiGet, apiPatch, apiPost } from "@/lib/api";
+import { formatIndianDate } from "@/lib/calendarDate";
 import type { Client, Worker } from "@/types";
 import { rupees } from "@/lib/finance";
 import { refreshCompanyQueries } from "@/lib/companyQueries";
@@ -217,7 +218,7 @@ export default function WorkforceManager({ pin }: { pin: string }) {
               <p className="mt-1 text-sm text-slate-600">{a.company_name}{a.role ? ` · ${a.role}` : ""} · {a.shift || "General"} shift</p>
               <p className="mt-1 text-sm text-slate-600" data-testid={`assignment-employee-id-${a.id}`}>Employee ID: <span className="font-medium">{a.employee_id || "Not set"}</span></p>
               <p className="mt-1 text-sm text-slate-600" data-testid={`assignment-salary-${a.id}`}>Salary: <span className="font-medium">{a.salary === null ? "Not set" : `${rupees(a.salary)} ${a.salary_basis === "Daily" ? "per day" : "per month"}`}</span></p>
-              <p className="mt-1 text-xs text-slate-500">{a.mobile || "No mobile"}{a.start_date ? ` · Started ${a.start_date}` : ""}{a.end_date ? ` · Leaving ${a.end_date}` : ""}{a.notes ? ` · ${a.notes}` : ""}</p>
+              <p className="mt-1 text-xs text-slate-500">{a.mobile || "No mobile"}{a.start_date ? ` · Started ${formatIndianDate(a.start_date)}` : ""}{a.end_date ? ` · Leaving ${formatIndianDate(a.end_date)}` : ""}{a.notes ? ` · ${a.notes}` : ""}</p>
               {editingId === a.id && <form className="mt-3 flex max-w-2xl flex-wrap items-end gap-2" onSubmit={(event) => { event.preventDefault(); saveEmployeeId.mutate({ id: a.id, employee_id: employeeId, salary, salary_basis: salaryBasis, shift, end_date: endDate }); }}>
                 <Label htmlFor={`employee-id-${a.id}`} className="sr-only">Employee ID for {a.full_name}</Label>
                 <Input id={`employee-id-${a.id}`} className="min-w-0 flex-1 basis-40" maxLength={80} value={employeeId} disabled={saveEmployeeId.isPending} onChange={(event) => setEmployeeId(event.target.value)} autoFocus data-testid={`assignment-edit-id-input-${a.id}`} />

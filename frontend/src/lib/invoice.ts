@@ -1,7 +1,7 @@
 export type InvoiceBillingMode = "managed_services" | "services_only";
 
 export const INVOICE_BILLING_OPTIONS = [
-  { value: "managed_services", label: "Managed services", description: "Manage wages and payroll. Invoice wages, service charges and GST." },
+  { value: "managed_services", label: "Managed services", description: "Manage wages and payroll. Invoice wages, ESI, PF, service charges and GST." },
   { value: "services_only", label: "Services only", description: "Use men's and women's wages to calculate service charges. Invoice service charges and GST only." },
 ] as const;
 

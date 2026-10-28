@@ -63,14 +63,16 @@ def test_percentage_includes_overtime_and_other_charges_before_gst():
     assert invoice.totals.subtotal == Decimal("298100.00")
     assert invoice.totals.total == Decimal("298100.00")
     data = invoice.model_dump(include=set(InvoiceInput.model_fields))
-    data.update(service_percentage="8", cgst_percentage="9", sgst_percentage="9")
+    data.update(service_percentage="8", esi_percentage="3.25", pf_percentage="12", cgst_percentage="9", sgst_percentage="9")
     totals = calculate_invoice(InvoiceInput(**data))
     assert totals.service_charge == Decimal("21680.00")
-    assert totals.subtotal == Decimal("292680.00")
-    assert totals.cgst_amount == Decimal("26341.20")
-    assert totals.sgst_amount == Decimal("26341.20")
-    assert totals.gst_amount == Decimal("52682.40")
-    assert totals.total == Decimal("345362.40")
+    assert totals.esi_amount == Decimal("8807.50")
+    assert totals.pf_amount == Decimal("32520.00")
+    assert totals.subtotal == Decimal("334007.50")
+    assert totals.cgst_amount == Decimal("30060.68")
+    assert totals.sgst_amount == Decimal("30060.68")
+    assert totals.gst_amount == Decimal("60121.36")
+    assert totals.total == Decimal("394128.86")
 
 
 def test_gst_uses_wages_plus_service_charges_and_recalculates_each_rate():
@@ -99,11 +101,13 @@ def test_historical_invoices_keep_recorded_gst_until_percentages_are_entered():
     data.pop("sgst_percentage")
     data["gst_amount"] = "123.45"
     old = saved_invoice(data).model_dump(mode="json")
-    for key in ("cgst_percentage", "sgst_percentage"):
+    for key in ("esi_percentage", "pf_percentage", "cgst_percentage", "sgst_percentage"):
         old.pop(key)
-    for key in ("cgst_amount", "sgst_amount"):
+    for key in ("esi_amount", "pf_amount", "cgst_amount", "sgst_amount"):
         old["totals"].pop(key)
     invoice = Invoice(**old)
+    assert invoice.esi_percentage == invoice.pf_percentage == 0
+    assert invoice.totals.esi_amount == invoice.totals.pf_amount == 0
     assert not invoice.uses_gst_percentages
     assert calculate_invoice(invoice).total == invoice.totals.total == Decimal("298223.45")
     assert "GST (recorded amount)" in " ".join(page.extract_text() for page in PdfReader(BytesIO(export_pdf(invoice))).pages)
@@ -111,7 +115,7 @@ def test_historical_invoices_keep_recorded_gst_until_percentages_are_entered():
         sheet = ET.fromstring(archive.read("xl/worksheets/sheet1.xml"))
         ns = {"s": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
         assert sheet.find(".//s:c[@r='F30']/s:v", ns).text == "123.45"
-        assert sheet.find(".//s:c[@r='F32']/s:f", ns).text == "SUM(F29:F30)"
+        assert sheet.find(".//s:c[@r='F32']/s:f", ns).text == "SUM(F19:F30)"
     updated = InvoiceInput(**{**invoice.model_dump(include=set(InvoiceInput.model_fields)), "cgst_percentage": "9", "sgst_percentage": "9"})
     assert calculate_invoice(updated).total == Decimal("351758.00")
 
@@ -123,7 +127,7 @@ def test_rounding_zero_percentage_and_invalid_inputs():
     data["lines"][6].update(quantity="0.5", rate="0.01")
     data["service_percentage"] = "0"
     assert calculate_invoice(InvoiceInput(**data)).total == Decimal("0.01")
-    for update in ({"service_percentage": "-1"}, {"service_percentage": "101"}, {"gst_amount": "NaN"}, {"gst_amount": "-1"}, {"cgst_percentage": "-1"}, {"sgst_percentage": "101"}, {"cgst_percentage": "NaN"}, {"sgst_percentage": "9.001"}, {"due_date": "2026-10-01"}, {"client_name": "Invalid\x00name"}):
+    for update in ({"service_percentage": "-1"}, {"service_percentage": "101"}, {"esi_percentage": "-1"}, {"pf_percentage": "101"}, {"esi_percentage": "NaN"}, {"pf_percentage": "12.001"}, {"gst_amount": "NaN"}, {"gst_amount": "-1"}, {"cgst_percentage": "-1"}, {"sgst_percentage": "101"}, {"cgst_percentage": "NaN"}, {"sgst_percentage": "9.001"}, {"due_date": "2026-10-01"}, {"client_name": "Invalid\x00name"}):
         with pytest.raises(ValidationError):
             InvoiceInput(**{**data, **update})
     data["lines"][0]["quantity"] = "1.5"
@@ -148,19 +152,24 @@ def test_each_tax_rounds_to_paise_independently():
 
 
 def test_excel_caches_and_formulas_match_pdf_and_saved_totals():
-    invoice = saved_invoice({**payload(), "cgst_percentage": "9", "sgst_percentage": "9", "supplier": {"payment_details": "Account name: Brothers Workforce Solutions\nBank / account / IFSC: To be provided"}})
+    invoice = saved_invoice({**payload(), "esi_percentage": "3.25", "pf_percentage": "12", "cgst_percentage": "9", "sgst_percentage": "9", "supplier": {"payment_details": "Account name: Brothers Workforce Solutions\nBank / account / IFSC: To be provided"}})
     with ZipFile(BytesIO(export_xlsx(invoice))) as archive:
         ns = {"s": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
         sheet = ET.fromstring(archive.read("xl/worksheets/sheet1.xml"))
         cells = {cell.get("r"): cell for cell in sheet.findall(".//s:c", ns)}
-        for cell, value in {"F19": "180000.00", "F20": "90000.00", "F25": "150.00", "F27": "850.00", "F26": "27100.00", "F29": "298100.00", "E30": "9", "E31": "9", "F30": "26829.00", "F31": "26829.00", "F32": "351758.00"}.items():
+        for cell, value in {"F19": "180000.00", "F20": "90000.00", "F25": "150.00", "F27": "850.00", "F26": "27100.00", "E28": "3.25", "F28": "8807.50", "E29": "12", "F29": "32520.00", "E30": "9", "E31": "9", "F30": "30548.48", "F31": "30548.48", "F32": "400524.46"}.items():
             assert Decimal(cells[cell].find("s:v", ns).text) == Decimal(value)
         assert cells["E26"].find("s:v", ns).text == "10"
         assert cells["F26"].find("s:f", ns).text == "ROUND(SUM(F19:F25,F27)*E26/100,2)"
-        assert cells["F30"].find("s:f", ns).text == "ROUND($F$29*E30/100,2)"
-        assert cells["F31"].find("s:f", ns).text == "ROUND($F$29*E31/100,2)"
-        assert cells["F32"].find("s:f", ns).text == "SUM(F29:F31)"
+        assert cells["F28"].find("s:f", ns).text == "ROUND(SUM(F19:F25,F27)*E28/100,2)"
+        assert cells["F29"].find("s:f", ns).text == "ROUND(SUM(F19:F25,F27)*E29/100,2)"
+        assert cells["F30"].find("s:f", ns).text == "ROUND(SUM($F$19:$F$29)*E30/100,2)"
+        assert cells["F31"].find("s:f", ns).text == "ROUND(SUM($F$19:$F$29)*E31/100,2)"
+        assert cells["F32"].find("s:f", ns).text == "SUM(F19:F31)"
+        assert "D29:E29" not in [item.get("ref") for item in sheet.findall("s:mergeCells/s:mergeCell", ns)]
         assert "D30:E30" not in [item.get("ref") for item in sheet.findall("s:mergeCells/s:mergeCell", ns)]
+        assert cells["D28"].find("s:is/s:t", ns).text == "ESI (%)"
+        assert cells["D29"].find("s:is/s:t", ns).text == "PF (%)"
         assert cells["D30"].find("s:is/s:t", ns).text == "CGST (%)"
         assert cells["D31"].find("s:is/s:t", ns).text == "SGST (%)"
         assert "xl/media/image.png" in archive.namelist()
@@ -170,8 +179,10 @@ def test_excel_caches_and_formulas_match_pdf_and_saved_totals():
     pdf = PdfReader(BytesIO(export_pdf(invoice)))
     assert len(pdf.pages) == 1
     text = " ".join(page.extract_text() for page in pdf.pages)
-    assert "298,100.00" in text
-    assert "351,758.00" in text
+    assert "339,427.50" in text
+    assert "400,524.46" in text
+    assert "ESI (3.25%)" in text
+    assert "PF (12%)" in text
     assert "CGST (9%)" in text
     assert "SGST (9%)" in text
     assert invoice.invoice_number in text

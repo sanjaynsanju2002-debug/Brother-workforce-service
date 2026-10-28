@@ -14,7 +14,9 @@ export function DateInput({ type = "date", value, onValueChange, id, disabled, r
   const generatedId = useId();
   const inputId = id || generatedId;
   const input = useRef<HTMLInputElement>(null);
-  const [manual, setManual] = useState(false);
+  // Always present the saved value in Indian order. Native date inputs use the
+  // device locale and can otherwise show MM/DD/YYYY even on this India site.
+  const [manual, setManual] = useState(true);
   const [text, setText] = useState(() => formatCalendarValue(value, type));
   const [error, setError] = useState("");
   const lower = String(min ?? (type === "month" ? "1000-01" : "1000-01-01"));
@@ -35,14 +37,21 @@ export function DateInput({ type = "date", value, onValueChange, id, disabled, r
   };
 
   return <div className="min-w-0 space-y-1">
-    <Input {...props} ref={input} id={inputId} key={manual ? "manual" : "calendar"}
+    <Input {...props} ref={input} id={inputId} key={manual ? "manual" : "calendar"} lang="en-IN"
       type={manual ? "text" : type} value={manual ? text : value} disabled={disabled} readOnly={readOnly}
       {...(manual ? { placeholder: format, maxLength: type === "month" ? 7 : 10 } : { min: lower, max: upper })}
       aria-invalid={!!error || props["aria-invalid"]}
       aria-describedby={[describedBy, manual && `${inputId}-format`, error && `${inputId}-error`].filter(Boolean).join(" ") || undefined}
       onChange={(event) => {
         if (manual) change(event.target.value);
-        else { setError(""); onValueChange(event.target.value); }
+        else {
+          setError("");
+          const next = event.target.value;
+          if (onValueChange(next) !== false) {
+            setText(formatCalendarValue(next, type));
+            setManual(true);
+          }
+        }
       }}
       onBlur={(event) => {
         if (manual) {
@@ -58,7 +67,7 @@ export function DateInput({ type = "date", value, onValueChange, id, disabled, r
         onClick={() => {
           if (manual && problem) { setError(problem); input.current?.reportValidity(); return; }
           setText(formatCalendarValue(value, type)); setError(""); setManual(!manual);
-        }}>{manual ? "Use calendar" : type === "month" ? "Type month manually" : "Type date manually"}</Button>
+        }}>{manual ? "Use calendar" : type === "month" ? "Use MM/YYYY" : "Use DD/MM/YYYY"}</Button>
       {manual && <span id={`${inputId}-format`} className="text-xs text-slate-500">{format}</span>}
     </div>
     {error && <p id={`${inputId}-error`} role="alert" className="text-sm text-red-600">{error}</p>}

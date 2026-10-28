@@ -29,11 +29,13 @@ def services_payload():
     lines[0].update(quantity="5", rate="12000")
     lines[1].update(quantity="4", rate="10000")
     return {**data, "billing_mode": "services_only", "lines": lines,
-            "service_percentage": "10", "cgst_percentage": "9", "sgst_percentage": "9"}
+            "service_percentage": "10", "esi_percentage": "3.25", "pf_percentage": "12", "cgst_percentage": "9", "sgst_percentage": "9"}
 
 
 def test_only_service_charges_are_receivable_and_taxable():
     invoice = saved_invoice(services_payload())
+    assert invoice.esi_percentage == invoice.pf_percentage == 0
+    assert invoice.totals.esi_amount == invoice.totals.pf_amount == 0
     assert invoice.totals.base_amount == Decimal("100000.00")
     assert invoice.totals.service_charge == invoice.totals.subtotal == Decimal("10000.00")
     assert invoice.totals.cgst_amount == invoice.totals.sgst_amount == Decimal("900.00")

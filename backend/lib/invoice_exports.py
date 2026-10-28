@@ -40,6 +40,8 @@ def export_xlsx(invoice: Invoice) -> bytes:
 
         number_style("F5", "dd/mm/yyyy")
         number_style("E26", '0.00"%"')
+        number_style("E28", '0.00"%"')
+        number_style("E29", '0.00"%"')
         for row in range(19, 25):
             number_style(f"D{row}", "#,##0")
 
@@ -99,9 +101,26 @@ def export_xlsx(invoice: Invoice) -> bytes:
             write(f"F{row}", totals.line_amounts[line.key], f"ROUND(D{row}*E{row},2)")
         write("E26", invoice.service_percentage)
         write("F26", totals.service_charge, "ROUND(F25*E26/100,2)" if services_only else "ROUND(SUM(F19:F25,F27)*E26/100,2)")
-        write("F29", totals.subtotal, "F26" if services_only else "SUM(F19:F27)")
         if services_only:
+            write("F29", totals.subtotal, "F26")
             write("D29", "Service charges")
+        else:
+            # Use the template's spare row and former subtotal row so ESI and
+            # PF remain visible and editable without moving payment details.
+            merges = sheet.find(f"{{{NS}}}mergeCells")
+            for merge in list(merges):
+                if merge.get("ref") == "D29:E29":
+                    merges.remove(merge)
+            merges.set("count", str(len(merges)))
+            for row, label, percentage, contribution in (
+                (28, "ESI (%)", invoice.esi_percentage, totals.esi_amount),
+                (29, "PF (%)", invoice.pf_percentage, totals.pf_amount),
+            ):
+                cells[f"E{row}"].set("s", cells["E26"].get("s"))
+                cells[f"F{row}"].set("s", cells["F30"].get("s"))
+                write(f"D{row}", label)
+                write(f"E{row}", percentage)
+                write(f"F{row}", contribution, f"ROUND(SUM(F19:F25,F27)*E{row}/100,2)")
         if invoice.uses_gst_percentages:
             # The template's spare row holds SGST without moving payment details
             # or the total. Unmerge the old GST label to expose the rate input.
@@ -118,13 +137,14 @@ def export_xlsx(invoice: Invoice) -> bytes:
                 cells[f"F{row}"].set("s", cells["F30"].get("s"))
                 write(f"D{row}", label)
                 write(f"E{row}", percentage)
-                write(f"F{row}", tax, f"ROUND($F$29*E{row}/100,2)")
-            write("F32", totals.total, "SUM(F29:F31)")
-            write("A39", "Amounts in INR. Wages are reference only. GST applies only to service charges." if services_only else "Amounts in INR. Enter 10 for 10%. CGST and SGST apply to the subtotal including service charges.")
+                tax_base = "$F$29" if services_only else "SUM($F$19:$F$29)"
+                write(f"F{row}", tax, f"ROUND({tax_base}*E{row}/100,2)")
+            write("F32", totals.total, "SUM(F29:F31)" if services_only else "SUM(F19:F31)")
+            write("A39", "Amounts in INR. Wages are reference only. GST applies only to service charges." if services_only else "Amounts in INR. ESI, PF and service charges are percentages of charges before GST. CGST and SGST apply to the resulting subtotal.")
         else:
             write("F30", totals.gst_amount)
-            write("F32", totals.total, "SUM(F29:F30)")
-            write("A39", "Amounts in INR. Wages are reference only. Total = service charges + recorded GST." if services_only else "Amounts in INR. Enter 10 for 10% service charge in E26 (before GST). GST is the amount recorded on this invoice.")
+            write("F32", totals.total, "SUM(F29:F30)" if services_only else "SUM(F19:F30)")
+            write("A39", "Amounts in INR. Wages are reference only. Total = service charges + recorded GST." if services_only else "Amounts in INR. ESI, PF and service charges are percentages of charges before GST. GST is the amount recorded on this invoice.")
 
         output = BytesIO()
         with ZipFile(output, "w", ZIP_DEFLATED) as target:
@@ -217,6 +237,10 @@ def export_pdf(invoice: Invoice) -> bytes:
     summary = Table([
         [p("Wage subtotal (reference only)" if services_only else "Total wages"), p(amount(wages))],
         *additional_rows,
+        *([] if services_only else [
+            [p(f"ESI ({invoice.esi_percentage:g}%)"), p(amount(totals.esi_amount))],
+            [p(f"PF ({invoice.pf_percentage:g}%)"), p(amount(totals.pf_amount))],
+        ]),
         [p(f"Service charge ({invoice.service_percentage:g}%)"), p(amount(totals.service_charge))],
         *([] if services_only else [[p("Subtotal before GST"), p(amount(totals.subtotal))]]),
         *tax_rows,

@@ -26,6 +26,29 @@ export function formatCalendarValue(value: string, type: CalendarValueType): str
   return type === "month" ? `${month}/${year}` : `${day}/${month}/${year}`;
 }
 
+/** Format an ISO calendar date for people in India without timezone rollover. */
+export function formatIndianDate(value: string | null | undefined): string {
+  if (!value) return "";
+  const dateOnly = value.match(/^(\d{4}-\d{2}-\d{2})$/)?.[1];
+  return dateOnly && parseCalendarValue(dateOnly, "date")
+    ? formatCalendarValue(dateOnly, "date")
+    : formatIndianDateTime(value, false);
+}
+
+/** Format a timestamp in India Standard Time with the date always shown as DD/MM/YYYY. */
+export function formatIndianDateTime(value: string | Date | null | undefined, includeTime = true): string {
+  if (!value) return "";
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat("en-IN", {
+    timeZone: "Asia/Kolkata",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    ...(includeTime ? { hour: "2-digit", minute: "2-digit", hour12: true } : {}),
+  }).format(date);
+}
+
 export function calendarInputError(text: string, type: CalendarValueType, min?: string, max?: string): string {
   if (!text.trim()) return "";
   const value = parseCalendarValue(text, type, true);
