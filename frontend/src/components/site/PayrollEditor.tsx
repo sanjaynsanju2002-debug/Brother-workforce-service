@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { apiGet, apiPost } from "@/lib/api";
 import { formatIndianDate } from "@/lib/calendarDate";
 import { monthLabel, rupees } from "@/lib/finance";
-import { downloadPayroll, firstPayrollIssue, payrollDeductionTotal, payrollEmployerContributionTotal, payrollError, payrollRows, sundayDates, type PayrollAmounts, type PayrollDraft, type PayrollInput, type PayrollIssue, type PayrollRecord, type PayrollRow, type PayrollTotals, type PayrollValueField } from "@/lib/payroll";
+import { downloadPayroll, firstPayrollIssue, isDhatuOrganicsCompany, payrollDeductionTotal, payrollEmployerContributionTotal, payrollError, payrollRows, sundayDates, type PayrollAmounts, type PayrollDraft, type PayrollInput, type PayrollIssue, type PayrollRecord, type PayrollRow, type PayrollTotals, type PayrollValueField } from "@/lib/payroll";
 
 import { OPS, downloadPrivate, operationError, type AttendanceSummary } from "@/lib/operations";
 
@@ -39,7 +39,17 @@ export default function PayrollEditor({ draft, month, deleting, onDirty, onBusy,
   const [issue, setIssue] = useState<PayrollIssue>();
   const [bulk, setBulk] = useState({ worked_days: "", daily_rate: "", government_holidays: "", esi_percentage: "", esi_employer_percentage: "", pf_percentage: "", pf_employer_percentage: "" });
   const monthDays = new Date(Number(month.slice(0, 4)), Number(month.slice(5)), 0).getDate();
+  const monthlyRegisterEnabled = isDhatuOrganicsCompany(draft.company.name);
   const sundays = sundayDates(month);
+  const bulkFields = monthlyRegisterEnabled ? ([
+    ["worked_days", "Days present / worked", monthDays], ["government_holidays", "Government holidays", monthDays],
+    ["daily_rate", "Daily rate (₹)", 1_000_000_000], ["esi_percentage", "Employee ESI (%)", 100],
+    ["esi_employer_percentage", "Employer ESI (%)", 100], ["pf_percentage", "Employee PF (%)", 100],
+    ["pf_employer_percentage", "Employer PF (%)", 100],
+  ] as const) : ([
+    ["worked_days", "Worked days", monthDays], ["daily_rate", "Daily rate (₹)", 1_000_000_000],
+    ["esi_percentage", "ESI (%)", 100], ["pf_percentage", "PF (%)", 100],
+  ] as const);
   const payload = useMemo<PayrollInput>(() => ({
     company_id: draft.company.id, month, notes, cost_responsibility: responsibility, attendance_refs: attendanceRefs,
     lines: rows.filter((row) => row.selected).map((row) => ({
@@ -165,17 +175,17 @@ export default function PayrollEditor({ draft, month, deleting, onDirty, onBusy,
 
         <div className="space-y-4 rounded-xl border border-slate-200 bg-white p-4">
           <div className="grid items-end gap-4 sm:grid-cols-2"><div><Label htmlFor="payroll-responsibility" className="mb-2 block">Who pays these salaries?</Label><select id="payroll-responsibility" className={selectClass} value={responsibility} onChange={(e) => { setResponsibility(e.target.value as "Agency" | "Client"); change(); }}><option value="Agency">Agency pays salaries</option><option value="Client">Client pays directly (reference payroll)</option></select></div><Button type="button" variant="outline" disabled={locked || !rows.length} onClick={() => attendanceImport.mutate()}>Import payroll-ready attendance</Button></div>
-          {linkedAttendance ? <div className="space-y-2 text-xs text-slate-600"><p>Linked to {linkedAttendance} payroll-ready attendance dates. Days present and overtime hours are locked to those records.</p><details><summary className="cursor-pointer">Review covered dates</summary><p className="mt-2">{coverage.isPending ? "Loading covered dates…" : coverage.isError ? "Could not load dates. Import attendance again to review." : coverage.data?.sheets.filter((s) => s.id in attendanceRefs).map((s) => formatIndianDate(s.date)).join(", ") || "Attendance records changed. Import attendance again."}</p><p className="mt-2">References are checked again when payroll is saved. Import again after attendance changes.</p></details><Button type="button" variant="outline" size="sm" onClick={() => { setAttendanceRefs({}); change(); }}>Use manual attendance</Button></div> : <p className="text-xs text-slate-500">Manual attendance. Import owner-approved days and completed employee check-outs to fill days present and overtime hours. Client-paid registers are excluded from agency salary balances and company payroll costs.</p>}
+          {linkedAttendance ? <div className="space-y-2 text-xs text-slate-600"><p>Linked to {linkedAttendance} payroll-ready attendance dates. {monthlyRegisterEnabled ? "Days present" : "Worked days"} and overtime hours are locked to those records.</p><details><summary className="cursor-pointer">Review covered dates</summary><p className="mt-2">{coverage.isPending ? "Loading covered dates…" : coverage.isError ? "Could not load dates. Import attendance again to review." : coverage.data?.sheets.filter((s) => s.id in attendanceRefs).map((s) => formatIndianDate(s.date)).join(", ") || "Attendance records changed. Import attendance again."}</p><p className="mt-2">References are checked again when payroll is saved. Import again after attendance changes.</p></details><Button type="button" variant="outline" size="sm" onClick={() => { setAttendanceRefs({}); change(); }}>Use manual attendance</Button></div> : <p className="text-xs text-slate-500">Manual attendance. Import owner-approved days and completed employee check-outs to fill {monthlyRegisterEnabled ? "days present" : "worked days"} and overtime hours. Client-paid registers are excluded from agency salary balances and company payroll costs.</p>}
         </div>
 
-        <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950" data-testid="payroll-sundays">
+        {monthlyRegisterEnabled && <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950" data-testid="payroll-sundays">
           <div className="flex items-start gap-3"><CalendarDays className="mt-0.5 h-5 w-5 shrink-0" /><div><p className="font-semibold">Sunday holidays: {sundays.length}</p><p className="mt-1 text-xs leading-relaxed text-blue-800">{sundays.map((day) => `${String(day).padStart(2, "0")}/${month.slice(5, 7)}/${month.slice(0, 4)}`).join(", ")} · Automatically included in paid days for monthly-salary employees.</p></div></div>
-        </div>
+        </div>}
 
         <div className="payroll-metrics" aria-live="polite">
           <Metric label="Employees" value={String(selected)} testId="payroll-employee-count" />
           <Metric label="Gross wages" value={totals ? rupees(totals.gross_wages) : "—"} testId="payroll-total-0" />
-          <Metric label="Employee ESI + PF" value={totals ? rupees(payrollDeductionTotal(totals)) : "—"} testId="payroll-total-deductions" />
+          <Metric label={monthlyRegisterEnabled ? "Employee ESI + PF" : "ESI + PF deductions"} value={totals ? rupees(payrollDeductionTotal(totals)) : "—"} testId="payroll-total-deductions" />
           <Metric label="Total payable" value={totals ? rupees(totals.payable) : "—"} testId="payroll-total-3" primary />
         </div>
 
@@ -195,7 +205,7 @@ export default function PayrollEditor({ draft, month, deleting, onDirty, onBusy,
                 <colgroup><col style={{ width: "42%" }} /><col style={{ width: "12%" }} /><col style={{ width: "23%" }} /><col style={{ width: "23%" }} /></colgroup>
                 <thead><tr>
                   <th scope="col">Employee</th>
-                  <th scope="col" className="payroll-days-cell">Paid days</th><th scope="col">Gross</th><th scope="col">Net</th>
+                  <th scope="col" className="payroll-days-cell">{monthlyRegisterEnabled ? "Paid days" : "Days"}</th><th scope="col">Gross</th><th scope="col">{monthlyRegisterEnabled ? "Net" : "Payable"}</th>
                 </tr></thead>
                 <tbody>{rows.map((row) => {
                   const result = calculated.get(row.assignment_id);
@@ -208,14 +218,14 @@ export default function PayrollEditor({ draft, month, deleting, onDirty, onBusy,
                         {!row.selected && <p className="mt-1 text-xs font-normal text-slate-500">Not included</p>}
                       </div>
                     </div></th>
-                    <td className="payroll-days-cell" data-label="Paid days">{result?.paid_days || row.worked_days || "—"}</td>
+                    <td className="payroll-days-cell" data-label={monthlyRegisterEnabled ? "Paid days" : "Worked days"}>{monthlyRegisterEnabled ? result?.paid_days || row.worked_days || "—" : row.worked_days || "—"}</td>
                     <td data-label="Gross salary">{result ? rupees(result.gross_wages) : "—"}</td>
                     <td className="payroll-payable-cell" data-label="Net payable">{result ? rupees(result.payable) : "—"}</td>
                   </tr>;
                 })}</tbody>
-                <tfoot><tr><th scope="row">Total · {selected} employees</th><td className="payroll-days-cell" data-label="Paid days">{totals?.paid_days ?? totals?.worked_days ?? "—"}</td><td data-label="Gross salary">{totals ? rupees(totals.gross_wages) : "—"}</td><td className="payroll-payable-cell" data-label="Net payable">{totals ? rupees(totals.payable) : "—"}</td></tr></tfoot>
+                <tfoot><tr><th scope="row">Total · {selected} employees</th><td className="payroll-days-cell" data-label={monthlyRegisterEnabled ? "Paid days" : "Worked days"}>{monthlyRegisterEnabled ? totals?.paid_days ?? totals?.worked_days ?? "—" : totals?.worked_days ?? "—"}</td><td data-label="Gross salary">{totals ? rupees(totals.gross_wages) : "—"}</td><td className="payroll-payable-cell" data-label={monthlyRegisterEnabled ? "Net payable" : "Payable"}>{totals ? rupees(totals.payable) : "—"}</td></tr></tfoot>
               </table>}
-            {rows.length > 0 && <div className="flex flex-wrap gap-x-4 gap-y-1 border-t border-slate-200 px-4 py-3 text-xs text-slate-500"><span>Employee ESI {totals ? rupees(totals.esi_deduction) : "—"}</span><span>Employee PF {totals ? rupees(totals.pf_deduction) : "—"}</span><span>Employer ESI + PF {totals ? rupees(payrollEmployerContributionTotal(totals)) : "—"}</span></div>}
+            {rows.length > 0 && <div className="flex flex-wrap gap-x-4 gap-y-1 border-t border-slate-200 px-4 py-3 text-xs text-slate-500"><span>{monthlyRegisterEnabled ? "Employee ESI" : "ESI"} {totals ? rupees(totals.esi_deduction) : "—"}</span><span>{monthlyRegisterEnabled ? "Employee PF" : "PF"} {totals ? rupees(totals.pf_deduction) : "—"}</span>{monthlyRegisterEnabled && <span>Employer ESI + PF {totals ? rupees(payrollEmployerContributionTotal(totals)) : "—"}</span>}</div>}
           </div>
 
           <section ref={panel} className="payroll-detail-panel min-w-0 rounded-xl border border-slate-200 bg-white p-5" aria-label="Employee payroll details" data-testid="payroll-detail-panel">
@@ -225,8 +235,8 @@ export default function PayrollEditor({ draft, month, deleting, onDirty, onBusy,
               <p className="mt-1 break-words text-xs text-slate-500">{active.employee_id || "No employee ID"}{active.role ? ` · ${active.role}` : ""}</p>
               <p className="mt-2 text-xs leading-relaxed text-slate-500">{active.salary === null ? "No salary on file" : `${rupees(active.salary)} per ${active.salary_basis === "Daily" ? "day" : "month"} on file`}</p>
               <label className="mt-4 flex min-h-9 items-center gap-2 text-sm"><input type="checkbox" className="h-4 w-4 accent-[#C2410C]" checked={active.selected} onChange={(event) => editRow(active.assignment_id, "selected", event.target.checked)} />Include in this payroll</label>
-              <EmployeeFields row={active} attendanceLinked={!!linkedAttendance} monthDays={monthDays} sundayCount={sundays.length} issue={issue} onChange={(field, value) => editRow(active.assignment_id, field, value)} />
-              <p className="mt-3 text-xs leading-relaxed text-slate-500">Monthly salary follows the uploaded register: LOP = absent days − credit leave. Paid days include present days, credit leave, government holidays and the month’s Sundays. Employee ESI and PF reduce net salary; employer contributions are shown separately.</p>
+              <EmployeeFields row={active} attendanceLinked={!!linkedAttendance} monthDays={monthDays} sundayCount={sundays.length} monthlyRegisterEnabled={monthlyRegisterEnabled} issue={issue} onChange={(field, value) => editRow(active.assignment_id, field, value)} />
+              <p className="mt-3 text-xs leading-relaxed text-slate-500">{monthlyRegisterEnabled ? "Dhatu Organics monthly salary follows the uploaded register: LOP = absent days − credit leave. Paid days include present days, credit leave, government holidays and the month’s Sundays. Employee ESI and PF reduce net salary; employer contributions are shown separately." : "Gross wages include worked days × daily rate and overtime hours × hourly rate. ESI and PF apply to gross wages at the rates you enter."}</p>
               {saved && !dirty && saved.lines.some((r) => r.assignment_id === active.assignment_id) && <Button type="button" variant="outline" size="sm" className="mt-3" onClick={() => void downloadPrivate(`${OPS}/payroll/${saved.id}/payslip/${active.assignment_id}.pdf`, `BWS-Payslip-${month}.pdf`).catch((e) => setProblem(operationError(e)))}>Download employee payslip</Button>}
               <div className="mt-5 space-y-3 border-t border-slate-200 pt-4 text-sm tabular-nums" aria-live="polite">
                 {active.calculation_method === "Monthly" && <>
@@ -239,10 +249,10 @@ export default function PayrollEditor({ draft, month, deleting, onDirty, onBusy,
                 <CalculationLine label="Overtime / extra-hours amount" value={calculated.get(active.assignment_id)?.overtime_amount} money />
                 <CalculationLine label="Gross salary" value={calculated.get(active.assignment_id)?.gross_wages} money />
                 <CalculationLine label="Employee ESI" value={calculated.get(active.assignment_id)?.esi_deduction} money />
-                <CalculationLine label="Employer ESI" value={calculated.get(active.assignment_id)?.esi_employer_contribution} money />
+                {monthlyRegisterEnabled && <CalculationLine label="Employer ESI" value={calculated.get(active.assignment_id)?.esi_employer_contribution} money />}
                 <CalculationLine label="Employee PF" value={calculated.get(active.assignment_id)?.pf_deduction} money />
-                <CalculationLine label="Employer PF" value={calculated.get(active.assignment_id)?.pf_employer_contribution} money />
-                <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-orange-50 p-3"><span className="font-medium">Net payable</span><span className="text-lg font-semibold" data-testid="payroll-active-payable">{calculated.has(active.assignment_id) ? rupees(calculated.get(active.assignment_id)!.payable) : "—"}</span></div>
+                {monthlyRegisterEnabled && <CalculationLine label="Employer PF" value={calculated.get(active.assignment_id)?.pf_employer_contribution} money />}
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-orange-50 p-3"><span className="font-medium">{monthlyRegisterEnabled ? "Net payable" : "Payable"}</span><span className="text-lg font-semibold" data-testid="payroll-active-payable">{calculated.has(active.assignment_id) ? rupees(calculated.get(active.assignment_id)!.payable) : "—"}</span></div>
               </div>
               {!active.selected && <p className="mt-3 text-xs text-slate-500">Select “Include in this payroll” to enter this employee’s attendance.</p>}
               <div className="mt-5 flex justify-between gap-2"><Button type="button" variant="outline" size="sm" disabled={activeIndex <= 0} onClick={() => showEmployee(rows[activeIndex - 1].assignment_id)}><ArrowLeft className="h-4 w-4" />Previous</Button><Button type="button" variant="outline" size="sm" disabled={activeIndex >= rows.length - 1} onClick={() => showEmployee(rows[activeIndex + 1].assignment_id)}>Next<ArrowRight className="h-4 w-4" /></Button></div>
@@ -264,12 +274,7 @@ export default function PayrollEditor({ draft, month, deleting, onDirty, onBusy,
       <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-2 p-4 text-sm font-medium [&::-webkit-details-marker]:hidden"><span>Apply values to selected employees</span><ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180" /></summary>
       <fieldset disabled={locked} className="min-w-0 border-t border-slate-200 p-5">
         <p className="text-xs text-slate-500">Fill the values you want to apply. Leave a field blank to keep its current value.</p>
-        <div className="mt-4 grid items-end gap-3 sm:grid-cols-2">{([
-          ["worked_days", "Days present / worked", monthDays], ["government_holidays", "Government holidays", monthDays],
-          ["daily_rate", "Daily rate (₹)", 1_000_000_000], ["esi_percentage", "Employee ESI (%)", 100],
-          ["esi_employer_percentage", "Employer ESI (%)", 100], ["pf_percentage", "Employee PF (%)", 100],
-          ["pf_employer_percentage", "Employer PF (%)", 100],
-        ] as const).map(([key, label, maximum]) => <div key={key}><Label htmlFor={`payroll-bulk-${key}`} className="mb-2 block">{label}</Label><Input id={`payroll-bulk-${key}`} type="number" min="0" max={maximum} step="0.01" inputMode="decimal" value={bulk[key]} onChange={(event) => setBulk({ ...bulk, [key]: event.target.value })} placeholder="Leave unchanged" /></div>)}</div>
+        <div className="mt-4 grid items-end gap-3 sm:grid-cols-2">{bulkFields.map(([key, label, maximum]) => <div key={key}><Label htmlFor={`payroll-bulk-${key}`} className="mb-2 block">{label}</Label><Input id={`payroll-bulk-${key}`} type="number" min="0" max={maximum} step="0.01" inputMode="decimal" value={bulk[key]} onChange={(event) => setBulk({ ...bulk, [key]: event.target.value })} placeholder="Leave unchanged" /></div>)}</div>
         <Button type="button" variant="outline" className="mt-4" disabled={!selected || Object.values(bulk).every((value) => value === "")} onClick={applyBulk}>Apply to {selected} selected employees</Button>
       </fieldset>
     </details>
@@ -284,10 +289,10 @@ function CalculationLine({ label, value, money = false }: { label: string; value
   return <div className="flex flex-wrap justify-between gap-x-3 gap-y-1"><span className="text-slate-500">{label}</span><span>{value === undefined ? "—" : money ? rupees(value) : value}</span></div>;
 }
 
-function EmployeeFields({ row, monthDays, sundayCount, attendanceLinked, issue, onChange }: { row: PayrollRow; attendanceLinked: boolean; monthDays: number; sundayCount: number; issue?: PayrollIssue; onChange: (field: PayrollValueField, value: string) => void }) {
-  const monthly = row.calculation_method === "Monthly";
+function EmployeeFields({ row, monthDays, sundayCount, monthlyRegisterEnabled, attendanceLinked, issue, onChange }: { row: PayrollRow; attendanceLinked: boolean; monthDays: number; sundayCount: number; monthlyRegisterEnabled: boolean; issue?: PayrollIssue; onChange: (field: PayrollValueField, value: string) => void }) {
+  const monthly = monthlyRegisterEnabled && row.calculation_method === "Monthly";
   return <div className="mt-4 space-y-5">
-    <div><Label htmlFor={`payroll-method-${row.assignment_id}`} className="mb-2 block text-xs text-slate-600">Salary calculation</Label><select id={`payroll-method-${row.assignment_id}`} className={selectClass} disabled={!row.selected || attendanceLinked} value={row.calculation_method} onChange={(event) => onChange("calculation_method", event.target.value)}><option value="Monthly">Monthly salary register</option><option value="Daily">Daily wages</option></select></div>
+    {monthlyRegisterEnabled && <div><Label htmlFor={`payroll-method-${row.assignment_id}`} className="mb-2 block text-xs text-slate-600">Salary calculation</Label><select id={`payroll-method-${row.assignment_id}`} className={selectClass} disabled={!row.selected || attendanceLinked} value={row.calculation_method} onChange={(event) => onChange("calculation_method", event.target.value)}><option value="Monthly">Monthly salary register</option><option value="Daily">Daily wages</option></select></div>}
 
     <fieldset className="space-y-3"><legend className="text-xs font-semibold uppercase tracking-wide text-slate-500">Attendance</legend><div className="grid grid-cols-2 gap-4">
       <PayrollNumberField row={row} field="worked_days" label={monthly ? "Days present" : "Worked days"} max={monthDays} prefix="days" issue={issue} disabled={attendanceLinked} onChange={onChange} />
@@ -311,10 +316,10 @@ function EmployeeFields({ row, monthDays, sundayCount, attendanceLinked, issue, 
     </div></fieldset>
 
     <fieldset className="space-y-3"><legend className="text-xs font-semibold uppercase tracking-wide text-slate-500">ESI and PF percentages</legend><div className="grid grid-cols-2 gap-4">
-      <PayrollNumberField row={row} field="esi_percentage" label="Employee ESI (%)" max={100} prefix="esi" issue={issue} onChange={onChange} />
-      <PayrollNumberField row={row} field="esi_employer_percentage" label="Employer ESI (%)" max={100} prefix="esi-employer" issue={issue} onChange={onChange} />
-      <PayrollNumberField row={row} field="pf_percentage" label="Employee PF (%)" max={100} prefix="pf" issue={issue} onChange={onChange} />
-      <PayrollNumberField row={row} field="pf_employer_percentage" label="Employer PF (%)" max={100} prefix="pf-employer" issue={issue} onChange={onChange} />
+      <PayrollNumberField row={row} field="esi_percentage" label={monthlyRegisterEnabled ? "Employee ESI (%)" : "ESI (%)"} max={100} prefix="esi" issue={issue} onChange={onChange} />
+      {monthlyRegisterEnabled && <PayrollNumberField row={row} field="esi_employer_percentage" label="Employer ESI (%)" max={100} prefix="esi-employer" issue={issue} onChange={onChange} />}
+      <PayrollNumberField row={row} field="pf_percentage" label={monthlyRegisterEnabled ? "Employee PF (%)" : "PF (%)"} max={100} prefix="pf" issue={issue} onChange={onChange} />
+      {monthlyRegisterEnabled && <PayrollNumberField row={row} field="pf_employer_percentage" label="Employer PF (%)" max={100} prefix="pf-employer" issue={issue} onChange={onChange} />}
     </div></fieldset>
   </div>;
 }

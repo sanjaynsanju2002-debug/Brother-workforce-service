@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { firstPayrollIssue, payrollDeductionTotal, payrollEmployerContributionTotal, payrollRows, sundayDates, type PayrollDraft, type PayrollRow, type PayrollTotals } from "./payroll";
+import { firstPayrollIssue, isDhatuOrganicsCompany, payrollDeductionTotal, payrollEmployerContributionTotal, payrollRows, sundayDates, type PayrollDraft, type PayrollRow, type PayrollTotals } from "./payroll";
 
 function employee(id: string, updates: Partial<PayrollRow> = {}): PayrollRow {
   return {
@@ -47,7 +47,7 @@ describe("payroll validation with a single employee details panel", () => {
 
 it("prefills daily rates and monthly salary register values from Company Workforce", () => {
   const people = [employee("daily"), employee("monthly", { salary_basis: "Monthly", salary: "15600.00" }), employee("completed", { status: "Completed" })];
-  const draft: PayrollDraft = { company: { id: "company", name: "Company" }, employees: people, payroll: null };
+  const draft: PayrollDraft = { company: { id: "company", name: "Dhatu Organics & Naturals" }, employees: people, payroll: null };
   const rows = payrollRows(draft);
   expect(rows[0].daily_rate).toBe("500.00");
   expect(rows[0].worked_days).toBe("");
@@ -55,6 +55,17 @@ it("prefills daily rates and monthly salary register values from Company Workfor
   expect(rows[1].base_salary).toBe("15600.00");
   expect(rows[1].calculation_method).toBe("Monthly");
   expect(rows[2].selected).toBe(false);
+});
+
+it("keeps the monthly salary register exclusive to Dhatu Organics", () => {
+  expect(isDhatuOrganicsCompany("Dhatu Organics & Naturals Pvt Ltd")).toBe(true);
+  expect(isDhatuOrganicsCompany("DONPL")).toBe(true);
+  expect(isDhatuOrganicsCompany("Example Manufacturing")).toBe(false);
+  const person = employee("monthly", { salary_basis: "Monthly", salary: "15600.00" });
+  const rows = payrollRows({ company: { id: "other", name: "Example Manufacturing" }, employees: [person], payroll: null });
+  expect(rows[0].calculation_method).toBe("Daily");
+  expect(rows[0].daily_rate).toBe("");
+  expect(rows[0].base_salary).toBe("0");
 });
 
 it("combines the saved ESI and PF amounts exactly for the summary card", () => {

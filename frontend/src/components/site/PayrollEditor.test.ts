@@ -23,8 +23,8 @@ it("renders the employee register and the selected employee's editable details w
   ];
   const totals = { employee_count: 2, worked_days: "51.50", gross_wages: "28300.00", esi_deduction: "212.25", pf_deduction: "3396.00", payable: "24691.75" };
   const draft: PayrollDraft = {
-    company: { id: "company", name: "Example Manufacturing" }, employees: people,
-    payroll: { id: "register", company_id: "company", company_name: "Example Manufacturing", company_location: "Mysore", month: "2026-10", notes: "Approved attendance", lines, totals, revision: 1, created_at: "2026-10-16T00:00:00Z", updated_at: "2026-10-16T00:00:00Z" },
+    company: { id: "company", name: "Dhatu Organics & Naturals" }, employees: people,
+    payroll: { id: "register", company_id: "company", company_name: "Dhatu Organics & Naturals", company_location: "Mysore", month: "2026-10", notes: "Approved attendance", lines, totals, revision: 1, created_at: "2026-10-16T00:00:00Z", updated_at: "2026-10-16T00:00:00Z" },
   };
   const input: PayrollInput = {
     company_id: "company", month: "2026-10", notes: draft.payroll!.notes, cost_responsibility: "Agency", attendance_refs: {},
@@ -47,5 +47,25 @@ it("renders the employee register and the selected employee's editable details w
   expect(html).toContain("Sunday holidays: 4");
   expect(html).toContain("Employer ESI");
   expect(html).toContain("Back to employee register");
+  client.clear();
+});
+
+it("hides the monthly register and Sunday holidays for other companies", () => {
+  const employee = { assignment_id: "first", employee_id: "0001", full_name: "Ravi Kumar", role: "Operator", salary: "500.00", salary_basis: "Daily" as const, status: "Active" as const };
+  const draft: PayrollDraft = { company: { id: "other", name: "Example Manufacturing" }, employees: [employee], payroll: null };
+  const input: PayrollInput = {
+    company_id: "other", month: "2026-10", notes: "", cost_responsibility: "Agency", attendance_refs: {},
+    lines: [{ assignment_id: "first", calculation_method: "Daily", worked_days: "0", daily_rate: "500.00", base_salary: "0", days_absent: "0", credit_leave: "0", government_holidays: "0", salary_advance: "0", penalty: "0", allowance: "0", esi_percentage: "0", esi_employer_percentage: "0", pf_percentage: "0", pf_employer_percentage: "0", overtime_hours: "0", overtime_rate: "0" }],
+  };
+  const totals = { employee_count: 1, worked_days: "0.00", paid_days: "0.00", gross_wages: "0.00", esi_deduction: "0.00", pf_deduction: "0.00", payable: "0.00" };
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
+  client.setQueryData(["payroll-preview", input], { lines: [], totals });
+  const html = renderToStaticMarkup(createElement(QueryClientProvider, { client }, createElement(PayrollEditor, {
+    draft, month: "2026-10", deleting: false, onDirty: () => {}, onBusy: () => {}, onReload: async () => {},
+  })));
+  expect(html).not.toContain("Sunday holidays:");
+  expect(html).not.toContain("Monthly salary register");
+  expect(html).not.toContain("Employer ESI (%)");
+  expect(html).toContain("Gross wages include worked days");
   client.clear();
 });

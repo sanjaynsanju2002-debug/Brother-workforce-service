@@ -56,6 +56,7 @@ def test_gross_esi_pf_payable_and_fractional_days_use_decimal_arithmetic():
     assert totals.esi_deduction == Decimal("212.25")
     assert totals.pf_deduction == Decimal("3396.00")
     assert totals.payable == Decimal("24691.75")
+    assert rows[0].sunday_holidays == rows[1].sunday_holidays == 0
 
 
 def test_monthly_register_matches_salary_sheet_and_adds_sundays_from_selected_month():
@@ -203,7 +204,8 @@ async def test_admin_access_company_isolation_and_input_validation(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_monthly_register_saves_automatic_sundays_and_employer_contributions(monkeypatch):
-    fake_db(monkeypatch)
+    fake = fake_db(monkeypatch)
+    fake.clients.records[0]["name"] = "Dhatu Organics & Naturals"
     body = {
         "company_id": "company-a", "month": "2026-09", "lines": [{
             "assignment_id": "person-b", "calculation_method": "Monthly", "worked_days": "21", "base_salary": "14400",
@@ -220,6 +222,23 @@ async def test_monthly_register_saves_automatic_sundays_and_employer_contributio
         assert line["sunday_holidays"] == 4 and line["paid_days"] == "26.00"
         assert line["loss_of_pay"] == "4.00" and line["leave_deduction"] == "1920.00"
         assert line["gross_wages"] == "12374.00" and line["esi_employer_contribution"] == "402.16"
+
+
+@pytest.mark.asyncio
+async def test_other_companies_cannot_use_dhatu_monthly_register(monkeypatch):
+    fake_db(monkeypatch)
+    body = {
+        "company_id": "company-a", "month": "2026-09", "lines": [{
+            "assignment_id": "person-b", "calculation_method": "Monthly", "worked_days": "21",
+            "base_salary": "14400", "days_absent": "4", "government_holidays": "1",
+        }],
+    }
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="https://brothersworkforcesolutions.in") as client:
+        await client.post("/api/admin/login", json={"pin": "123456"})
+        for path in ("/api/admin/payroll/preview", "/api/admin/payroll"):
+            response = await client.post(path, json=body)
+            assert response.status_code == 422
+            assert response.json()["detail"] == payroll.DHATU_MONTHLY_ONLY
 
 
 @pytest.mark.asyncio

@@ -20,10 +20,29 @@ from lib.payroll import MAX_EMPLOYEES, Payroll, PayrollEmployee, PayrollInput, P
 
 router = APIRouter(prefix="/admin/payroll", dependencies=[Depends(require_admin)])
 CONFLICT = "Payroll changed in another session. Reopen this company and month before saving."
+DHATU_MONTHLY_ONLY = "The monthly salary register is available only for Dhatu Organics & Naturals. Use daily wages for this company."
 
 
 def register_id(company_id: str, month: str) -> str:
     return str(uuid5(NAMESPACE_URL, f"bws:payroll:{company_id}:{month}"))
+
+
+def is_dhatu_organics(name: str) -> bool:
+    normalized = re.sub(r"[^a-z0-9]+", "", name.casefold())
+    return normalized == "donpl" or "dhatuorganics" in normalized
+
+
+async def allow_monthly_register(payload: PayrollInput):
+    if not any(line.calculation_method == "Monthly" for line in payload.lines):
+        return
+    company = await db.clients.find_one({"id": payload.company_id, "archived": {"$ne": True}}, {"_id": 0, "name": 1})
+    if company:
+        name = company["name"]
+    else:
+        saved = await db.payroll.find_one({"_id": register_id(payload.company_id, payload.month)}, {"_id": 0, "company_name": 1})
+        name = saved.get("company_name", "") if saved else ""
+    if not is_dhatu_organics(name):
+        raise HTTPException(422, DHATU_MONTHLY_ONLY)
 
 
 def record_model(doc: dict) -> Payroll:
@@ -78,6 +97,7 @@ async def payroll_draft(company_id: str = Query(min_length=1, max_length=80), mo
 
 @router.post("/preview")
 async def payroll_preview(payload: PayrollInput):
+    await allow_monthly_register(payload)
     lines, totals = calculate_payroll(payload)
     return {"lines": lines, "totals": totals}
 
@@ -93,6 +113,7 @@ async def list_payroll(company_id: str | None = Query(default=None, max_length=8
 
 @router.post("", response_model=Payroll)
 async def save_payroll(payload: PayrollSave):
+    await allow_monthly_register(payload)
     if not payload.lines or not any(line.worked_days > 0 for line in payload.lines):
         raise HTTPException(422, "Select employees and enter days present for at least one employee")
     if any(line.calculation_method == "Daily" and line.worked_days > 0 and line.daily_rate == 0 for line in payload.lines):

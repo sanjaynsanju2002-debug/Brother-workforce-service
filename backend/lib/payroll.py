@@ -194,6 +194,7 @@ def calculate_payroll(value: PayrollInput) -> tuple[list[PayrollLineTotals], Pay
     sundays = sunday_count(value.month)
     for line in value.lines:
         if line.calculation_method == "Monthly":
+            sunday_holidays = sundays
             loss_of_pay = line.days_absent - line.credit_leave
             paid_days = line.worked_days + line.credit_leave + line.government_holidays + Decimal(sundays)
             per_day = round_money(line.base_salary / Decimal(month_days))
@@ -208,6 +209,7 @@ def calculate_payroll(value: PayrollInput) -> tuple[list[PayrollLineTotals], Pay
             pf_employer = round_money(gross * line.pf_employer_percentage / Decimal("100"))
             payable = round_money(gross - esi - pf + overtime_amount)
         else:
+            sunday_holidays = 0
             gross, esi, pf, payable = line_amounts(line.worked_days, line.daily_rate, line.esi_percentage, line.pf_percentage, line.overtime_hours, line.overtime_rate)
             loss_of_pay = Decimal("0.00")
             paid_days = line.worked_days
@@ -219,7 +221,7 @@ def calculate_payroll(value: PayrollInput) -> tuple[list[PayrollLineTotals], Pay
             esi_employer = round_money(gross * line.esi_employer_percentage / Decimal("100"))
             pf_employer = round_money(gross * line.pf_employer_percentage / Decimal("100"))
         rows.append(PayrollLineTotals(
-            assignment_id=line.assignment_id, loss_of_pay=loss_of_pay, sunday_holidays=sundays,
+            assignment_id=line.assignment_id, loss_of_pay=loss_of_pay, sunday_holidays=sunday_holidays,
             paid_days=paid_days, per_day_salary=per_day, per_hour_salary=per_hour,
             leave_deduction=leave_deduction, overtime_amount=overtime_amount,
             effective_overtime_rate=overtime_rate, gross_wages=gross, esi_deduction=esi,

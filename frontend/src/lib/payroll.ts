@@ -42,6 +42,11 @@ export type PayrollPage = { items: PayrollSummary[]; total: number; page: number
 
 const ZERO = "0";
 
+export function isDhatuOrganicsCompany(name: string): boolean {
+  const normalized = name.toLocaleLowerCase("en-IN").replace(/[^a-z0-9]+/g, "");
+  return normalized === "donpl" || normalized.includes("dhatuorganics");
+}
+
 export function sundayDates(month: string): number[] {
   const [year, monthNumber] = month.split("-").map(Number);
   if (!year || monthNumber < 1 || monthNumber > 12) return [];
@@ -52,14 +57,15 @@ export function sundayDates(month: string): number[] {
 
 export function payrollRows(draft: PayrollDraft, _month = ""): PayrollRow[] {
   const saved = new Map(draft.payroll?.lines.map((line) => [line.assignment_id, line]) ?? []);
+  const monthlyRegisterEnabled = isDhatuOrganicsCompany(draft.company.name);
   return draft.employees.map((person) => {
     const line = saved.get(person.assignment_id);
-    const method = line?.calculation_method ?? person.salary_basis;
+    const method = monthlyRegisterEnabled ? line?.calculation_method ?? person.salary_basis : "Daily";
     return {
       ...(line ?? person), selected: draft.payroll ? !!line : person.status === "Active",
       calculation_method: method,
       worked_days: line?.worked_days ?? "",
-      daily_rate: line?.daily_rate ?? (method === "Daily" ? person.salary ?? "" : ZERO),
+      daily_rate: line?.daily_rate ?? (method === "Monthly" ? ZERO : person.salary_basis === "Daily" ? person.salary ?? "" : ""),
       base_salary: line?.base_salary ?? (method === "Monthly" ? person.salary ?? "" : ZERO),
       days_absent: line?.days_absent ?? ZERO,
       credit_leave: line?.credit_leave ?? ZERO,
