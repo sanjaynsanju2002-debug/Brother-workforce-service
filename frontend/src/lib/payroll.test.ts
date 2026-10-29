@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { firstPayrollIssue, payrollDeductionTotal, payrollRows, type PayrollDraft, type PayrollRow, type PayrollTotals } from "./payroll";
+import { firstPayrollIssue, payrollDeductionTotal, payrollEmployerContributionTotal, payrollRows, sundayDates, type PayrollDraft, type PayrollRow, type PayrollTotals } from "./payroll";
 
 function employee(id: string, updates: Partial<PayrollRow> = {}): PayrollRow {
   return {
     assignment_id: id, employee_id: `BWS-${id}`, full_name: `Employee ${id}`, role: "Operator", salary: "500.00", salary_basis: "Daily", status: "Active",
-    selected: true, worked_days: "26", daily_rate: "500.00", esi_percentage: "0.75", pf_percentage: "12", ...updates,
+    selected: true, calculation_method: "Daily", worked_days: "26", daily_rate: "500.00", base_salary: "0",
+    days_absent: "0", credit_leave: "0", government_holidays: "0", salary_advance: "0", penalty: "0", allowance: "0",
+    esi_percentage: "0.75", esi_employer_percentage: "3.25", pf_percentage: "12", pf_employer_percentage: "12",
+    overtime_hours: "0", overtime_rate: "0", ...updates,
   };
 }
 
@@ -42,14 +45,15 @@ describe("payroll validation with a single employee details panel", () => {
   });
 });
 
-it("prefills daily rates while leaving monthly salaries as a reference", () => {
+it("prefills daily rates and monthly salary register values from Company Workforce", () => {
   const people = [employee("daily"), employee("monthly", { salary_basis: "Monthly", salary: "15600.00" }), employee("completed", { status: "Completed" })];
   const draft: PayrollDraft = { company: { id: "company", name: "Company" }, employees: people, payroll: null };
   const rows = payrollRows(draft);
   expect(rows[0].daily_rate).toBe("500.00");
   expect(rows[0].worked_days).toBe("");
-  expect(rows[1].daily_rate).toBe("");
-  expect(rows[1].salary).toBe("15600.00");
+  expect(rows[1].daily_rate).toBe("0");
+  expect(rows[1].base_salary).toBe("15600.00");
+  expect(rows[1].calculation_method).toBe("Monthly");
   expect(rows[2].selected).toBe(false);
 });
 
@@ -58,4 +62,17 @@ it("combines the saved ESI and PF amounts exactly for the summary card", () => {
   expect(payrollDeductionTotal(totals)).toBe("5291.25");
   expect(payrollDeductionTotal({ ...totals, esi_deduction: "0.10", pf_deduction: "0.20" })).toBe("0.30");
   expect(payrollDeductionTotal({ ...totals, esi_deduction: "9999999999999.99", pf_deduction: "0.01" })).toBe("10000000000000.00");
+  expect(payrollEmployerContributionTotal({ ...totals, esi_employer_contribution: "455.00", pf_employer_contribution: "0.00" })).toBe("455.00");
+});
+
+it("lists every Sunday for the selected payroll month without timezone drift", () => {
+  expect(sundayDates("2026-09")).toEqual([6, 13, 20, 27]);
+  expect(sundayDates("2026-05")).toEqual([3, 10, 17, 24, 31]);
+});
+
+it("validates the monthly salary register fields", () => {
+  const monthly = employee("monthly", { calculation_method: "Monthly", salary_basis: "Monthly", base_salary: "15000", worked_days: "24", days_absent: "2", credit_leave: "0", government_holidays: "1", daily_rate: "0", overtime_rate: "0" });
+  expect(firstPayrollIssue([monthly], 30)).toBeUndefined();
+  expect(firstPayrollIssue([{ ...monthly, credit_leave: "3" }], 30)).toMatchObject({ field: "credit_leave" });
+  expect(firstPayrollIssue([{ ...monthly, base_salary: "0" }], 30)).toMatchObject({ field: "base_salary" });
 });

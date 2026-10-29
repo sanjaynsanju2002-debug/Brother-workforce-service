@@ -33,7 +33,7 @@ def record_model(doc: dict) -> Payroll:
 def employee_model(doc: dict) -> PayrollEmployee:
     return PayrollEmployee(
         assignment_id=doc["id"], employee_id=doc.get("employee_id"), full_name=doc["full_name"],
-        role=(doc.get("role") or "")[:150] or None, salary=doc.get("salary"),
+        role=(doc.get("role") or "")[:150] or None, start_date=doc.get("start_date"), salary=doc.get("salary"),
         salary_basis=doc.get("salary_basis", "Monthly"), status=doc.get("status", "Active"),
     )
 
@@ -94,11 +94,11 @@ async def list_payroll(company_id: str | None = Query(default=None, max_length=8
 @router.post("", response_model=Payroll)
 async def save_payroll(payload: PayrollSave):
     if not payload.lines or not any(line.worked_days > 0 for line in payload.lines):
-        raise HTTPException(422, "Select employees and enter worked days for at least one employee")
-    if any(line.worked_days > 0 and line.daily_rate == 0 for line in payload.lines):
+        raise HTTPException(422, "Select employees and enter days present for at least one employee")
+    if any(line.calculation_method == "Daily" and line.worked_days > 0 and line.daily_rate == 0 for line in payload.lines):
         raise HTTPException(422, "Enter a daily rate for every employee with worked days")
-    if any(line.overtime_hours > 0 and line.overtime_rate == 0 for line in payload.lines):
-        raise HTTPException(422, "Enter an hourly overtime rate for every employee with overtime")
+    if any(line.calculation_method == "Daily" and line.overtime_hours > 0 and line.overtime_rate == 0 for line in payload.lines):
+        raise HTTPException(422, "Enter an hourly overtime rate for every daily-wage employee with overtime")
     if payload.attendance_refs:
         from routers.operations import attendance_totals
         summary = await attendance_totals(payload.company_id, payload.month)

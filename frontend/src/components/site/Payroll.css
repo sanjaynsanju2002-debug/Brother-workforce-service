@@ -80,7 +80,7 @@
 
 @container payroll (min-width: 820px) {
   .payroll-ledger {
-    grid-template-columns: minmax(0, 1fr) 18rem;
+    grid-template-columns: minmax(0, 1fr) minmax(22rem, 27rem);
   }
 
   .payroll-detail-panel {

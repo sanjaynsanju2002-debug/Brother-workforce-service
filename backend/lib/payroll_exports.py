@@ -19,12 +19,144 @@ def month_label(month: str) -> str:
     return f"{calendar.month_name[int(month[5:])]} {month[:4]}"
 
 
+def export_monthly_register_xlsx(payroll: Payroll) -> bytes:
+    """Build the expanded monthly salary register used by the admin payroll screen."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+    from openpyxl.utils import get_column_letter
+
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "Payroll"
+    sheet.sheet_view.showGridLines = False
+    supplier = payroll.supplier
+    last_column = 31
+    last_letter = get_column_letter(last_column)
+    navy, orange, pale, blue = "0F2444", "C2410C", "E2E8F0", "DBEAFE"
+    thin = Side(style="thin", color=pale)
+
+    sheet.merge_cells(f"A1:{last_letter}1")
+    sheet["A1"] = supplier.name
+    sheet["A1"].font = Font(name="Arial", size=16, bold=True, color=navy)
+    sheet["A1"].alignment = Alignment(horizontal="left")
+    sheet.merge_cells(f"A2:{last_letter}2")
+    sheet["A2"] = supplier.address
+    sheet.merge_cells(f"A3:{last_letter}3")
+    sheet["A3"] = " | ".join(filter(None, (supplier.phone, supplier.email, supplier.website, f"GSTIN: {supplier.gstin}" if supplier.gstin else "")))
+    sheet.merge_cells(f"A5:{last_letter}5")
+    sheet["A5"] = f"SALARY REGISTER · {payroll.company_name} · {month_label(payroll.month)}"
+    sheet["A5"].font = Font(name="Arial", size=13, bold=True, color="FFFFFF")
+    sheet["A5"].fill = PatternFill("solid", fgColor=navy)
+    sheet["A5"].alignment = Alignment(horizontal="left", vertical="center")
+    sheet.row_dimensions[5].height = 25
+    sheet.merge_cells(f"A6:{last_letter}6")
+    sheet["A6"] = f"Worksite: {payroll.company_location or 'Not supplied'} | Sundays: {payroll.lines[0].sunday_holidays if payroll.lines else 0} | Employees: {len(payroll.lines)}"
+    sheet["A6"].font = Font(name="Arial", size=9, color="475569")
+
+    headers = [
+        "Sl. No.", "Employee ID", "Name", "Date of Joining", "Days Absent", "Credit Leave", "Loss of Pay (LOP)",
+        "Govt Holiday", "Sunday Holiday", "Days Present", "Paid Days", "Salary", "Salary Loan / Advance",
+        "Leave Deduction", "Penalty", "Allowance", "Salary Gross Amount", "Employee ESI %", "Employee ESI",
+        "Employer ESI %", "Employer ESI", "Employee PF %", "Employee PF", "Employer PF %", "Employer PF",
+        "OT / Extra Hours", "OT Hourly Rate", "OT / Extra Amount", "Salary Net Amount", "Per Hour Salary", "Per Day Salary",
+    ]
+    header_row = 8
+    for column, label in enumerate(headers, 1):
+        cell = sheet.cell(header_row, column, label)
+        cell.font = Font(name="Arial", size=8, bold=True, color="FFFFFF")
+        cell.fill = PatternFill("solid", fgColor=navy)
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        cell.border = Border(left=thin, right=thin, top=thin, bottom=thin)
+    sheet.row_dimensions[header_row].height = 48
+
+    start = header_row + 1
+    days = calendar.monthrange(int(payroll.month[:4]), int(payroll.month[5:]))[1]
+    for index, line in enumerate(payroll.lines, start):
+        monthly = line.calculation_method == "Monthly"
+        values = [
+            index - header_row, line.employee_id or "", line.full_name, line.start_date or "", line.days_absent if monthly else "",
+            line.credit_leave if monthly else "", line.loss_of_pay if monthly else "", line.government_holidays if monthly else "",
+            line.sunday_holidays if monthly else "", line.worked_days, line.paid_days, line.base_salary if monthly else "",
+            line.salary_advance if monthly else "", line.leave_deduction if monthly else "", line.penalty if monthly else "",
+            line.allowance if monthly else "", line.gross_wages, line.esi_percentage, line.esi_deduction,
+            line.esi_employer_percentage, line.esi_employer_contribution, line.pf_percentage, line.pf_deduction,
+            line.pf_employer_percentage, line.pf_employer_contribution, line.overtime_hours, line.effective_overtime_rate,
+            line.overtime_amount, line.payable, line.per_hour_salary, line.per_day_salary,
+        ]
+        for column, value in enumerate(values, 1):
+            cell = sheet.cell(index, column, float(value) if hasattr(value, "as_tuple") else value)
+            cell.font = Font(name="Arial", size=9, color=navy)
+            cell.alignment = Alignment(horizontal="left" if column in (2, 3, 4) else "center", vertical="center", wrap_text=column == 3)
+            cell.border = Border(bottom=thin)
+            if column >= 12 and column not in (18, 20, 22, 24, 26):
+                cell.number_format = '#,##0.00;[Red](#,##0.00);-'
+        if monthly:
+            sheet.cell(index, 7, f"=MAX(0,E{index}-F{index})")
+            sheet.cell(index, 11, f"=F{index}+H{index}+I{index}+J{index}")
+            sheet.cell(index, 14, f"=ROUND(AE{index}*G{index},2)")
+            sheet.cell(index, 17, f"=ROUND(L{index}-N{index}-M{index}-O{index}+P{index},2)")
+            sheet.cell(index, 19, f"=ROUND(Q{index}*R{index}/100,2)")
+            sheet.cell(index, 21, f"=ROUND(Q{index}*T{index}/100,2)")
+            sheet.cell(index, 23, f"=ROUND(Q{index}*V{index}/100,2)")
+            sheet.cell(index, 25, f"=ROUND(Q{index}*X{index}/100,2)")
+            sheet.cell(index, 28, f"=ROUND(Z{index}*AA{index},2)")
+            sheet.cell(index, 29, f"=ROUND(Q{index}-S{index}-W{index}+AB{index},2)")
+            sheet.cell(index, 30, f"=ROUND(AE{index}/9,2)")
+            sheet.cell(index, 31, f"=ROUND(L{index}/{days},2)")
+        else:
+            sheet.cell(index, 17, f"=ROUND(J{index}*AE{index}+AB{index},2)")
+            sheet.cell(index, 19, f"=ROUND(Q{index}*R{index}/100,2)")
+            sheet.cell(index, 21, f"=ROUND(Q{index}*T{index}/100,2)")
+            sheet.cell(index, 23, f"=ROUND(Q{index}*V{index}/100,2)")
+            sheet.cell(index, 25, f"=ROUND(Q{index}*X{index}/100,2)")
+            sheet.cell(index, 28, f"=ROUND(Z{index}*AA{index},2)")
+            sheet.cell(index, 29, f"=ROUND(Q{index}-S{index}-W{index},2)")
+            sheet.cell(index, 30, f"=ROUND(AE{index}/9,2)")
+        sheet.row_dimensions[index].height = 25
+
+    total_row = start + len(payroll.lines)
+    sheet.merge_cells(start_row=total_row, start_column=1, end_row=total_row, end_column=4)
+    sheet.cell(total_row, 1, f"TOTAL ({len(payroll.lines)} employees)")
+    for column in range(1, last_column + 1):
+        cell = sheet.cell(total_row, column)
+        cell.fill = PatternFill("solid", fgColor="FFEDD5")
+        cell.font = Font(name="Arial", size=9, bold=True, color=navy)
+        cell.border = Border(top=Side(style="medium", color=orange))
+    for column in (10, 11, 13, 14, 15, 16, 17, 19, 21, 23, 25, 26, 28, 29):
+        letter = get_column_letter(column)
+        sheet.cell(total_row, column, f"=SUM({letter}{start}:{letter}{total_row - 1})")
+        sheet.cell(total_row, column).number_format = '#,##0.00;[Red](#,##0.00);-'
+
+    widths = {1: 8, 2: 14, 3: 24, 4: 14}
+    for column in range(1, last_column + 1):
+        sheet.column_dimensions[get_column_letter(column)].width = widths.get(column, 13)
+    sheet.freeze_panes = "E9"
+    sheet.auto_filter.ref = f"A8:{last_letter}{total_row - 1}"
+    sheet.print_title_rows = "1:8"
+    sheet.print_area = f"A1:{last_letter}{total_row}"
+    sheet.page_setup.orientation = "landscape"
+    sheet.page_setup.paperSize = sheet.PAPERSIZE_A3
+    sheet.page_setup.fitToWidth = 1
+    sheet.page_setup.fitToHeight = 0
+    sheet.sheet_properties.pageSetUpPr.fitToPage = True
+    sheet.oddFooter.left.text = f"{supplier.name} | Payroll {payroll.month}"
+    sheet.oddFooter.right.text = "Page &P of &N"
+    workbook.calculation.fullCalcOnLoad = True
+    workbook.calculation.forceFullCalc = True
+    workbook.calculation.calcMode = "auto"
+    output = BytesIO()
+    workbook.save(output)
+    return output.getvalue()
+
+
 def export_payroll_xlsx(payroll: Payroll) -> bytes:
     """Fill the Artifact Tool template, preserving its styles and embedded logo.
 
     Each formula has a saved-value cache so Excel and other viewers display the
     same amounts immediately, before their first recalculation.
     """
+    if any(line.calculation_method == "Monthly" for line in payroll.lines):
+        return export_monthly_register_xlsx(payroll)
     with ZipFile(ASSETS / "payroll-template.xlsx") as source:
         sheet = ET.fromstring(source.read("xl/worksheets/sheet1.xml"))
         data = sheet.find(f"{{{NS}}}sheetData")
@@ -176,7 +308,81 @@ def export_payroll_xlsx(payroll: Payroll) -> bytes:
     return output.getvalue()
 
 
+def export_monthly_register_pdf(payroll: Payroll) -> bytes:
+    import reportlab
+    from reportlab.lib import colors
+    from reportlab.lib.enums import TA_CENTER, TA_LEFT
+    from reportlab.lib.pagesizes import A3, landscape
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+    from reportlab.platypus import Image, LongTable, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
+    fonts = Path(reportlab.__file__).parent / "fonts"
+    for name, filename in (("PayrollSans", "Vera.ttf"), ("PayrollBold", "VeraBd.ttf")):
+        if name not in pdfmetrics.getRegisteredFontNames():
+            pdfmetrics.registerFont(TTFont(name, str(fonts / filename)))
+    navy, orange, muted = (colors.HexColor(value) for value in ("#0F2444", "#C2410C", "#64748B"))
+    output = BytesIO()
+    page = landscape(A3)
+    doc = SimpleDocTemplate(output, pagesize=page, leftMargin=20, rightMargin=20, topMargin=28, bottomMargin=28,
+                            title=f"Salary register - {payroll.company_name} - {payroll.month}", author=payroll.supplier.name)
+    body = ParagraphStyle("RegisterBody", fontName="PayrollSans", fontSize=5.5, leading=7, textColor=navy, alignment=TA_LEFT)
+    center = ParagraphStyle("RegisterCenter", parent=body, alignment=TA_CENTER)
+    bold = ParagraphStyle("RegisterBold", parent=body, fontName="PayrollBold")
+    heading = ParagraphStyle("RegisterHeading", parent=bold, fontSize=13, leading=16)
+    tablehead = ParagraphStyle("RegisterHead", parent=center, fontName="PayrollBold", textColor=colors.white)
+
+    def p(value, style=body):
+        return Paragraph(escape(str(value)).replace("\n", "<br/>"), style)
+
+    def money(value):
+        return f"{value:,.2f}"
+
+    supplier, totals = payroll.supplier, payroll.totals
+    with ZipFile(ASSETS / "invoice-template.xlsx") as archive:
+        logo = Image(BytesIO(archive.read("xl/media/image.png")), width=82, height=56)
+    brand = [p(supplier.name, heading), p(supplier.address), p(" | ".join(filter(None, (supplier.phone, supplier.email, supplier.website))), body)]
+    header = Table([[logo, brand]], colWidths=[95, doc.width - 95])
+    header.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 0), ("BOTTOMPADDING", (0, 0), (-1, -1), 6)]))
+    story = [header, p("SALARY REGISTER", heading), p(f"{payroll.company_name} | {month_label(payroll.month)} | {payroll.company_location or 'Worksite not supplied'}", bold), Spacer(1, 8)]
+    summary = Table([[p(label, body) for label in ("Employees", "Gross salary (INR)", "Employee ESI + PF (INR)", "Employer ESI + PF (INR)", "Net payable (INR)")],
+                     [p(value, bold) for value in (totals.employee_count, money(totals.gross_wages), money(totals.esi_deduction + totals.pf_deduction), money(totals.esi_employer_contribution + totals.pf_employer_contribution), money(totals.payable))]],
+                    colWidths=[doc.width / 5] * 5)
+    summary.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#F8FAFC")), ("LINEABOVE", (0, 0), (-1, 0), .6, orange), ("TOPPADDING", (0, 0), (-1, -1), 4), ("BOTTOMPADDING", (0, 0), (-1, -1), 4)]))
+    story.extend([summary, Spacer(1, 8)])
+    labels = ("No.", "Employee ID", "Name", "Joined", "Absent", "Credit", "LOP", "Govt", "Sun", "Present", "Paid", "Salary", "Loan / advance", "Leave deduction", "Penalty", "Allowance", "Gross", "Emp ESI", "Er ESI", "Emp PF", "Er PF", "OT amount", "Net")
+    rows = [[p(label, tablehead) for label in labels]]
+    for number, line in enumerate(payroll.lines, 1):
+        rows.append([p(number, center), p(line.employee_id or "—"), p(line.full_name), p(line.start_date or "—"),
+                     p(f"{line.days_absent:g}", center), p(f"{line.credit_leave:g}", center), p(f"{line.loss_of_pay:g}", center),
+                     p(f"{line.government_holidays:g}", center), p(line.sunday_holidays, center), p(f"{line.worked_days:g}", center),
+                     p(f"{line.paid_days:g}", center), p(money(line.base_salary)), p(money(line.salary_advance)), p(money(line.leave_deduction)),
+                     p(money(line.penalty)), p(money(line.allowance)), p(money(line.gross_wages)), p(money(line.esi_deduction)),
+                     p(money(line.esi_employer_contribution)), p(money(line.pf_deduction)), p(money(line.pf_employer_contribution)),
+                     p(money(line.overtime_amount)), p(money(line.payable), bold)])
+    rows.append([p("TOTAL", bold), "", "", "", "", "", "", "", "", p(f"{totals.worked_days:g}", center), p(f"{totals.paid_days:g}", center), "", "", p(money(totals.leave_deduction), bold), "", "", p(money(totals.gross_wages), bold), p(money(totals.esi_deduction), bold), p(money(totals.esi_employer_contribution), bold), p(money(totals.pf_deduction), bold), p(money(totals.pf_employer_contribution), bold), p(money(totals.overtime_amount), bold), p(money(totals.payable), bold)])
+    weights = [.025, .055, .09, .05, .035, .035, .03, .03, .025, .035, .035, .055, .06, .06, .045, .045, .06, .05, .05, .05, .05, .05, .06]
+    table = LongTable(rows, colWidths=[doc.width * weight / sum(weights) for weight in weights], repeatRows=1, hAlign="LEFT")
+    table.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, 0), navy), ("ROWBACKGROUNDS", (0, 1), (-1, -2), [colors.white, colors.HexColor("#F8FAFC")]),
+                               ("BACKGROUND", (0, -1), (-1, -1), colors.HexColor("#FFEDD5")), ("SPAN", (0, -1), (3, -1)),
+                               ("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("LINEBELOW", (0, 1), (-1, -1), .25, colors.HexColor("#E2E8F0")),
+                               ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+                               ("LEFTPADDING", (0, 0), (-1, -1), 2), ("RIGHTPADDING", (0, 0), (-1, -1), 2)]))
+    story.extend([table, Spacer(1, 7), p("LOP = absent days - credit leave. Paid days = present + credit leave + government holidays + Sundays. Net = gross - employee ESI - employee PF + overtime amount.", body)])
+
+    def footer(canvas, document):
+        canvas.saveState(); canvas.setFont("PayrollSans", 6); canvas.setFillColor(muted)
+        canvas.drawString(20, 14, f"{supplier.name[:65]} | Payroll {payroll.month}")
+        canvas.drawRightString(page[0] - 20, 14, f"Page {document.page}"); canvas.restoreState()
+
+    doc.build(story, onFirstPage=footer, onLaterPages=footer)
+    return output.getvalue()
+
+
 def export_payroll_pdf(payroll: Payroll) -> bytes:
+    if any(line.calculation_method == "Monthly" for line in payroll.lines):
+        return export_monthly_register_pdf(payroll)
     import reportlab
     from reportlab.lib import colors
     from reportlab.lib.enums import TA_CENTER, TA_LEFT

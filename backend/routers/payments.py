@@ -191,14 +191,25 @@ async def download_payslip(payroll_id: str, assignment_id: str):
     paid = salary_paid(doc, assignment_id)
     entries = [t for t in doc.get("salary_payments", []) if t["assignment_id"] == assignment_id and not t.get("voided_at")]
     lines = [("Company", doc["company_name"]), ("Payroll month", doc["month"]), ("Employee", line["full_name"]),
-             ("Employee ID", line.get("employee_id") or "Not supplied"), ("Role", line.get("role") or "Not supplied"),
-             ("Worked days", line["worked_days"]), ("Daily rate (INR)", line["daily_rate"]),
-             ("Overtime hours / hourly rate (INR)", f'{line.get("overtime_hours", "0")} / {line.get("overtime_rate", "0")}'),
-             ("Gross wages (INR)", line["gross_wages"]), ("ESI deduction (INR)", line["esi_deduction"]),
-             ("PF deduction (INR)", line["pf_deduction"]), ("Net payable (INR)", line["payable"]),
+             ("Employee ID", line.get("employee_id") or "Not supplied"), ("Role", line.get("role") or "Not supplied")]
+    if line.get("calculation_method") == "Monthly":
+        lines.extend([("Days present", line["worked_days"]), ("Days absent", line.get("days_absent", "0")),
+                      ("Credit leave", line.get("credit_leave", "0")), ("Loss of pay days", line.get("loss_of_pay", "0")),
+                      ("Government holidays", line.get("government_holidays", "0")), ("Sunday holidays", line.get("sunday_holidays", "0")),
+                      ("Paid days", line.get("paid_days", "0")), ("Monthly salary (INR)", line.get("base_salary", "0")),
+                      ("Per-day salary (INR)", line.get("per_day_salary", "0")), ("Leave deduction (INR)", line.get("leave_deduction", "0")),
+                      ("Salary loan / advance (INR)", line.get("salary_advance", "0")), ("Penalty (INR)", line.get("penalty", "0")),
+                      ("Allowance (INR)", line.get("allowance", "0"))])
+    else:
+        lines.extend([("Worked days", line["worked_days"]), ("Daily rate (INR)", line["daily_rate"])])
+    lines.extend([("Overtime hours / hourly rate (INR)", f'{line.get("overtime_hours", "0")} / {line.get("effective_overtime_rate", line.get("overtime_rate", "0"))}'),
+             ("Overtime amount (INR)", line.get("overtime_amount", "0")), ("Gross salary (INR)", line["gross_wages"]),
+             ("Employee ESI (INR)", line["esi_deduction"]), ("Employer ESI (INR)", line.get("esi_employer_contribution", "0")),
+             ("Employee PF (INR)", line["pf_deduction"]), ("Employer PF (INR)", line.get("pf_employer_contribution", "0")),
+             ("Net payable (INR)", line["payable"]),
              ("Advances paid (INR)", money(sum((amount(t["amount"]) for t in entries if t["kind"] == "Advance"), Decimal("0")))),
              ("Total paid including advances (INR)", money(paid)), ("Balance (INR)", money(amount(line["payable"]) - paid)),
-             ("Salary paid by", doc.get("cost_responsibility", "Agency")), ("Register revision", doc["revision"])]
+             ("Salary paid by", doc.get("cost_responsibility", "Agency")), ("Register revision", doc["revision"])])
     for entry in entries:
         lines.append((entry["payment_date"] + " · " + entry["kind"], f'INR {entry["amount"]} · {entry["method"]} · {entry.get("reference") or "No reference"}'))
     content = await run_in_threadpool(pdf_document, "Employee payslip", lines, doc.get("supplier", {}).get("name", "Brothers Workforce Solutions"))

@@ -11,6 +11,7 @@ from zipfile import ZipFile
 
 import httpx
 import pytest
+from openpyxl import load_workbook
 from pydantic import ValidationError
 from pypdf import PdfReader
 from pymongo.errors import DuplicateKeyError
@@ -20,7 +21,7 @@ os.environ.setdefault("DB_NAME", "bws_payroll_test")
 
 from lib import auth
 from lib.invoices import InvoiceProfile
-from lib.payroll import Payroll, PayrollInput, PayrollLine, calculate_payroll
+from lib.payroll import Payroll, PayrollInput, PayrollLine, calculate_payroll, sunday_count
 from lib.payroll_exports import export_payroll_pdf, export_payroll_xlsx
 from routers import assignments, payroll
 from server import app
@@ -55,6 +56,49 @@ def test_gross_esi_pf_payable_and_fractional_days_use_decimal_arithmetic():
     assert totals.esi_deduction == Decimal("212.25")
     assert totals.pf_deduction == Decimal("3396.00")
     assert totals.payable == Decimal("24691.75")
+
+
+def test_monthly_register_matches_salary_sheet_and_adds_sundays_from_selected_month():
+    data = {
+        "company_id": "company-a", "month": "2026-09", "lines": [{
+            "assignment_id": "person-a", "calculation_method": "Monthly", "worked_days": "24",
+            "base_salary": "15000", "days_absent": "2", "credit_leave": "0",
+            "government_holidays": "1", "salary_advance": "0", "penalty": "0", "allowance": "0",
+            "overtime_hours": "10", "overtime_rate": "56.60", "esi_percentage": "0.75",
+            "esi_employer_percentage": "3.25", "pf_percentage": "0", "pf_employer_percentage": "0",
+        }],
+    }
+    rows, totals = calculate_payroll(PayrollInput(**data))
+    row = rows[0]
+    assert sunday_count("2026-09") == row.sunday_holidays == 4
+    assert row.loss_of_pay == Decimal("2.00")
+    assert row.paid_days == Decimal("29.00")
+    assert row.per_day_salary == Decimal("500.00")
+    assert row.per_hour_salary == Decimal("55.56")
+    assert row.leave_deduction == Decimal("1000.00")
+    assert row.gross_wages == Decimal("14000.00")
+    assert row.esi_deduction == Decimal("105.00")
+    assert row.esi_employer_contribution == Decimal("455.00")
+    assert row.overtime_amount == Decimal("566.00")
+    assert row.payable == Decimal("14461.00")
+    assert totals.paid_days == Decimal("29.00")
+
+
+def test_monthly_register_uses_automatic_per_hour_rate_when_overtime_rate_is_zero():
+    value = PayrollInput(**{
+        "company_id": "company-a", "month": "2026-10", "lines": [{
+            "assignment_id": "person-a", "calculation_method": "Monthly", "worked_days": "23",
+            "base_salary": "27900", "days_absent": "1", "credit_leave": "1",
+            "government_holidays": "1", "overtime_hours": "2", "overtime_rate": "0",
+        }],
+    })
+    row = calculate_payroll(value)[0][0]
+    assert row.sunday_holidays == 4
+    assert row.loss_of_pay == 0
+    assert row.per_day_salary == Decimal("900.00")
+    assert row.effective_overtime_rate == Decimal("100.00")
+    assert row.overtime_amount == Decimal("200.00")
+    assert row.payable == Decimal("28100.00")
 
 
 def test_each_deduction_rounds_to_paise_independently_and_zero_days_pay_zero():
@@ -155,6 +199,27 @@ async def test_admin_access_company_isolation_and_input_validation(monkeypatch):
             assert (await client.post("/api/admin/payroll", json={**payload(), "lines": lines})).status_code == 422
         preview = (await client.post("/api/admin/payroll/preview", json=payload())).json()
         assert preview["totals"]["payable"] == "24691.75"
+
+
+@pytest.mark.asyncio
+async def test_monthly_register_saves_automatic_sundays_and_employer_contributions(monkeypatch):
+    fake_db(monkeypatch)
+    body = {
+        "company_id": "company-a", "month": "2026-09", "lines": [{
+            "assignment_id": "person-b", "calculation_method": "Monthly", "worked_days": "21", "base_salary": "14400",
+            "days_absent": "4", "credit_leave": "0", "government_holidays": "1", "salary_advance": "0",
+            "penalty": "106", "allowance": "0", "overtime_hours": "9.26", "overtime_rate": "53.35",
+            "esi_percentage": "0.75", "esi_employer_percentage": "3.25", "pf_percentage": "0", "pf_employer_percentage": "0",
+        }],
+    }
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="https://brothersworkforcesolutions.in") as client:
+        await client.post("/api/admin/login", json={"pin": "123456"})
+        saved = await client.post("/api/admin/payroll", json=body)
+        assert saved.status_code == 200, saved.text
+        line = saved.json()["lines"][0]
+        assert line["sunday_holidays"] == 4 and line["paid_days"] == "26.00"
+        assert line["loss_of_pay"] == "4.00" and line["leave_deduction"] == "1920.00"
+        assert line["gross_wages"] == "12374.00" and line["esi_employer_contribution"] == "402.16"
 
 
 @pytest.mark.asyncio
@@ -363,6 +428,33 @@ def test_excel_preserves_logo_print_settings_text_ids_and_dynamic_formulas(count
         workbook = ET.fromstring(archive.read("xl/workbook.xml"))
         assert workbook.find("s:definedNames/s:definedName[@name='_xlnm.Print_Area']", ns).text.endswith(f"$K${count + 19}")
         assert "Employee name" not in " ".join(cell.find("s:is/s:t", ns).text or "" for cell in cells.values() if cell.find("s:is/s:t", ns) is not None and cell.get("r") != "C15")
+
+
+def test_monthly_register_download_contains_sheet_columns_sundays_and_formulas():
+    value = PayrollInput(**{
+        "company_id": "company-a", "month": "2026-09", "lines": [{
+            "assignment_id": "person-a", "calculation_method": "Monthly", "worked_days": "24", "base_salary": "15000",
+            "days_absent": "2", "credit_leave": "0", "government_holidays": "1", "overtime_hours": "10",
+            "overtime_rate": "56.60", "esi_percentage": "0.75", "esi_employer_percentage": "3.25",
+            "pf_percentage": "0", "pf_employer_percentage": "0",
+        }],
+    })
+    amounts, totals = calculate_payroll(value)
+    line = PayrollLine(**value.lines[0].model_dump(), employee_id="0001", full_name="Shivaprasad", start_date="2022-07-27", **amounts[0].model_dump(exclude={"assignment_id"}))
+    now = datetime.now(timezone.utc)
+    saved = Payroll(id="monthly", **value.model_dump(exclude={"lines"}), lines=[line], company_name="DONPL", company_location="Mysore", supplier=InvoiceProfile(), totals=totals, revision=1, created_at=now, updated_at=now)
+    book = load_workbook(BytesIO(export_payroll_xlsx(saved)), data_only=False)
+    sheet = book["Payroll"]
+    assert sheet["I8"].value == "Sunday Holiday"
+    assert sheet["I9"].value == 4
+    assert sheet["G9"].value == "=MAX(0,E9-F9)"
+    assert sheet["K9"].value == "=F9+H9+I9+J9"
+    assert sheet["AC9"].value == "=ROUND(Q9-S9-W9+AB9,2)"
+    assert sheet["AE9"].value == "=ROUND(L9/30,2)"
+    assert sheet.freeze_panes == "E9"
+    text = " ".join(page.extract_text() for page in PdfReader(BytesIO(export_payroll_pdf(saved))).pages)
+    for expected in ("SALARY REGISTER", "Shivaprasad", "Sunday", "14,461.00"):
+        assert expected in text
 
 
 def test_pdf_contains_branding_separate_deductions_and_repeated_headers_on_later_pages():

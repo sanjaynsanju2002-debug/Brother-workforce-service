@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, ArrowRight, ChevronDown, Download, FileSpreadsheet, Loader2, RotateCcw, Save, Users } from "lucide-react";
+import { ArrowLeft, ArrowRight, CalendarDays, ChevronDown, Download, FileSpreadsheet, Loader2, RotateCcw, Save, Users } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { apiGet, apiPost } from "@/lib/api";
 import { formatIndianDate } from "@/lib/calendarDate";
 import { monthLabel, rupees } from "@/lib/finance";
-import { downloadPayroll, firstPayrollIssue, payrollDeductionTotal, payrollError, payrollRows, type PayrollAmounts, type PayrollDraft, type PayrollInput, type PayrollIssue, type PayrollRecord, type PayrollRow, type PayrollTotals, type PayrollValueField } from "@/lib/payroll";
+import { downloadPayroll, firstPayrollIssue, payrollDeductionTotal, payrollEmployerContributionTotal, payrollError, payrollRows, sundayDates, type PayrollAmounts, type PayrollDraft, type PayrollInput, type PayrollIssue, type PayrollRecord, type PayrollRow, type PayrollTotals, type PayrollValueField } from "@/lib/payroll";
 
 import { OPS, downloadPrivate, operationError, type AttendanceSummary } from "@/lib/operations";
 
@@ -28,7 +28,7 @@ export default function PayrollEditor({ draft, month, deleting, onDirty, onBusy,
   const qc = useQueryClient();
   const register = useRef<HTMLDivElement>(null);
   const panel = useRef<HTMLElement>(null);
-  const [rows, setRows] = useState(() => payrollRows(draft));
+  const [rows, setRows] = useState(() => payrollRows(draft, month));
   const [activeId, setActiveId] = useState(() => rows.find((row) => row.selected)?.assignment_id ?? rows[0]?.assignment_id ?? "");
   const [saved, setSaved] = useState(draft.payroll);
   const [notes, setNotes] = useState(draft.payroll?.notes ?? "");
@@ -37,13 +37,19 @@ export default function PayrollEditor({ draft, month, deleting, onDirty, onBusy,
   const [responsibility, setResponsibility] = useState<"Agency" | "Client">(draft.payroll?.cost_responsibility ?? "Agency");
   const [problem, setProblem] = useState("");
   const [issue, setIssue] = useState<PayrollIssue>();
-  const [bulk, setBulk] = useState({ worked_days: "", daily_rate: "", esi_percentage: "", pf_percentage: "" });
+  const [bulk, setBulk] = useState({ worked_days: "", daily_rate: "", government_holidays: "", esi_percentage: "", esi_employer_percentage: "", pf_percentage: "", pf_employer_percentage: "" });
   const monthDays = new Date(Number(month.slice(0, 4)), Number(month.slice(5)), 0).getDate();
+  const sundays = sundayDates(month);
   const payload = useMemo<PayrollInput>(() => ({
     company_id: draft.company.id, month, notes, cost_responsibility: responsibility, attendance_refs: attendanceRefs,
     lines: rows.filter((row) => row.selected).map((row) => ({
-      assignment_id: row.assignment_id, worked_days: row.worked_days || "0", daily_rate: row.daily_rate || "0",
-      esi_percentage: row.esi_percentage || "0", pf_percentage: row.pf_percentage || "0", overtime_hours: row.overtime_hours || "0", overtime_rate: row.overtime_rate || "0",
+      assignment_id: row.assignment_id, calculation_method: row.calculation_method,
+      worked_days: row.worked_days || "0", daily_rate: row.daily_rate || "0", base_salary: row.base_salary || "0",
+      days_absent: row.days_absent || "0", credit_leave: row.credit_leave || "0", government_holidays: row.government_holidays || "0",
+      salary_advance: row.salary_advance || "0", penalty: row.penalty || "0", allowance: row.allowance || "0",
+      esi_percentage: row.esi_percentage || "0", esi_employer_percentage: row.esi_employer_percentage || "0",
+      pf_percentage: row.pf_percentage || "0", pf_employer_percentage: row.pf_employer_percentage || "0",
+      overtime_hours: row.overtime_hours || "0", overtime_rate: row.overtime_rate || "0",
     })),
   }), [draft.company.id, month, notes, rows, responsibility, attendanceRefs]);
   const [previewInput, setPreviewInput] = useState(payload);
@@ -132,7 +138,7 @@ export default function PayrollEditor({ draft, month, deleting, onDirty, onBusy,
     const values = Object.entries(bulk).filter(([, value]) => value !== "");
     if (linkedAttendance && bulk.worked_days) { toast.error("Choose manual attendance before changing imported worked days."); return; }
     for (const [field, value] of values) {
-      const amount = Number(value), maximum = field === "worked_days" ? monthDays : field === "daily_rate" ? 1_000_000_000 : 100;
+      const amount = Number(value), maximum = field === "worked_days" || field === "government_holidays" ? monthDays : field === "daily_rate" ? 1_000_000_000 : 100;
       if (!Number.isFinite(amount) || amount < 0 || amount > maximum || !/^(?:\d+|\d*\.\d{1,2})$/.test(value)) {
         toast.error(`Enter a valid ${field.replaceAll("_", " ")} between 0 and ${maximum}`); return;
       }
@@ -159,13 +165,17 @@ export default function PayrollEditor({ draft, month, deleting, onDirty, onBusy,
 
         <div className="space-y-4 rounded-xl border border-slate-200 bg-white p-4">
           <div className="grid items-end gap-4 sm:grid-cols-2"><div><Label htmlFor="payroll-responsibility" className="mb-2 block">Who pays these salaries?</Label><select id="payroll-responsibility" className={selectClass} value={responsibility} onChange={(e) => { setResponsibility(e.target.value as "Agency" | "Client"); change(); }}><option value="Agency">Agency pays salaries</option><option value="Client">Client pays directly (reference payroll)</option></select></div><Button type="button" variant="outline" disabled={locked || !rows.length} onClick={() => attendanceImport.mutate()}>Import payroll-ready attendance</Button></div>
-          {linkedAttendance ? <div className="space-y-2 text-xs text-slate-600"><p>Linked to {linkedAttendance} payroll-ready attendance dates. Days and overtime hours are locked to those records.</p><details><summary className="cursor-pointer">Review covered dates</summary><p className="mt-2">{coverage.isPending ? "Loading covered dates…" : coverage.isError ? "Could not load dates. Import attendance again to review." : coverage.data?.sheets.filter((s) => s.id in attendanceRefs).map((s) => formatIndianDate(s.date)).join(", ") || "Attendance records changed. Import attendance again."}</p><p className="mt-2">References are checked again when payroll is saved. Import again after attendance changes.</p></details><Button type="button" variant="outline" size="sm" onClick={() => { setAttendanceRefs({}); change(); }}>Use manual attendance</Button></div> : <p className="text-xs text-slate-500">Manual worked days. Import owner-approved days and completed employee check-outs to fill days and overtime hours. Enter the hourly overtime rate yourself. Client-paid registers are excluded from agency salary balances and company payroll costs.</p>}
+          {linkedAttendance ? <div className="space-y-2 text-xs text-slate-600"><p>Linked to {linkedAttendance} payroll-ready attendance dates. Days present and overtime hours are locked to those records.</p><details><summary className="cursor-pointer">Review covered dates</summary><p className="mt-2">{coverage.isPending ? "Loading covered dates…" : coverage.isError ? "Could not load dates. Import attendance again to review." : coverage.data?.sheets.filter((s) => s.id in attendanceRefs).map((s) => formatIndianDate(s.date)).join(", ") || "Attendance records changed. Import attendance again."}</p><p className="mt-2">References are checked again when payroll is saved. Import again after attendance changes.</p></details><Button type="button" variant="outline" size="sm" onClick={() => { setAttendanceRefs({}); change(); }}>Use manual attendance</Button></div> : <p className="text-xs text-slate-500">Manual attendance. Import owner-approved days and completed employee check-outs to fill days present and overtime hours. Client-paid registers are excluded from agency salary balances and company payroll costs.</p>}
+        </div>
+
+        <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950" data-testid="payroll-sundays">
+          <div className="flex items-start gap-3"><CalendarDays className="mt-0.5 h-5 w-5 shrink-0" /><div><p className="font-semibold">Sunday holidays: {sundays.length}</p><p className="mt-1 text-xs leading-relaxed text-blue-800">{sundays.map((day) => `${String(day).padStart(2, "0")}/${month.slice(5, 7)}/${month.slice(0, 4)}`).join(", ")} · Automatically included in paid days for monthly-salary employees.</p></div></div>
         </div>
 
         <div className="payroll-metrics" aria-live="polite">
           <Metric label="Employees" value={String(selected)} testId="payroll-employee-count" />
           <Metric label="Gross wages" value={totals ? rupees(totals.gross_wages) : "—"} testId="payroll-total-0" />
-          <Metric label="ESI + PF deductions" value={totals ? rupees(payrollDeductionTotal(totals)) : "—"} testId="payroll-total-deductions" />
+          <Metric label="Employee ESI + PF" value={totals ? rupees(payrollDeductionTotal(totals)) : "—"} testId="payroll-total-deductions" />
           <Metric label="Total payable" value={totals ? rupees(totals.payable) : "—"} testId="payroll-total-3" primary />
         </div>
 
@@ -185,7 +195,7 @@ export default function PayrollEditor({ draft, month, deleting, onDirty, onBusy,
                 <colgroup><col style={{ width: "42%" }} /><col style={{ width: "12%" }} /><col style={{ width: "23%" }} /><col style={{ width: "23%" }} /></colgroup>
                 <thead><tr>
                   <th scope="col">Employee</th>
-                  <th scope="col" className="payroll-days-cell">Days</th><th scope="col">Gross</th><th scope="col">Payable</th>
+                  <th scope="col" className="payroll-days-cell">Paid days</th><th scope="col">Gross</th><th scope="col">Net</th>
                 </tr></thead>
                 <tbody>{rows.map((row) => {
                   const result = calculated.get(row.assignment_id);
@@ -198,14 +208,14 @@ export default function PayrollEditor({ draft, month, deleting, onDirty, onBusy,
                         {!row.selected && <p className="mt-1 text-xs font-normal text-slate-500">Not included</p>}
                       </div>
                     </div></th>
-                    <td className="payroll-days-cell" data-label="Worked days">{row.worked_days || "—"}</td>
-                    <td data-label="Gross wages">{result ? rupees(result.gross_wages) : "—"}</td>
-                    <td className="payroll-payable-cell" data-label="Payable">{result ? rupees(result.payable) : "—"}</td>
+                    <td className="payroll-days-cell" data-label="Paid days">{result?.paid_days || row.worked_days || "—"}</td>
+                    <td data-label="Gross salary">{result ? rupees(result.gross_wages) : "—"}</td>
+                    <td className="payroll-payable-cell" data-label="Net payable">{result ? rupees(result.payable) : "—"}</td>
                   </tr>;
                 })}</tbody>
-                <tfoot><tr><th scope="row">Total · {selected} employees</th><td className="payroll-days-cell" data-label="Worked days">{totals?.worked_days ?? "—"}</td><td data-label="Gross wages">{totals ? rupees(totals.gross_wages) : "—"}</td><td className="payroll-payable-cell" data-label="Payable">{totals ? rupees(totals.payable) : "—"}</td></tr></tfoot>
+                <tfoot><tr><th scope="row">Total · {selected} employees</th><td className="payroll-days-cell" data-label="Paid days">{totals?.paid_days ?? totals?.worked_days ?? "—"}</td><td data-label="Gross salary">{totals ? rupees(totals.gross_wages) : "—"}</td><td className="payroll-payable-cell" data-label="Net payable">{totals ? rupees(totals.payable) : "—"}</td></tr></tfoot>
               </table>}
-            {rows.length > 0 && <div className="flex flex-wrap gap-x-4 gap-y-1 border-t border-slate-200 px-4 py-3 text-xs text-slate-500"><span>ESI {totals ? rupees(totals.esi_deduction) : "—"}</span><span>PF {totals ? rupees(totals.pf_deduction) : "—"}</span></div>}
+            {rows.length > 0 && <div className="flex flex-wrap gap-x-4 gap-y-1 border-t border-slate-200 px-4 py-3 text-xs text-slate-500"><span>Employee ESI {totals ? rupees(totals.esi_deduction) : "—"}</span><span>Employee PF {totals ? rupees(totals.pf_deduction) : "—"}</span><span>Employer ESI + PF {totals ? rupees(payrollEmployerContributionTotal(totals)) : "—"}</span></div>}
           </div>
 
           <section ref={panel} className="payroll-detail-panel min-w-0 rounded-xl border border-slate-200 bg-white p-5" aria-label="Employee payroll details" data-testid="payroll-detail-panel">
@@ -215,12 +225,24 @@ export default function PayrollEditor({ draft, month, deleting, onDirty, onBusy,
               <p className="mt-1 break-words text-xs text-slate-500">{active.employee_id || "No employee ID"}{active.role ? ` · ${active.role}` : ""}</p>
               <p className="mt-2 text-xs leading-relaxed text-slate-500">{active.salary === null ? "No salary on file" : `${rupees(active.salary)} per ${active.salary_basis === "Daily" ? "day" : "month"} on file`}</p>
               <label className="mt-4 flex min-h-9 items-center gap-2 text-sm"><input type="checkbox" className="h-4 w-4 accent-[#C2410C]" checked={active.selected} onChange={(event) => editRow(active.assignment_id, "selected", event.target.checked)} />Include in this payroll</label>
-              <EmployeeFields row={active} attendanceLinked={!!linkedAttendance} monthDays={monthDays} issue={issue} onChange={(field, value) => editRow(active.assignment_id, field, value)} />
-              <p className="mt-3 text-xs leading-relaxed text-slate-500">Gross wages include worked days × daily rate and overtime hours × hourly rate. ESI and PF apply to gross wages at the rates you enter.</p>
+              <EmployeeFields row={active} attendanceLinked={!!linkedAttendance} monthDays={monthDays} sundayCount={sundays.length} issue={issue} onChange={(field, value) => editRow(active.assignment_id, field, value)} />
+              <p className="mt-3 text-xs leading-relaxed text-slate-500">Monthly salary follows the uploaded register: LOP = absent days − credit leave. Paid days include present days, credit leave, government holidays and the month’s Sundays. Employee ESI and PF reduce net salary; employer contributions are shown separately.</p>
               {saved && !dirty && saved.lines.some((r) => r.assignment_id === active.assignment_id) && <Button type="button" variant="outline" size="sm" className="mt-3" onClick={() => void downloadPrivate(`${OPS}/payroll/${saved.id}/payslip/${active.assignment_id}.pdf`, `BWS-Payslip-${month}.pdf`).catch((e) => setProblem(operationError(e)))}>Download employee payslip</Button>}
               <div className="mt-5 space-y-3 border-t border-slate-200 pt-4 text-sm tabular-nums" aria-live="polite">
-                {[["Gross wages", calculated.get(active.assignment_id)?.gross_wages], ["ESI deduction", calculated.get(active.assignment_id)?.esi_deduction], ["PF deduction", calculated.get(active.assignment_id)?.pf_deduction]].map(([label, value]) => <div key={label} className="flex flex-wrap justify-between gap-x-3 gap-y-1"><span className="text-slate-500">{label}</span><span>{value ? rupees(value) : "—"}</span></div>)}
-                <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-orange-50 p-3"><span className="font-medium">Payable</span><span className="text-lg font-semibold" data-testid="payroll-active-payable">{calculated.has(active.assignment_id) ? rupees(calculated.get(active.assignment_id)!.payable) : "—"}</span></div>
+                {active.calculation_method === "Monthly" && <>
+                  <CalculationLine label="Loss of pay days" value={calculated.get(active.assignment_id)?.loss_of_pay} />
+                  <CalculationLine label="Paid days" value={calculated.get(active.assignment_id)?.paid_days} />
+                  <CalculationLine label="Per-day salary" value={calculated.get(active.assignment_id)?.per_day_salary} money />
+                  <CalculationLine label="Per-hour salary" value={calculated.get(active.assignment_id)?.per_hour_salary} money />
+                  <CalculationLine label="Leave deduction" value={calculated.get(active.assignment_id)?.leave_deduction} money />
+                </>}
+                <CalculationLine label="Overtime / extra-hours amount" value={calculated.get(active.assignment_id)?.overtime_amount} money />
+                <CalculationLine label="Gross salary" value={calculated.get(active.assignment_id)?.gross_wages} money />
+                <CalculationLine label="Employee ESI" value={calculated.get(active.assignment_id)?.esi_deduction} money />
+                <CalculationLine label="Employer ESI" value={calculated.get(active.assignment_id)?.esi_employer_contribution} money />
+                <CalculationLine label="Employee PF" value={calculated.get(active.assignment_id)?.pf_deduction} money />
+                <CalculationLine label="Employer PF" value={calculated.get(active.assignment_id)?.pf_employer_contribution} money />
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-orange-50 p-3"><span className="font-medium">Net payable</span><span className="text-lg font-semibold" data-testid="payroll-active-payable">{calculated.has(active.assignment_id) ? rupees(calculated.get(active.assignment_id)!.payable) : "—"}</span></div>
               </div>
               {!active.selected && <p className="mt-3 text-xs text-slate-500">Select “Include in this payroll” to enter this employee’s attendance.</p>}
               <div className="mt-5 flex justify-between gap-2"><Button type="button" variant="outline" size="sm" disabled={activeIndex <= 0} onClick={() => showEmployee(rows[activeIndex - 1].assignment_id)}><ArrowLeft className="h-4 w-4" />Previous</Button><Button type="button" variant="outline" size="sm" disabled={activeIndex >= rows.length - 1} onClick={() => showEmployee(rows[activeIndex + 1].assignment_id)}>Next<ArrowRight className="h-4 w-4" /></Button></div>
@@ -243,7 +265,10 @@ export default function PayrollEditor({ draft, month, deleting, onDirty, onBusy,
       <fieldset disabled={locked} className="min-w-0 border-t border-slate-200 p-5">
         <p className="text-xs text-slate-500">Fill the values you want to apply. Leave a field blank to keep its current value.</p>
         <div className="mt-4 grid items-end gap-3 sm:grid-cols-2">{([
-          ["worked_days", "Worked days", monthDays], ["daily_rate", "Daily rate (₹)", 1_000_000_000], ["esi_percentage", "ESI (%)", 100], ["pf_percentage", "PF (%)", 100],
+          ["worked_days", "Days present / worked", monthDays], ["government_holidays", "Government holidays", monthDays],
+          ["daily_rate", "Daily rate (₹)", 1_000_000_000], ["esi_percentage", "Employee ESI (%)", 100],
+          ["esi_employer_percentage", "Employer ESI (%)", 100], ["pf_percentage", "Employee PF (%)", 100],
+          ["pf_employer_percentage", "Employer PF (%)", 100],
         ] as const).map(([key, label, maximum]) => <div key={key}><Label htmlFor={`payroll-bulk-${key}`} className="mb-2 block">{label}</Label><Input id={`payroll-bulk-${key}`} type="number" min="0" max={maximum} step="0.01" inputMode="decimal" value={bulk[key]} onChange={(event) => setBulk({ ...bulk, [key]: event.target.value })} placeholder="Leave unchanged" /></div>)}</div>
         <Button type="button" variant="outline" className="mt-4" disabled={!selected || Object.values(bulk).every((value) => value === "")} onClick={applyBulk}>Apply to {selected} selected employees</Button>
       </fieldset>
@@ -255,18 +280,47 @@ function Metric({ label, value, testId, primary = false }: { label: string; valu
   return <div className={`min-w-0 rounded-xl p-4 ${primary ? "bg-[#0F2444] text-white" : "border border-slate-200 bg-white"}`}><p className={`text-xs leading-relaxed ${primary ? "text-slate-200" : "text-slate-500"}`}>{label}</p><p className="mt-2 break-words text-xl font-semibold tabular-nums" data-testid={testId}>{value}</p></div>;
 }
 
-function EmployeeFields({ row, monthDays, attendanceLinked, issue, onChange }: { row: PayrollRow; attendanceLinked: boolean; monthDays: number; issue?: PayrollIssue; onChange: (field: PayrollValueField, value: string) => void }) {
-  const fields = [
-    { key: "worked_days", label: "Worked days", min: "0", max: monthDays, prefix: "days" },
-    { key: "daily_rate", label: "Daily rate (₹)", min: Number(row.worked_days) > 0 ? "0.01" : "0", max: 1_000_000_000, prefix: "rate" },
-    { key: "overtime_hours", label: "Overtime hours", min: "0", max: 744, prefix: "ot-hours" },
-    { key: "overtime_rate", label: "Overtime hourly rate (₹)", min: "0", max: 1_000_000_000, prefix: "ot-rate" },
-    { key: "esi_percentage", label: "ESI (%)", min: "0", max: 100, prefix: "esi" },
-    { key: "pf_percentage", label: "PF (%)", min: "0", max: 100, prefix: "pf" },
-  ] as const;
-  return <div className="mt-4 grid grid-cols-2 gap-4">{fields.map(({ key, label, min, max, prefix }) => {
-    const invalid = issue?.assignment_id === row.assignment_id && issue.field === key;
-    const id = `payroll-${prefix}-${row.assignment_id}`;
-    return <div key={key}><Label htmlFor={id} className="mb-2 block text-xs text-slate-600">{label}</Label><Input id={id} name={key} type="number" inputMode="decimal" min={min} max={max} step="0.01" required={row.selected && (key !== "daily_rate" || Number(row.worked_days) > 0)} disabled={!row.selected || (attendanceLinked && (key === "worked_days" || key === "overtime_hours"))} className={key === "worked_days" ? "text-center tabular-nums" : "tabular-nums"} value={row[key]} onChange={(event) => onChange(key, event.target.value)} aria-invalid={invalid || undefined} aria-label={`${label} for ${row.full_name}`} data-testid={id} /></div>;
-  })}</div>;
+function CalculationLine({ label, value, money = false }: { label: string; value?: string; money?: boolean }) {
+  return <div className="flex flex-wrap justify-between gap-x-3 gap-y-1"><span className="text-slate-500">{label}</span><span>{value === undefined ? "—" : money ? rupees(value) : value}</span></div>;
+}
+
+function EmployeeFields({ row, monthDays, sundayCount, attendanceLinked, issue, onChange }: { row: PayrollRow; attendanceLinked: boolean; monthDays: number; sundayCount: number; issue?: PayrollIssue; onChange: (field: PayrollValueField, value: string) => void }) {
+  const monthly = row.calculation_method === "Monthly";
+  return <div className="mt-4 space-y-5">
+    <div><Label htmlFor={`payroll-method-${row.assignment_id}`} className="mb-2 block text-xs text-slate-600">Salary calculation</Label><select id={`payroll-method-${row.assignment_id}`} className={selectClass} disabled={!row.selected || attendanceLinked} value={row.calculation_method} onChange={(event) => onChange("calculation_method", event.target.value)}><option value="Monthly">Monthly salary register</option><option value="Daily">Daily wages</option></select></div>
+
+    <fieldset className="space-y-3"><legend className="text-xs font-semibold uppercase tracking-wide text-slate-500">Attendance</legend><div className="grid grid-cols-2 gap-4">
+      <PayrollNumberField row={row} field="worked_days" label={monthly ? "Days present" : "Worked days"} max={monthDays} prefix="days" issue={issue} disabled={attendanceLinked} onChange={onChange} />
+      {monthly && <>
+        <PayrollNumberField row={row} field="days_absent" label="Days absent" max={monthDays} prefix="absent" issue={issue} onChange={onChange} />
+        <PayrollNumberField row={row} field="credit_leave" label="Credit leave" max={monthDays} prefix="credit-leave" issue={issue} onChange={onChange} />
+        <PayrollNumberField row={row} field="government_holidays" label="Government holidays" max={monthDays} prefix="government-holidays" issue={issue} onChange={onChange} />
+        <div className="col-span-2 rounded-lg border border-blue-100 bg-blue-50 px-3 py-2"><p className="text-xs text-blue-700">Sunday holidays</p><output className="mt-1 block font-semibold tabular-nums text-blue-950" data-testid={`payroll-sunday-count-${row.assignment_id}`}>{sundayCount}</output></div>
+      </>}
+    </div></fieldset>
+
+    <fieldset className="space-y-3"><legend className="text-xs font-semibold uppercase tracking-wide text-slate-500">Salary and adjustments</legend><div className="grid grid-cols-2 gap-4">
+      {monthly ? <PayrollNumberField row={row} field="base_salary" label="Monthly salary (₹)" max={1_000_000_000} min="0.01" prefix="base-salary" issue={issue} onChange={onChange} /> : <PayrollNumberField row={row} field="daily_rate" label="Daily rate (₹)" max={1_000_000_000} min={Number(row.worked_days) > 0 ? "0.01" : "0"} prefix="rate" issue={issue} onChange={onChange} />}
+      {monthly && <>
+        <PayrollNumberField row={row} field="salary_advance" label="Salary loan / advance (₹)" max={1_000_000_000} prefix="advance" issue={issue} onChange={onChange} />
+        <PayrollNumberField row={row} field="penalty" label="Penalty (₹)" max={1_000_000_000} prefix="penalty" issue={issue} onChange={onChange} />
+        <PayrollNumberField row={row} field="allowance" label="Allowance (₹)" max={1_000_000_000} prefix="allowance" issue={issue} onChange={onChange} />
+      </>}
+      <PayrollNumberField row={row} field="overtime_hours" label="Overtime / extra hours" max={744} prefix="ot-hours" issue={issue} disabled={attendanceLinked} onChange={onChange} />
+      <PayrollNumberField row={row} field="overtime_rate" label={monthly ? "Overtime rate (₹; 0 = auto)" : "Overtime hourly rate (₹)"} max={1_000_000_000} prefix="ot-rate" issue={issue} onChange={onChange} />
+    </div></fieldset>
+
+    <fieldset className="space-y-3"><legend className="text-xs font-semibold uppercase tracking-wide text-slate-500">ESI and PF percentages</legend><div className="grid grid-cols-2 gap-4">
+      <PayrollNumberField row={row} field="esi_percentage" label="Employee ESI (%)" max={100} prefix="esi" issue={issue} onChange={onChange} />
+      <PayrollNumberField row={row} field="esi_employer_percentage" label="Employer ESI (%)" max={100} prefix="esi-employer" issue={issue} onChange={onChange} />
+      <PayrollNumberField row={row} field="pf_percentage" label="Employee PF (%)" max={100} prefix="pf" issue={issue} onChange={onChange} />
+      <PayrollNumberField row={row} field="pf_employer_percentage" label="Employer PF (%)" max={100} prefix="pf-employer" issue={issue} onChange={onChange} />
+    </div></fieldset>
+  </div>;
+}
+
+function PayrollNumberField({ row, field, label, max, prefix, issue, min = "0", disabled = false, onChange }: { row: PayrollRow; field: Exclude<PayrollValueField, "calculation_method">; label: string; max: number; prefix: string; issue?: PayrollIssue; min?: string; disabled?: boolean; onChange: (field: PayrollValueField, value: string) => void }) {
+  const invalid = issue?.assignment_id === row.assignment_id && issue.field === field;
+  const id = `payroll-${prefix}-${row.assignment_id}`;
+  return <div><Label htmlFor={id} className="mb-2 block text-xs text-slate-600">{label}</Label><Input id={id} name={field} type="number" inputMode="decimal" min={min} max={max} step="0.01" required={row.selected} disabled={!row.selected || disabled} className={field === "worked_days" ? "text-center tabular-nums" : "tabular-nums"} value={row[field]} onChange={(event) => onChange(field, event.target.value)} aria-invalid={invalid || undefined} aria-label={`${label} for ${row.full_name}`} data-testid={id} /></div>;
 }
