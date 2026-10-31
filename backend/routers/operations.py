@@ -198,14 +198,23 @@ async def attendance_totals(company_id, month):
             if not attendance_row_payroll_ready(sheet, row):
                 continue
             contributes = True
-            summary = people.setdefault(row["assignment_id"], {"assignment_id": row["assignment_id"], "full_name": row["full_name"], "worked_days": Decimal("0"), "overtime_hours": Decimal("0"), "status_counts": {}})
+            summary = people.setdefault(row["assignment_id"], {"assignment_id": row["assignment_id"], "full_name": row["full_name"], "worked_days": Decimal("0"), "monthly_worked_days": Decimal("0"), "paid_leave_days": Decimal("0"), "paid_holiday_days": Decimal("0"), "overtime_hours": Decimal("0"), "status_counts": {}})
             summary["worked_days"] += paid_values.get(row["status"], Decimal("0"))
+            # Monthly payroll already pays Sundays. Split other paid statuses
+            # so import does not add the same date again as a worked day.
+            if date.fromisoformat(sheet["attendance_date"]).weekday() != 6:
+                if row["status"] in ("Present", "Half-day"):
+                    summary["monthly_worked_days"] += paid_values[row["status"]]
+                elif row["status"] == "Paid leave":
+                    summary["paid_leave_days"] += Decimal("1")
+                elif row["status"] in ("Holiday", "Weekly off"):
+                    summary["paid_holiday_days"] += Decimal("1")
             summary["overtime_hours"] += amount(row.get("overtime_hours"))
             summary["status_counts"][row["status"]] = summary["status_counts"].get(row["status"], 0) + 1
             status_counts[row["status"]] = status_counts.get(row["status"], 0) + 1
         if contributes:
             contributing_sheets.append(sheet)
-    return {"lines": [{**r, "worked_days": money(r["worked_days"]), "overtime_hours": money(r["overtime_hours"])} for r in people.values()],
+    return {"lines": [{**r, **{field: money(r[field]) for field in ("worked_days", "monthly_worked_days", "paid_leave_days", "paid_holiday_days", "overtime_hours")}} for r in people.values()],
             "sheets": [{"id": s["id"], "date": s["attendance_date"], "revision": s["revision"]} for s in contributing_sheets],
             "approved_days": len(contributing_sheets), "status_counts": status_counts}
 

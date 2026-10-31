@@ -80,12 +80,18 @@
 
 @container payroll (min-width: 820px) {
   .payroll-ledger {
-    grid-template-columns: minmax(0, 1fr) minmax(22rem, 27rem);
+    grid-template-columns: minmax(0, 1fr) minmax(26rem, 1fr);
+  }
+
+  .payroll-register {
+    position: sticky;
+    top: 1rem;
+    max-height: calc(100vh - 2rem);
+    overflow: auto;
   }
 
   .payroll-detail-panel {
-    position: sticky;
-    top: 1rem;
+    min-width: 0;
   }
 
   .payroll-back-to-register {

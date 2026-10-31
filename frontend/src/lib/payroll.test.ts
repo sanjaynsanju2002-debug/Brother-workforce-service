@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { firstPayrollIssue, isDhatuOrganicsCompany, payrollDeductionTotal, payrollEmployerContributionTotal, payrollRows, sundayDates, type PayrollDraft, type PayrollRow, type PayrollTotals } from "./payroll";
+import { editPayrollRow, firstPayrollIssue, isDhatuOrganicsCompany, payrollDeductionTotal, payrollEmployerContributionTotal, payrollRows, sundayDates, type PayrollDraft, type PayrollRow, type PayrollTotals } from "./payroll";
 
 function employee(id: string, updates: Partial<PayrollRow> = {}): PayrollRow {
   return {
@@ -86,4 +86,20 @@ it("validates the monthly salary register fields", () => {
   expect(firstPayrollIssue([monthly], 30)).toBeUndefined();
   expect(firstPayrollIssue([{ ...monthly, credit_leave: "3" }], 30)).toMatchObject({ field: "credit_leave" });
   expect(firstPayrollIssue([{ ...monthly, base_salary: "0" }], 30)).toMatchObject({ field: "base_salary" });
+});
+
+
+it("defaults new Dhatu monthly payroll to full calendar pay with editable Sundays and 8 hours", () => {
+  const person = employee("monthly", { salary_basis: "Monthly", salary: "15000" });
+  const row = payrollRows({ company: { id: "dhatu", name: "DONPL" }, employees: [person], payroll: null }, "2026-10")[0];
+  expect(row).toMatchObject({ monthly_pay_basis: "PaidDays", base_salary: "15000", worked_days: "27", days_absent: "0", paid_sundays: "4", hours_per_day: "8" });
+  expect(firstPayrollIssue([row], 31, 4)).toBeUndefined();
+  const absent = editPayrollRow(row, "days_absent", "2.5", 31, 4);
+  expect(absent.worked_days).toBe("24.5");
+  const leave = editPayrollRow(absent, "credit_leave", "1.5", 31, 4);
+  expect(leave.days_absent).toBe("1");
+  expect(firstPayrollIssue([leave], 31, 4)).toBeUndefined();
+  expect(firstPayrollIssue([{ ...leave, worked_days: "28" }], 31, 4)?.field).toBe("worked_days");
+  expect(firstPayrollIssue([{ ...leave, paid_sundays: "5" }], 31, 4)?.field).toBe("paid_sundays");
+  expect(firstPayrollIssue([{ ...leave, hours_per_day: "0" }], 31, 4)?.field).toBe("hours_per_day");
 });

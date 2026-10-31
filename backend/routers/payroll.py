@@ -16,7 +16,7 @@ from lib.db import db
 from lib.invoices import InvoiceProfile
 from lib.months import MONTH_PATTERN
 from lib.ledger import salary_paid, amount
-from lib.payroll import MAX_EMPLOYEES, Payroll, PayrollEmployee, PayrollInput, PayrollLine, PayrollSave, calculate_payroll
+from lib.payroll import MAX_EMPLOYEES, Payroll, PayrollEmployee, PayrollInput, PayrollLine, PayrollSave, calculate_payroll, sunday_count
 
 router = APIRouter(prefix="/admin/payroll", dependencies=[Depends(require_admin)])
 CONFLICT = "Payroll changed in another session. Reopen this company and month before saving."
@@ -114,7 +114,7 @@ async def list_payroll(company_id: str | None = Query(default=None, max_length=8
 @router.post("", response_model=Payroll)
 async def save_payroll(payload: PayrollSave):
     await allow_monthly_register(payload)
-    if not payload.lines or not any(line.worked_days > 0 for line in payload.lines):
+    if not payload.lines or not any(line.worked_days > 0 or (line.calculation_method == "Monthly" and line.monthly_pay_basis == "PaidDays" and line.credit_leave + line.government_holidays + (line.paid_sundays if line.paid_sundays is not None else sunday_count(payload.month)) > 0) for line in payload.lines):
         raise HTTPException(422, "Select employees and enter days present for at least one employee")
     if any(line.calculation_method == "Daily" and line.worked_days > 0 and line.daily_rate == 0 for line in payload.lines):
         raise HTTPException(422, "Enter a daily rate for every employee with worked days")
@@ -128,7 +128,14 @@ async def save_payroll(payload: PayrollSave):
         by_id = {r["assignment_id"]: r for r in summary["lines"]}
         for line in payload.lines:
             imported = by_id.get(line.assignment_id)
-            if imported and (line.worked_days != amount(imported["worked_days"]) or line.overtime_hours != amount(imported["overtime_hours"])):
+            paid_days = line.calculation_method == "Monthly" and line.monthly_pay_basis == "PaidDays"
+            worked_field = "monthly_worked_days" if paid_days else "worked_days"
+            if imported and (
+                line.worked_days != amount(imported[worked_field])
+                or line.overtime_hours != amount(imported["overtime_hours"])
+                or (paid_days and (line.credit_leave != amount(imported["paid_leave_days"])
+                                   or line.government_holidays != amount(imported["paid_holiday_days"])))
+            ):
                 raise HTTPException(422, "Attendance-linked payroll must match payroll-ready days and overtime. Re-import attendance or choose manual attendance.")
     run_id = register_id(payload.company_id, payload.month)
     existing = await db.payroll.find_one({"_id": run_id})

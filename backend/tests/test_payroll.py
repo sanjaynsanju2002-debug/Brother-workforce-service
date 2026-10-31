@@ -490,3 +490,87 @@ def test_pdf_contains_branding_separate_deductions_and_repeated_headers_on_later
         assert "Employee ID" in page.extract_text()
         assert "PF deduction" in page.extract_text()
     assert "Employee 55" in " ".join(page.extract_text() for page in multi.pages)
+
+
+def paid_days_input(month="2026-10", **changes):
+    line = {"assignment_id": "person-a", "calculation_method": "Monthly", "monthly_pay_basis": "PaidDays", "base_salary": "15000", "hours_per_day": "8", "worked_days": "25", "paid_sundays": 4, "days_absent": "2", "esi_percentage": "0.75"}
+    line.update(changes)
+    return PayrollInput(company_id="company-a", month=month, lines=[line])
+
+
+def test_worked_days_drive_gross_with_sundays_and_esi_then_net_adjustments():
+    value = paid_days_input(base_salary="15500", allowance="100", overtime_hours="2", salary_advance="500", penalty="25", esi_employer_percentage="3.25")
+    row = calculate_payroll(value)[0][0]
+    assert row.paid_days == Decimal("29")
+    assert row.loss_of_pay == Decimal("2")
+    assert row.per_day_salary == Decimal("500")
+    assert row.per_hour_salary == Decimal("62.50")
+    assert row.overtime_amount == Decimal("125")
+    assert row.gross_wages == Decimal("14725")  # 29 x 500 + 100 + 125
+    assert row.esi_deduction == Decimal("110.44")
+    assert row.payable == Decimal("14089.56")  # gross - ESI - advance - penalty
+    assert row.esi_employer_contribution == Decimal("478.56")
+    fewer_days = calculate_payroll(paid_days_input(base_salary="15500", worked_days="23", days_absent="4"))[0][0]
+    assert fewer_days.gross_wages == Decimal("13500")
+
+
+@pytest.mark.parametrize("month,worked,sundays", [("2026-10", "27", 4), ("2026-09", "26", 4), ("2026-02", "24", 4), ("2028-02", "25", 4), ("2026-05", "26", 5)])
+def test_full_month_pays_exact_ctc_without_rounding_drift(month, worked, sundays):
+    row = calculate_payroll(paid_days_input(month, worked_days=worked, paid_sundays=sundays, days_absent="0"))[0][0]
+    assert row.gross_wages == Decimal("15000")
+    assert row.esi_deduction == Decimal("112.50")
+    assert row.payable == Decimal("14887.50")
+
+
+def test_paid_leave_half_days_and_sunday_override_are_counted_once():
+    value = paid_days_input(base_salary="15500", worked_days="23.5", credit_leave="1.5", government_holidays="1", paid_sundays=3)
+    row = calculate_payroll(value)[0][0]
+    assert row.paid_days == Decimal("29") and row.loss_of_pay == Decimal("2")
+    assert row.gross_wages == Decimal("14500")
+    assert row.payable == Decimal("14391.25")
+
+
+@pytest.mark.parametrize("changes", [{"worked_days": "28"}, {"paid_sundays": 5}, {"paid_sundays": "1.5"}, {"hours_per_day": "0"}, {"hours_per_day": "25"}, {"salary_advance": "15000"}, {"esi_percentage": "100", "salary_advance": "1"}])
+def test_paid_days_reject_overlap_invalid_hours_sundays_and_excess_deductions(changes):
+    with pytest.raises(ValidationError):
+        paid_days_input(**changes)
+
+
+def test_paid_days_exports_cached_values_and_recalculating_formulas_agree():
+    value = paid_days_input(base_salary="15500", salary_advance="500", penalty="25")
+    amounts, totals = calculate_payroll(value)
+    line = PayrollLine(**value.lines[0].model_dump(), full_name="Payroll Example", **amounts[0].model_dump(exclude={"assignment_id"}))
+    now = datetime.now(timezone.utc)
+    saved = Payroll(id="paid-days", **value.model_dump(exclude={"lines"}), lines=[line], company_name="DONPL", company_location="Mysore", supplier=InvoiceProfile(), totals=totals, revision=1, created_at=now, updated_at=now)
+    exported = export_payroll_xlsx(saved)
+    sheet = load_workbook(BytesIO(exported), data_only=False).active
+    assert sheet["Q9"].value == "=ROUND(L9*K9/31+P9+AB9,2)"
+    assert sheet["AC9"].value == "=ROUND(Q9-S9-W9-M9-O9,2)"
+    assert sheet["AF9"].value == 8
+    cached = load_workbook(BytesIO(exported), data_only=True).active
+    assert cached["Q9"].value == float(line.gross_wages) == 14500
+    assert cached["S9"].value == float(line.esi_deduction) == 108.75
+    assert cached["AC9"].value == float(line.payable) == 13866.25
+    text = " ".join(page.extract_text() for page in PdfReader(BytesIO(export_payroll_pdf(saved))).pages)
+    assert "13,866.25" in text and "hours/day 8" in text
+
+
+@pytest.mark.asyncio
+async def test_paid_days_manual_values_save_reopen_and_revise(monkeypatch):
+    fake = fake_db(monkeypatch)
+    fake.clients.records[0]["name"] = "DONPL"
+    body = paid_days_input(base_salary="15500").model_dump(mode="json")
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="https://brothersworkforcesolutions.in") as client:
+        await client.post("/api/admin/login", json={"pin": "123456"})
+        response = await client.post("/api/admin/payroll", json=body)
+        assert response.status_code == 200, response.text
+        saved = response.json()
+        draft = (await client.get("/api/admin/payroll/draft?company_id=company-a&month=2026-10")).json()
+        assert draft["payroll"]["lines"][0]["hours_per_day"] == "8"
+        assert draft["payroll"]["lines"][0]["paid_sundays"] == 4
+        body.update(revision=saved["revision"], created_at=saved["created_at"])
+        body["lines"][0].update(worked_days="24", days_absent="3", hours_per_day="7", esi_percentage="1")
+        revised = await client.post("/api/admin/payroll", json=body)
+        assert revised.status_code == 200, revised.text
+        assert revised.json()["lines"][0]["gross_wages"] == "14000.00"
+        assert revised.json()["lines"][0]["payable"] == "13860.00"

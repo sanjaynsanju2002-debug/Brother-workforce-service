@@ -6,7 +6,7 @@ export type CompanyOption = { id: string; name: string; archived?: boolean };
 export type WorkerOption = { id: string; full_name: string; education?: string; mobile?: string; status: string };
 export type PaymentEntry = { id: string; amount: string; payment_date: string; method: string; reference: string; notes: string; by: string; kind?: "Advance" | "Salary"; assignment_id?: string; voided_at?: string | null; void_reason?: string };
 export type InvoicePaymentRecord = { id: string; revision: number; invoice_number: string; client_name: string; invoice_date: string; totals: { total: string }; payment_status: string; opening_paid_amount?: string | null; payments?: PaymentEntry[]; follow_up_date?: string | null };
-export type AttendanceSummary = { lines: { assignment_id: string; full_name: string; worked_days: string; overtime_hours: string }[]; sheets: { id: string; date: string; revision: number }[]; approved_days: number };
+export type AttendanceSummary = { lines: { assignment_id: string; full_name: string; worked_days: string; monthly_worked_days?: string; paid_leave_days?: string; paid_holiday_days?: string; overtime_hours: string }[]; sheets: { id: string; date: string; revision: number }[]; approved_days: number };
 export const operationError = (error: unknown) => {
   if (error instanceof ApiError) {
     const detail = (error.body as { detail?: string | { msg: string }[] } | null)?.detail;

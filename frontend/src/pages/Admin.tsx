@@ -365,7 +365,7 @@ function Dashboard({
   return (
     <div className="min-h-screen bg-[#F8FAFC]">
       <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-3 px-4 py-3 sm:flex-nowrap sm:px-6 sm:py-4">
+        <div className="flex w-full flex-wrap items-center gap-3 px-4 py-3 sm:flex-nowrap sm:px-6 sm:py-4">
           <img src={BRAND.logo} alt="" className="dashboard-brand-logo h-10 w-10 object-contain" />
           <div>
             <p className="font-[family-name:var(--font-heading)] text-sm font-bold text-[#0F2444]">
@@ -385,8 +385,8 @@ function Dashboard({
         </div>
       </header>
 
-      <main className="mx-auto max-w-7xl px-3 py-5 sm:px-6 sm:py-8">
-        <Tabs value={activeTab} onValueChange={(value) => { if (value) setActiveTab(value); }} orientation="vertical" className="flex flex-col gap-6 lg:grid lg:grid-cols-[240px_minmax(0,1fr)]">
+      <main className="w-full px-3 py-5 sm:px-6 sm:py-6" data-testid="admin-workspace">
+        <Tabs value={activeTab} onValueChange={(value) => { if (value) setActiveTab(value); }} orientation="vertical" className="flex flex-col gap-5 lg:grid lg:grid-cols-[224px_minmax(0,1fr)]">
           <aside className="min-w-0 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:self-start lg:overflow-y-auto" aria-label="Admin sections">
             <button type="button" className="flex w-full items-center justify-between rounded-lg border border-slate-200 bg-white px-4 py-3 font-semibold text-[#0F2444] lg:hidden" onClick={() => setSidebarOpen((open) => !open)} aria-expanded={sidebarOpen} aria-controls="admin-sidebar-menu" data-testid="admin-sidebar-toggle">
               Dashboard menu <Menu className="h-5 w-5" />

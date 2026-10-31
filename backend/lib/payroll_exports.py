@@ -30,7 +30,7 @@ def export_monthly_register_xlsx(payroll: Payroll) -> bytes:
     sheet.title = "Payroll"
     sheet.sheet_view.showGridLines = False
     supplier = payroll.supplier
-    last_column = 31
+    last_column = 32
     last_letter = get_column_letter(last_column)
     navy, orange, pale, blue = "0F2444", "C2410C", "E2E8F0", "DBEAFE"
     thin = Side(style="thin", color=pale)
@@ -58,7 +58,7 @@ def export_monthly_register_xlsx(payroll: Payroll) -> bytes:
         "Govt Holiday", "Sunday Holiday", "Days Present", "Paid Days", "Salary", "Salary Loan / Advance",
         "Leave Deduction", "Penalty", "Allowance", "Salary Gross Amount", "Employee ESI %", "Employee ESI",
         "Employer ESI %", "Employer ESI", "Employee PF %", "Employee PF", "Employer PF %", "Employer PF",
-        "OT / Extra Hours", "OT Hourly Rate", "OT / Extra Amount", "Salary Net Amount", "Per Hour Salary", "Per Day Salary",
+        "OT / Extra Hours", "OT Hourly Rate", "OT / Extra Amount", "Salary Net Amount", "Per Hour Salary", "Per Day Salary", "Hours Per Day",
     ]
     header_row = 8
     for column, label in enumerate(headers, 1):
@@ -81,7 +81,7 @@ def export_monthly_register_xlsx(payroll: Payroll) -> bytes:
             line.allowance if monthly else "", line.gross_wages, line.esi_percentage, line.esi_deduction,
             line.esi_employer_percentage, line.esi_employer_contribution, line.pf_percentage, line.pf_deduction,
             line.pf_employer_percentage, line.pf_employer_contribution, line.overtime_hours, line.effective_overtime_rate,
-            line.overtime_amount, line.payable, line.per_hour_salary, line.per_day_salary,
+            line.overtime_amount, line.payable, line.per_hour_salary, line.per_day_salary, line.hours_per_day,
         ]
         for column, value in enumerate(values, 1):
             cell = sheet.cell(index, column, float(value) if hasattr(value, "as_tuple") else value)
@@ -101,8 +101,14 @@ def export_monthly_register_xlsx(payroll: Payroll) -> bytes:
             sheet.cell(index, 25, f"=ROUND(Q{index}*X{index}/100,2)")
             sheet.cell(index, 28, f"=ROUND(Z{index}*AA{index},2)")
             sheet.cell(index, 29, f"=ROUND(Q{index}-S{index}-W{index}+AB{index},2)")
-            sheet.cell(index, 30, f"=ROUND(AE{index}/9,2)")
+            sheet.cell(index, 30, f"=ROUND(AE{index}/AF{index},2)")
             sheet.cell(index, 31, f"=ROUND(L{index}/{days},2)")
+            if line.monthly_pay_basis == "PaidDays":
+                sheet.cell(index, 7, f"=MAX(0,{days}-K{index})")
+                sheet.cell(index, 14, f"=ROUND(L{index}*G{index}/{days},2)")
+                sheet.cell(index, 17, f"=ROUND(L{index}*K{index}/{days}+P{index}+AB{index},2)")
+                sheet.cell(index, 29, f"=ROUND(Q{index}-S{index}-W{index}-M{index}-O{index},2)")
+                sheet.cell(index, 30, f"=ROUND(L{index}/{days}/AF{index},2)")
         else:
             sheet.cell(index, 17, f"=ROUND(J{index}*AE{index}+AB{index},2)")
             sheet.cell(index, 19, f"=ROUND(Q{index}*R{index}/100,2)")
@@ -111,7 +117,7 @@ def export_monthly_register_xlsx(payroll: Payroll) -> bytes:
             sheet.cell(index, 25, f"=ROUND(Q{index}*X{index}/100,2)")
             sheet.cell(index, 28, f"=ROUND(Z{index}*AA{index},2)")
             sheet.cell(index, 29, f"=ROUND(Q{index}-S{index}-W{index},2)")
-            sheet.cell(index, 30, f"=ROUND(AE{index}/9,2)")
+            sheet.cell(index, 30, f"=ROUND(AE{index}/AF{index},2)")
         sheet.row_dimensions[index].height = 25
 
     total_row = start + len(payroll.lines)
@@ -146,7 +152,31 @@ def export_monthly_register_xlsx(payroll: Payroll) -> bytes:
     workbook.calculation.calcMode = "auto"
     output = BytesIO()
     workbook.save(output)
-    return output.getvalue()
+    # Cache calculated values so every viewer agrees with the saved register,
+    # even before Excel recalculates the editable formulas.
+    cached = {}
+    fields = {7: "loss_of_pay", 11: "paid_days", 14: "leave_deduction", 17: "gross_wages", 19: "esi_deduction", 21: "esi_employer_contribution", 23: "pf_deduction", 25: "pf_employer_contribution", 28: "overtime_amount", 29: "payable", 30: "per_hour_salary", 31: "per_day_salary"}
+    for index, line in enumerate(payroll.lines, start):
+        for column, field in fields.items():
+            cached[f"{get_column_letter(column)}{index}"] = getattr(line, field)
+    total_fields = {10: "worked_days", 11: "paid_days", 13: "salary_advance", 14: "leave_deduction", 15: "penalty", 16: "allowance", 17: "gross_wages", 19: "esi_deduction", 21: "esi_employer_contribution", 23: "pf_deduction", 25: "pf_employer_contribution", 26: "overtime_hours", 28: "overtime_amount", 29: "payable"}
+    for column, field in total_fields.items():
+        cached[f"{get_column_letter(column)}{total_row}"] = sum(getattr(line, field) for line in payroll.lines)
+    result = BytesIO()
+    with ZipFile(output) as source, ZipFile(result, "w", ZIP_DEFLATED) as target:
+        for name in source.namelist():
+            data = source.read(name)
+            if name == "xl/worksheets/sheet1.xml":
+                root = ET.fromstring(data)
+                for cell in root.iter(f"{{{NS}}}c"):
+                    if cell.get("r") in cached and cell.find(f"{{{NS}}}f") is not None:
+                        value = cell.find(f"{{{NS}}}v")
+                        if value is None:
+                            value = ET.SubElement(cell, f"{{{NS}}}v")
+                        value.text = str(cached[cell.get("r")])
+                data = ET.tostring(root, encoding="utf-8", xml_declaration=True)
+            target.writestr(name, data)
+    return result.getvalue()
 
 
 def export_payroll_xlsx(payroll: Payroll) -> bytes:
@@ -369,7 +399,14 @@ def export_monthly_register_pdf(payroll: Payroll) -> bytes:
                                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("LINEBELOW", (0, 1), (-1, -1), .25, colors.HexColor("#E2E8F0")),
                                ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
                                ("LEFTPADDING", (0, 0), (-1, -1), 2), ("RIGHTPADDING", (0, 0), (-1, -1), 2)]))
-    story.extend([table, Spacer(1, 7), p("LOP = absent days - credit leave. Paid days = present + credit leave + government holidays + Sundays. Net = gross - employee ESI - employee PF + overtime amount.", body)])
+    story.extend([table, Spacer(1, 7)])
+    if any(line.monthly_pay_basis == "PaidDays" for line in payroll.lines):
+        story.append(p("Worked-days calculation: paid days = worked days + paid leave + other paid holidays + paid Sundays (count each day once). Gross = monthly CTC x paid days / calendar days + allowance + overtime. Net = gross - employee ESI - employee PF - advance - penalty. Employer contributions are separate.", body))
+        for line in payroll.lines:
+            if line.calculation_method == "Monthly" and line.monthly_pay_basis == "PaidDays":
+                story.append(p(f"{line.full_name}: monthly CTC INR {money(line.base_salary)}; hours/day {line.hours_per_day:g}; daily INR {money(line.per_day_salary)}; hourly INR {money(line.per_hour_salary)}; employee ESI {line.esi_percentage:g}%; employee PF {line.pf_percentage:g}%.", body))
+    else:
+        story.append(p("LOP = absent days - credit leave. Paid days = present + credit leave + government holidays + Sundays. Net = gross - employee ESI - employee PF + overtime amount.", body))
 
     def footer(canvas, document):
         canvas.saveState(); canvas.setFont("PayrollSans", 6); canvas.setFillColor(muted)
