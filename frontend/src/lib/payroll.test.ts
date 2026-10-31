@@ -103,3 +103,19 @@ it("defaults new Dhatu monthly payroll to full calendar pay with editable Sunday
   expect(firstPayrollIssue([{ ...leave, paid_sundays: "5" }], 31, 4)?.field).toBe("paid_sundays");
   expect(firstPayrollIssue([{ ...leave, hours_per_day: "0" }], 31, 4)?.field).toBe("hours_per_day");
 });
+
+it("includes an excluded employee when a payroll value is edited", () => {
+  const row = employee("excluded", { selected: false });
+  expect(editPayrollRow(row, "esi_percentage", "0.75", 31, 4).selected).toBe(true);
+});
+
+it("accepts a manual paid-days total and balances worked and unpaid days", () => {
+  const row = employee("monthly", { calculation_method: "Monthly", monthly_pay_basis: "PaidDays", base_salary: "31000", hours_per_day: "8", worked_days: "25", paid_sundays: "4", credit_leave: "1", government_holidays: "1", days_absent: "0", pf_percentage: "0" });
+  const changed = editPayrollRow(row, "total_paid_days", "25.5", 31, 4);
+  expect(changed).toMatchObject({ total_paid_days: "25.5", worked_days: "19.5", days_absent: "5.5" });
+  expect(firstPayrollIssue([changed], 31, 4)).toBeUndefined();
+  expect(editPayrollRow(changed, "worked_days", "18.5", 31, 4)).toMatchObject({ total_paid_days: undefined, days_absent: "6.5" });
+  for (const total of ["", "5", "32", "25.555"]) {
+    expect(firstPayrollIssue([editPayrollRow(row, "total_paid_days", total, 31, 4)], 31, 4)?.field).toBe("total_paid_days");
+  }
+});

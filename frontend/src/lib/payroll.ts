@@ -23,9 +23,10 @@ export type PayrollTotals = {
   gross_wages: string; esi_deduction: string; esi_employer_contribution?: string;
   pf_deduction: string; pf_employer_contribution?: string; payable: string;
 };
-export type PayrollRow = PayrollEmployee & PayrollInputValues & { selected: boolean };
+export type PayrollRow = PayrollEmployee & PayrollInputValues & { selected: boolean; total_paid_days?: string };
 export type PayrollValueField = keyof PayrollInputValues;
-export type PayrollIssue = { assignment_id: string; field: PayrollValueField; message: string };
+export type PayrollEditField = PayrollValueField | "total_paid_days";
+export type PayrollIssue = { assignment_id: string; field: PayrollEditField; message: string };
 export type PayrollInput = {
   company_id: string; month: string; notes: string; cost_responsibility?: "Agency" | "Client";
   attendance_refs?: Record<string, number>; lines: ({ assignment_id: string } & PayrollInputValues)[];
@@ -92,8 +93,9 @@ export function payrollRows(draft: PayrollDraft, month = ""): PayrollRow[] {
 
 // Keep manual attendance balanced: editing unpaid leave adjusts worked days;
 // editing worked or paid days adjusts unpaid leave. Each date is counted once.
-export function editPayrollRow(row: PayrollRow, field: PayrollValueField, value: string, monthDays: number, sundays: number): PayrollRow {
-  const next = { ...row, [field]: value } as PayrollRow;
+export function editPayrollRow(row: PayrollRow, field: PayrollEditField, value: string, monthDays: number, sundays: number): PayrollRow {
+  const next = { ...row, [field]: value, selected: true } as PayrollRow;
+  if (["worked_days", "days_absent", "credit_leave", "government_holidays", "paid_sundays", "monthly_pay_basis", "calculation_method"].includes(field)) next.total_paid_days = undefined;
   if (field === "calculation_method" && value === "Monthly") {
     next.monthly_pay_basis = "PaidDays";
     next.hours_per_day ??= "8";
@@ -102,7 +104,10 @@ export function editPayrollRow(row: PayrollRow, field: PayrollValueField, value:
   }
   if (next.calculation_method !== "Monthly" || next.monthly_pay_basis !== "PaidDays") return next;
   const paidHolidays = Number(next.credit_leave) + Number(next.government_holidays) + Number(next.paid_sundays ?? sundays);
-  if (field === "days_absent") next.worked_days = String(Math.max(0, Math.round((monthDays - Number(value) - paidHolidays) * 100) / 100));
+  if (field === "total_paid_days") {
+    next.worked_days = value.trim() ? String(Math.round((Number(value) - paidHolidays) * 100) / 100) : "";
+    next.days_absent = value.trim() ? String(Math.round((monthDays - Number(value)) * 100) / 100) : "";
+  } else if (field === "days_absent") next.worked_days = String(Math.max(0, Math.round((monthDays - Number(value) - paidHolidays) * 100) / 100));
   else if (["worked_days", "credit_leave", "government_holidays", "paid_sundays", "monthly_pay_basis", "calculation_method"].includes(field)) {
     next.days_absent = String(Math.max(0, Math.round((monthDays - Number(next.worked_days) - paidHolidays) * 100) / 100));
   }
@@ -116,6 +121,13 @@ const DECIMAL = /^(?:\d+|\d*\.\d{1,2})$/;
 export function firstPayrollIssue(rows: PayrollRow[], monthDays: number, sundays = 6): PayrollIssue | undefined {
   const included = rows.filter((row) => row.selected);
   for (const row of included) {
+    if (row.calculation_method === "Monthly" && row.monthly_pay_basis === "PaidDays" && row.total_paid_days !== undefined) {
+      const paid = row.total_paid_days.trim();
+      const minimum = Number(row.credit_leave) + Number(row.government_holidays) + Number(row.paid_sundays ?? sundays);
+      if (!DECIMAL.test(paid) || Number(paid) < minimum || Number(paid) > monthDays) {
+        return { assignment_id: row.assignment_id, field: "total_paid_days", message: `${row.full_name}: total paid days must be between ${minimum} and ${monthDays}. Paid Sundays, leave and holidays are already included.` };
+      }
+    }
     const attendance = [
       ["worked_days", row.calculation_method === "Monthly" ? "days present" : "worked days", monthDays],
       ["days_absent", "days absent", monthDays], ["credit_leave", "credit leave", monthDays],
