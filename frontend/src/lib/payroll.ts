@@ -6,6 +6,7 @@ export type PayrollEmployee = {
   salary: string | null; salary_basis: PayrollMethod; status: "Active" | "Completed";
 };
 export type PayrollInputValues = {
+  monthly_pay_basis?: "SalaryLessLOP" | "PaidDays"; hours_per_day?: string; paid_sundays?: string;
   calculation_method: PayrollMethod; worked_days: string; daily_rate: string; base_salary: string;
   days_absent: string; credit_leave: string; government_holidays: string; salary_advance: string;
   penalty: string; allowance: string; esi_percentage: string; esi_employer_percentage: string;
@@ -31,7 +32,7 @@ export type PayrollInput = {
 };
 export type PayrollRecord = {
   id: string; company_id: string; company_name: string; company_location: string; month: string; notes: string;
-  lines: (PayrollEmployee & PayrollInputValues & PayrollAmounts)[];
+  lines: (PayrollEmployee & Omit<PayrollInputValues, "paid_sundays"> & { paid_sundays?: number | null } & PayrollAmounts)[];
   cost_responsibility?: "Agency" | "Client"; attendance_refs?: Record<string, number>;
   totals: PayrollTotals; revision: number; created_at: string; updated_at: string;
 };
@@ -55,16 +56,22 @@ export function sundayDates(month: string): number[] {
     .filter((day) => new Date(Date.UTC(year, monthNumber - 1, day)).getUTCDay() === 0);
 }
 
-export function payrollRows(draft: PayrollDraft, _month = ""): PayrollRow[] {
+export function payrollRows(draft: PayrollDraft, month = ""): PayrollRow[] {
   const saved = new Map(draft.payroll?.lines.map((line) => [line.assignment_id, line]) ?? []);
   const monthlyRegisterEnabled = isDhatuOrganicsCompany(draft.company.name);
   return draft.employees.map((person) => {
     const line = saved.get(person.assignment_id);
+    const { paid_sundays: savedSundays, ...savedValues } = line ?? {};
     const method = monthlyRegisterEnabled ? line?.calculation_method ?? person.salary_basis : "Daily";
     return {
-      ...(line ?? person), selected: draft.payroll ? !!line : person.status === "Active",
+      ...person, ...(line ? savedValues : {}), selected: draft.payroll ? !!line : person.status === "Active",
       calculation_method: method,
-      worked_days: line?.worked_days ?? "",
+      ...(method === "Monthly" ? {
+        monthly_pay_basis: line?.monthly_pay_basis ?? (line ? "SalaryLessLOP" : "PaidDays"),
+        hours_per_day: line?.hours_per_day ?? (line ? "9" : "8"),
+        paid_sundays: String(savedSundays ?? sundayDates(month).length),
+      } : {}),
+      worked_days: line?.worked_days ?? (method === "Monthly" && month ? String(new Date(Number(month.slice(0, 4)), Number(month.slice(5)), 0).getDate() - sundayDates(month).length) : ""),
       daily_rate: line?.daily_rate ?? (method === "Monthly" ? ZERO : person.salary_basis === "Daily" ? person.salary ?? "" : ""),
       base_salary: line?.base_salary ?? (method === "Monthly" ? person.salary ?? "" : ZERO),
       days_absent: line?.days_absent ?? ZERO,
@@ -83,11 +90,30 @@ export function payrollRows(draft: PayrollDraft, _month = ""): PayrollRow[] {
   });
 }
 
+// Keep manual attendance balanced: editing unpaid leave adjusts worked days;
+// editing worked or paid days adjusts unpaid leave. Each date is counted once.
+export function editPayrollRow(row: PayrollRow, field: PayrollValueField, value: string, monthDays: number, sundays: number): PayrollRow {
+  const next = { ...row, [field]: value } as PayrollRow;
+  if (field === "calculation_method" && value === "Monthly") {
+    next.monthly_pay_basis = "PaidDays";
+    next.hours_per_day ??= "8";
+    next.paid_sundays ??= String(sundays);
+    if (!Number(next.base_salary) && row.salary_basis === "Monthly") next.base_salary = row.salary ?? "";
+  }
+  if (next.calculation_method !== "Monthly" || next.monthly_pay_basis !== "PaidDays") return next;
+  const paidHolidays = Number(next.credit_leave) + Number(next.government_holidays) + Number(next.paid_sundays ?? sundays);
+  if (field === "days_absent") next.worked_days = String(Math.max(0, Math.round((monthDays - Number(value) - paidHolidays) * 100) / 100));
+  else if (["worked_days", "credit_leave", "government_holidays", "paid_sundays", "monthly_pay_basis", "calculation_method"].includes(field)) {
+    next.days_absent = String(Math.max(0, Math.round((monthDays - Number(next.worked_days) - paidHolidays) * 100) / 100));
+  }
+  return next;
+}
+
 const DECIMAL = /^(?:\d+|\d*\.\d{1,2})$/;
 
 // All included employees must be checked even when only one employee's inputs
 // are mounted in the details panel. Amounts still come from the backend.
-export function firstPayrollIssue(rows: PayrollRow[], monthDays: number): PayrollIssue | undefined {
+export function firstPayrollIssue(rows: PayrollRow[], monthDays: number, sundays = 6): PayrollIssue | undefined {
   const included = rows.filter((row) => row.selected);
   for (const row of included) {
     const attendance = [
@@ -104,7 +130,7 @@ export function firstPayrollIssue(rows: PayrollRow[], monthDays: number): Payrol
       ["overtime_hours", "overtime hours", 744], ["overtime_rate", "overtime hourly rate", 1_000_000_000],
     ] as const;
     for (const [field, label, maximum] of [...attendance, ...money, ...rates]) {
-      const value = row[field].trim();
+      const value = String(row[field] ?? "").trim();
       if (field === "daily_rate" && !value && Number(row.worked_days) === 0) continue;
       if (!value || !DECIMAL.test(value) || !Number.isFinite(Number(value)) || Number(value) > maximum) {
         return { assignment_id: row.assignment_id, field, message: `${row.full_name}: enter ${label} from 0 to ${maximum}, with up to 2 decimal places.` };
@@ -119,14 +145,20 @@ export function firstPayrollIssue(rows: PayrollRow[], monthDays: number): Payrol
     if (row.calculation_method === "Daily" && Number(row.overtime_hours) > 0 && !Number(row.overtime_rate)) {
       return { assignment_id: row.assignment_id, field: "overtime_rate", message: `${row.full_name}: enter an hourly overtime rate greater than 0.` };
     }
-    if (Number(row.credit_leave) > Number(row.days_absent)) {
+    if (row.calculation_method === "Monthly" && row.monthly_pay_basis === "PaidDays") {
+      const hours = row.hours_per_day ?? "";
+      if (!DECIMAL.test(hours) || Number(hours) <= 0 || Number(hours) > 24) return { assignment_id: row.assignment_id, field: "hours_per_day", message: `${row.full_name}: enter hours per day above 0 and up to 24.` };
+      const paidSundays = Number(row.paid_sundays);
+      if (!String(row.paid_sundays ?? "").trim() || !Number.isInteger(paidSundays) || paidSundays < 0 || paidSundays > sundays) return { assignment_id: row.assignment_id, field: "paid_sundays", message: `${row.full_name}: enter paid Sundays from 0 to ${sundays}.` };
+      if (Math.round((Number(row.worked_days) + Number(row.days_absent) + Number(row.credit_leave) + Number(row.government_holidays) + paidSundays) * 100) > monthDays * 100) return { assignment_id: row.assignment_id, field: "worked_days", message: `${row.full_name}: attendance exceeds ${monthDays} days. Count worked days, paid leave, holidays and Sundays once each.` };
+    } else if (row.calculation_method === "Monthly" && Number(row.credit_leave) > Number(row.days_absent)) {
       return { assignment_id: row.assignment_id, field: "credit_leave", message: `${row.full_name}: credit leave cannot exceed absent days.` };
     }
     if (Math.round(Number(row.esi_percentage) * 100) + Math.round(Number(row.pf_percentage) * 100) > 10_000) {
       return { assignment_id: row.assignment_id, field: "pf_percentage", message: `${row.full_name}: combined employee ESI and PF percentages cannot exceed 100%.` };
     }
   }
-  if (included.length && !included.some((row) => Number(row.worked_days) > 0)) {
+  if (included.length && !included.some((row) => Number(row.worked_days) > 0 || (row.calculation_method === "Monthly" && row.monthly_pay_basis === "PaidDays" && Number(row.credit_leave) + Number(row.government_holidays) + Number(row.paid_sundays) > 0))) {
     return { assignment_id: included[0].assignment_id, field: "worked_days", message: "Enter days present for at least one included employee." };
   }
 }

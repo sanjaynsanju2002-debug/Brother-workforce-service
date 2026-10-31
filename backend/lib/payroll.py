@@ -38,6 +38,9 @@ def sunday_count(month: str) -> int:
 class PayrollLineInput(InvoiceModel):
     assignment_id: str = Field(min_length=1, max_length=80)
     calculation_method: Literal["Daily", "Monthly"] = "Daily"
+    monthly_pay_basis: Literal["SalaryLessLOP", "PaidDays"] = "SalaryLessLOP"
+    hours_per_day: Annotated[Decimal, Field(gt=0, le=24, decimal_places=2, allow_inf_nan=False)] = HOURS_PER_DAY
+    paid_sundays: int | None = Field(default=None, ge=0, le=6)
     worked_days: WorkedDays = Decimal("0.00")
     daily_rate: Money = Decimal("0.00")
     base_salary: Money = Decimal("0.00")
@@ -72,6 +75,36 @@ class PayrollLineInput(InvoiceModel):
         return self
 
 
+def paid_day_amounts(line: PayrollLineInput, month_days: int, sundays: int) -> dict:
+    paid_sundays = sundays if line.paid_sundays is None else line.paid_sundays
+    if paid_sundays > sundays:
+        raise ValueError("Paid Sundays cannot exceed Sundays in the selected month")
+    paid_days = line.worked_days + line.credit_leave + line.government_holidays + paid_sundays
+    if paid_days + line.days_absent > month_days:
+        raise ValueError(f"Worked days, paid leave, holidays, Sundays and unpaid leave cannot exceed {month_days} days. Count each day once.")
+    # Round only the final prorated wages so a complete month pays the exact CTC.
+    per_day = line.base_salary / Decimal(month_days)
+    per_hour = round_money(per_day / line.hours_per_day)
+    overtime_rate = line.overtime_rate or per_hour
+    overtime = round_money(line.overtime_hours * overtime_rate)
+    gross = round_money(per_day * paid_days + line.allowance + overtime)
+    esi = round_money(gross * line.esi_percentage / 100)
+    pf = round_money(gross * line.pf_percentage / 100)
+    if esi + pf + line.salary_advance + line.penalty > gross:
+        raise ValueError("Employee deductions, advance and penalty cannot exceed gross pay")
+    return dict(
+        sunday_holidays=paid_sundays, paid_days=paid_days,
+        loss_of_pay=Decimal(month_days) - paid_days,
+        per_day_salary=round_money(per_day), per_hour_salary=per_hour,
+        leave_deduction=round_money(per_day * (Decimal(month_days) - paid_days)),
+        effective_overtime_rate=overtime_rate, overtime_amount=overtime, gross_wages=gross,
+        esi_deduction=esi, pf_deduction=pf,
+        esi_employer_contribution=round_money(gross * line.esi_employer_percentage / 100),
+        pf_employer_contribution=round_money(gross * line.pf_employer_percentage / 100),
+        payable=round_money(gross - esi - pf - line.salary_advance - line.penalty),
+    )
+
+
 class PayrollInput(InvoiceModel):
     company_id: str = Field(min_length=1, max_length=80)
     month: str = Field(pattern=MONTH_PATTERN)
@@ -88,7 +121,7 @@ class PayrollInput(InvoiceModel):
         for line in self.lines:
             if any(value > days for value in (line.worked_days, line.days_absent, line.credit_leave, line.government_holidays)):
                 raise ValueError(f"Attendance days cannot exceed {days} for this month")
-            if line.credit_leave > line.days_absent:
+            if line.calculation_method == "Monthly" and line.monthly_pay_basis != "PaidDays" and line.credit_leave > line.days_absent:
                 raise ValueError("Credit leave cannot exceed absent days")
             if line.calculation_method == "Daily":
                 if line.worked_days > 0 and line.daily_rate == 0:
@@ -98,6 +131,9 @@ class PayrollInput(InvoiceModel):
                 continue
             if line.base_salary == 0:
                 raise ValueError("Enter the monthly salary for every monthly-salary employee")
+            if line.monthly_pay_basis == "PaidDays":
+                paid_day_amounts(line, days, sunday_count(self.month))
+                continue
             per_day = round_money(line.base_salary / Decimal(days))
             loss_of_pay = line.days_absent - line.credit_leave
             if line.base_salary + line.allowance < round_money(per_day * loss_of_pay) + line.salary_advance + line.penalty:
@@ -193,12 +229,15 @@ def calculate_payroll(value: PayrollInput) -> tuple[list[PayrollLineTotals], Pay
     month_days = calendar.monthrange(int(value.month[:4]), int(value.month[5:]))[1]
     sundays = sunday_count(value.month)
     for line in value.lines:
+        if line.calculation_method == "Monthly" and line.monthly_pay_basis == "PaidDays":
+            rows.append(PayrollLineTotals(assignment_id=line.assignment_id, **paid_day_amounts(line, month_days, sundays)))
+            continue
         if line.calculation_method == "Monthly":
             sunday_holidays = sundays
             loss_of_pay = line.days_absent - line.credit_leave
             paid_days = line.worked_days + line.credit_leave + line.government_holidays + Decimal(sundays)
             per_day = round_money(line.base_salary / Decimal(month_days))
-            per_hour = round_money(per_day / HOURS_PER_DAY)
+            per_hour = round_money(per_day / line.hours_per_day)
             leave_deduction = round_money(per_day * loss_of_pay)
             overtime_rate = line.overtime_rate or per_hour
             overtime_amount = round_money(line.overtime_hours * overtime_rate)

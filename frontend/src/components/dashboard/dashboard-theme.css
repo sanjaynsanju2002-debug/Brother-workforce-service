@@ -56,7 +56,7 @@ html[data-dashboard-theme="dark"], .bws-dashboard.dark {
 .bws-dashboard.dark :is(.text-green-600, .text-green-700, .text-green-900, .text-emerald-800, .text-emerald-900) { color: #a7f3d0; }
 .bws-dashboard.dark .bg-blue-50 { background-color: #182e49; }
 .bws-dashboard.dark .border-blue-200 { border-color: #537ba8; }
-.bws-dashboard.dark :is(.text-blue-600, .text-blue-900) { color: #bfdbfe; }
+.bws-dashboard.dark :is(.text-blue-600, .text-blue-700, .text-blue-800, .text-blue-900, .text-blue-950) { color: #bfdbfe; }
 .bws-dashboard.dark :is(.bg-green-600, [class~="bg-[#16A34A]"]) { background-color: #166534; }
 
 .bws-dashboard.dark :is([class~="hover:bg-slate-50"], [class~="hover:bg-slate-100"]):hover { background-color: var(--dashboard-hover); }

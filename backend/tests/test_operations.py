@@ -577,3 +577,36 @@ async def test_archived_links_remain_correctable_and_missing_document_count_is_v
         overview = (await c.get("/api/admin/operations/overview")).json()
         assert overview["deployed_workers"] == overview["shortages"] == overview["missing_documents"] == 0
         assert overview["reminders"] == []
+
+
+@pytest.mark.asyncio
+async def test_monthly_attendance_import_separates_sundays_leave_and_holidays(store):
+    async with session() as c:
+        await login(c)
+        co = await company(c, "Dhatu Organics & Naturals")
+        worker = await person(c, co["id"], salary_basis="Monthly", salary="31000")
+        route = "/api/admin/operations"
+        for day, status in [("2026-10-04", "Weekly off"), ("2026-10-05", "Present"), ("2026-10-06", "Paid leave"), ("2026-10-07", "Holiday")]:
+            response = await c.put(f"{route}/attendance", json={"company_id": co["id"], "attendance_date": day, "rows": [{"assignment_id": worker["id"], "status": status}]})
+            assert response.status_code == 200, response.text
+            sheet = response.json()
+            approved = await c.post(f"{route}/attendance/{sheet['id']}/approve", json={"revision": sheet["revision"]})
+            assert approved.status_code == 200, approved.text
+        summary = (await c.get(f"{route}/attendance-summary", params={"company_id": co["id"], "month": "2026-10"})).json()
+        line = summary["lines"][0]
+        assert line["worked_days"] == "4.00"
+        assert line["monthly_worked_days"] == line["paid_leave_days"] == line["paid_holiday_days"] == "1.00"
+        body = {"company_id": co["id"], "month": "2026-10", "attendance_refs": {s["id"]: s["revision"] for s in summary["sheets"]}, "lines": [{"assignment_id": worker["id"], "calculation_method": "Monthly", "monthly_pay_basis": "PaidDays", "base_salary": "31000", "hours_per_day": "8", "worked_days": "1", "credit_leave": "1", "government_holidays": "1", "paid_sundays": 4, "days_absent": "24", "esi_percentage": "0.75"}]}
+        response = await c.post("/api/admin/payroll", json=body)
+        assert response.status_code == 200, response.text
+        saved = response.json()
+        assert saved["lines"][0]["paid_days"] == "7.00"
+        assert saved["totals"]["gross_wages"] == "7000.00"
+        assert saved["totals"]["payable"] == "6947.50"
+        body.update(revision=saved["revision"], created_at=saved["created_at"])
+        body["lines"][0].update(worked_days="2", days_absent="23")
+        assert (await c.post("/api/admin/payroll", json=body)).status_code == 422
+        body["attendance_refs"] = {}
+        manual = await c.post("/api/admin/payroll", json=body)
+        assert manual.status_code == 200, manual.text
+        assert manual.json()["totals"]["gross_wages"] == "8000.00"
