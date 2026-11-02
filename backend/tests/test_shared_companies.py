@@ -97,6 +97,40 @@ async def test_deleting_company_removes_active_choices_and_roster_but_keeps_hist
 
 
 @pytest.mark.asyncio
+async def test_archived_company_billing_profile_can_be_edited_before_restore(company_db):
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="https://test.invalid") as client:
+        await client.post("/api/admin/login", json={"pin": "123456"})
+        company = (await client.post(
+            "/api/admin/invoices/companies",
+            json={"name": "Factory A", "address": "Old address", "gstin": "29OLD"},
+        )).json()
+        assert (await client.delete(f"/api/admin/clients/{company['id']}")).status_code == 200
+
+        updated = await client.patch(
+            f"/api/admin/clients/{company['id']}",
+            json={"name": "Factory A Private Limited", "billing_address": "New billing address", "gstin": "29NEWGSTIN"},
+        )
+        assert updated.status_code == 200, updated.text
+        assert updated.json()["archived"] is True
+        assert updated.json()["billing_address"] == "New billing address"
+        assert updated.json()["gstin"] == "29NEWGSTIN"
+
+        archived = (await client.get("/api/admin/clients?archived=true")).json()
+        assert [(row["name"], row["billing_address"], row["gstin"]) for row in archived] == [
+            ("Factory A Private Limited", "New billing address", "29NEWGSTIN")
+        ]
+        assert company_db.invoice_companies.records[0]["address"] == "New billing address"
+        assert company_db.invoice_companies.records[0]["gstin"] == "29NEWGSTIN"
+        assert (await client.get("/api/admin/invoices/companies")).json() == []
+
+        assert (await client.post(f"/api/admin/clients/{company['id']}/restore")).status_code == 200
+        invoice_company = (await client.get("/api/admin/invoices/companies")).json()[0]
+        assert invoice_company["name"] == "Factory A Private Limited"
+        assert invoice_company["address"] == "New billing address"
+        assert invoice_company["gstin"] == "29NEWGSTIN"
+
+
+@pytest.mark.asyncio
 async def test_legacy_invoice_company_links_and_names_are_preserved(company_db):
     old_id, roster_id = str(uuid4()), str(uuid4())
     now = datetime.now(timezone.utc)

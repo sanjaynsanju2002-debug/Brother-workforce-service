@@ -99,11 +99,25 @@ async def update_client(client_id: str, payload: ClientUpdate) -> Client:
     )
     if not doc:
         raise HTTPException(status_code=404, detail="Client not found")
+
+    # Keep the compatibility invoice-company record in sync. Some older companies
+    # were first created in Invoice, while newer records live primarily in clients.
+    # Updating either active or archived profiles must produce one consistent set of
+    # billing details when the company is later selected or restored.
+    billing_changes = {}
     if "name" in changes:
+        billing_changes["name"] = changes["name"]
         await rename_roster_company(db, client_id, changes["name"])
-        billing = await db.invoice_companies.find(company_name_query(before["name"])).to_list(None)
+    if "billing_address" in changes:
+        billing_changes["address"] = changes["billing_address"]
+    if "gstin" in changes:
+        billing_changes["gstin"] = changes["gstin"]
+    if billing_changes:
+        billing = await db.invoice_companies.find({
+            "$or": [{"id": client_id}, company_name_query(before["name"])]
+        }).to_list(None)
         for record in billing:
-            await db.invoice_companies.update_one({"id": record["id"]}, {"$set": {"name": changes["name"]}})
+            await db.invoice_companies.update_one({"id": record["id"]}, {"$set": billing_changes})
     return Client(**doc)
 
 
