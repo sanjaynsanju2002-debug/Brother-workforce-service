@@ -23,7 +23,7 @@ from lib import auth
 from lib.invoices import InvoiceProfile
 from lib.payroll import Payroll, PayrollInput, PayrollLine, calculate_payroll, sunday_count
 from lib.payroll_exports import export_payroll_pdf, export_payroll_xlsx
-from routers import assignments, payroll
+from routers import assignments, payroll, payments
 from server import app
 from tests.test_admin_session_and_application import FakeDB
 from tests.test_finance import Collection as BaseCollection
@@ -574,3 +574,87 @@ async def test_paid_days_manual_values_save_reopen_and_revise(monkeypatch):
         assert revised.status_code == 200, revised.text
         assert revised.json()["lines"][0]["gross_wages"] == "14000.00"
         assert revised.json()["lines"][0]["payable"] == "13860.00"
+
+
+def worked_days_input(month="2026-11", **changes):
+    line = {"assignment_id": "person-a", "calculation_method": "Monthly", "monthly_pay_basis": "WorkedDays",
+            "base_salary": "18000", "hours_per_day": "8", "worked_days": "25",
+            "esi_percentage": "0.75", "esi_employer_percentage": "3.25"}
+    line.update(changes)
+    return PayrollInput(company_id="company-a", month=month, lines=[line])
+
+
+def test_calendar_day_salary_uses_only_entered_days_then_deducts_employee_esi():
+    row = calculate_payroll(worked_days_input())[0][0]
+    assert row.gross_wages == Decimal("15000.00")  # 18000 / 30 * 25
+    assert row.paid_days == Decimal("25") and row.sunday_holidays == 0
+    assert row.esi_deduction == Decimal("113.00")
+    assert row.payable == Decimal("14887.00")
+    assert row.esi_employer_contribution == Decimal("488.00")
+    no_employer_esi = calculate_payroll(worked_days_input(esi_employer_percentage="0"))[0][0]
+    assert no_employer_esi.esi_employer_contribution == 0
+    assert no_employer_esi.payable == row.payable
+    exempt = calculate_payroll(worked_days_input(esi_percentage="0"))[0][0]
+    assert exempt.payable == exempt.gross_wages == 15000
+    assert exempt.esi_employer_contribution == 488
+
+
+@pytest.mark.parametrize("month,days", [("2026-11", 30), ("2026-10", 31), ("2026-02", 28), ("2028-02", 29)])
+def test_calendar_proration_full_month_has_no_daily_rate_rounding_drift(month, days):
+    row = calculate_payroll(worked_days_input(month, base_salary="15000", worked_days=str(days)))[0][0]
+    assert row.gross_wages == 15000
+    assert row.esi_deduction == 113 and row.esi_employer_contribution == 488
+    assert row.payable == 14887
+
+
+def test_calendar_proration_half_days_zero_days_and_each_employees_esi_rounding():
+    half = calculate_payroll(worked_days_input("2026-10", base_salary="15000", worked_days="25.5"))[0][0]
+    assert half.gross_wages == Decimal("12338.71")
+    assert half.esi_deduction == 93 and half.esi_employer_contribution == 402
+    assert half.payable == Decimal("12245.71")
+    zero = calculate_payroll(worked_days_input(worked_days="0"))[0][0]
+    assert zero.gross_wages == zero.esi_deduction == zero.esi_employer_contribution == zero.payable == 0
+    value = worked_days_input(base_salary="15000", worked_days="26")
+    value.lines.append(value.lines[0].model_copy(update={"assignment_id": "person-b"}))
+    _, total = calculate_payroll(value)
+    assert total.esi_deduction == 196  # sum of 98 per employee, not a rounded total
+    assert total.esi_employer_contribution == 846
+
+
+@pytest.mark.parametrize("changes", [{"worked_days": "31"}, {"worked_days": "-1"}, {"salary_advance": "15001"}, {"esi_percentage": "100", "penalty": "1"}])
+def test_calendar_proration_blocks_invalid_days_and_negative_net(changes):
+    with pytest.raises(ValidationError):
+        worked_days_input(**changes)
+
+
+@pytest.mark.asyncio
+async def test_calendar_salary_preview_save_reopen_exports_and_payslip_agree_for_any_company(monkeypatch):
+    fake = fake_db(monkeypatch)
+    monkeypatch.setattr(payments, "db", {"payroll": fake.payroll})
+    body = worked_days_input().model_dump(mode="json")
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="https://brothersworkforcesolutions.in") as client:
+        await client.post("/api/admin/login", json={"pin": "123456"})
+        preview = await client.post("/api/admin/payroll/preview", json=body)
+        assert preview.status_code == 200, preview.text
+        response = await client.post("/api/admin/payroll", json=body)
+        assert response.status_code == 200, response.text
+        saved = response.json()
+        assert saved["totals"] == preview.json()["totals"]
+        assert saved["totals"]["payable"] == "14887.00"
+        reopened = (await client.get("/api/admin/payroll/draft?company_id=company-a&month=2026-11")).json()
+        assert reopened["payroll"] == saved
+        exported = await client.get(f'/api/admin/payroll/{saved["id"]}/download/xlsx')
+        sheet = load_workbook(BytesIO(exported.content), data_only=False).active
+        assert sheet["Q9"].value == "=ROUND(L9*J9/30+P9+AB9,2)"
+        assert sheet["S9"].value == "=ROUNDUP(Q9*R9/100,0)"
+        assert sheet["U9"].value == "=ROUNDUP(Q9*T9/100,0)"
+        assert sheet["AC9"].value == "=ROUND(Q9-S9-W9-M9-O9,2)"
+        cached = load_workbook(BytesIO(exported.content), data_only=True).active
+        for cell, expected in {"Q9": 15000, "S9": 113, "U9": 488, "AC9": 14887, "K9": 25}.items():
+            assert cached[cell].value == expected
+        for path in (f'/api/admin/payroll/{saved["id"]}/download/pdf', f'/api/admin/operations/payroll/{saved["id"]}/payslip/person-a.pdf'):
+            document = await client.get(path)
+            assert document.status_code == 200, document.text if document.status_code != 200 else ""
+            text = " ".join(page.extract_text() for page in PdfReader(BytesIO(document.content)).pages)
+            for expected in ("15,000.00", "113.00", "488.00", "14,887.00"):
+                assert expected.replace(",", "") in text.replace(",", "")

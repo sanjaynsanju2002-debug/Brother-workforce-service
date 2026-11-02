@@ -33,7 +33,9 @@ def is_dhatu_organics(name: str) -> bool:
 
 
 async def allow_monthly_register(payload: PayrollInput):
-    if not any(line.calculation_method == "Monthly" for line in payload.lines):
+    # Calendar-day salary proration is available to every company. The previous
+    # register with automatic Sunday/leave additions remains company-specific.
+    if not any(line.calculation_method == "Monthly" and line.monthly_pay_basis != "WorkedDays" for line in payload.lines):
         return
     company = await db.clients.find_one({"id": payload.company_id, "archived": {"$ne": True}}, {"_id": 0, "name": 1})
     if company:

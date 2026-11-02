@@ -109,6 +109,15 @@ def export_monthly_register_xlsx(payroll: Payroll) -> bytes:
                 sheet.cell(index, 17, f"=ROUND(L{index}*K{index}/{days}+P{index}+AB{index},2)")
                 sheet.cell(index, 29, f"=ROUND(Q{index}-S{index}-W{index}-M{index}-O{index},2)")
                 sheet.cell(index, 30, f"=ROUND(L{index}/{days}/AF{index},2)")
+            elif line.monthly_pay_basis == "WorkedDays":
+                sheet.cell(index, 7, f"=MAX(0,{days}-J{index})")
+                sheet.cell(index, 11, f"=J{index}")
+                sheet.cell(index, 14, f"=ROUND(L{index}*G{index}/{days},2)")
+                sheet.cell(index, 17, f"=ROUND(L{index}*J{index}/{days}+P{index}+AB{index},2)")
+                sheet.cell(index, 19, f"=ROUNDUP(Q{index}*R{index}/100,0)")
+                sheet.cell(index, 21, f"=ROUNDUP(Q{index}*T{index}/100,0)")
+                sheet.cell(index, 29, f"=ROUND(Q{index}-S{index}-W{index}-M{index}-O{index},2)")
+                sheet.cell(index, 30, f"=ROUND(L{index}/{days}/AF{index},2)")
         else:
             sheet.cell(index, 17, f"=ROUND(J{index}*AE{index}+AB{index},2)")
             sheet.cell(index, 19, f"=ROUND(Q{index}*R{index}/100,2)")
@@ -185,7 +194,7 @@ def export_payroll_xlsx(payroll: Payroll) -> bytes:
     Each formula has a saved-value cache so Excel and other viewers display the
     same amounts immediately, before their first recalculation.
     """
-    if any(line.calculation_method == "Monthly" for line in payroll.lines):
+    if any(line.calculation_method == "Monthly" or line.esi_employer_contribution or line.pf_employer_contribution for line in payroll.lines):
         return export_monthly_register_xlsx(payroll)
     with ZipFile(ASSETS / "payroll-template.xlsx") as source:
         sheet = ET.fromstring(source.read("xl/worksheets/sheet1.xml"))
@@ -376,8 +385,8 @@ def export_monthly_register_pdf(payroll: Payroll) -> bytes:
     header = Table([[logo, brand]], colWidths=[95, doc.width - 95])
     header.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "TOP"), ("LEFTPADDING", (0, 0), (-1, -1), 0), ("BOTTOMPADDING", (0, 0), (-1, -1), 6)]))
     story = [header, p("SALARY REGISTER", heading), p(f"{payroll.company_name} | {month_label(payroll.month)} | {payroll.company_location or 'Worksite not supplied'}", bold), Spacer(1, 8)]
-    summary = Table([[p(label, body) for label in ("Employees", "Gross salary (INR)", "Employee ESI + PF (INR)", "Employer ESI + PF (INR)", "Net payable (INR)")],
-                     [p(value, bold) for value in (totals.employee_count, money(totals.gross_wages), money(totals.esi_deduction + totals.pf_deduction), money(totals.esi_employer_contribution + totals.pf_employer_contribution), money(totals.payable))]],
+    summary = Table([[p(label, body) for label in ("Employees", "Gross salary (INR)", "Employee ESI (INR)", "Employer ESI - separate (INR)", "Net salary (INR)")],
+                     [p(value, bold) for value in (totals.employee_count, money(totals.gross_wages), money(totals.esi_deduction), money(totals.esi_employer_contribution), money(totals.payable))]],
                     colWidths=[doc.width / 5] * 5)
     summary.setStyle(TableStyle([("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#F8FAFC")), ("LINEABOVE", (0, 0), (-1, 0), .6, orange), ("TOPPADDING", (0, 0), (-1, -1), 4), ("BOTTOMPADDING", (0, 0), (-1, -1), 4)]))
     story.extend([summary, Spacer(1, 8)])
@@ -400,12 +409,14 @@ def export_monthly_register_pdf(payroll: Payroll) -> bytes:
                                ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
                                ("LEFTPADDING", (0, 0), (-1, -1), 2), ("RIGHTPADDING", (0, 0), (-1, -1), 2)]))
     story.extend([table, Spacer(1, 7)])
+    if any(line.calculation_method == "Monthly" and line.monthly_pay_basis == "WorkedDays" for line in payroll.lines):
+        story.append(p("Calendar-day calculation: gross salary = monthly salary / calendar days in the payroll month x worked days + allowance + overtime. Sundays and holidays are not added automatically. Net salary = gross salary - employee ESI - optional employee PF - advance - penalty. ESI shares are rounded up to the next rupee. Employer ESI is paid separately and does not reduce employee net salary.", body))
     if any(line.monthly_pay_basis == "PaidDays" for line in payroll.lines):
         story.append(p("Worked-days calculation: paid days = worked days + paid leave + other paid holidays + paid Sundays (count each day once). Gross = monthly CTC x paid days / calendar days + allowance + overtime. Net = gross - employee ESI - employee PF - advance - penalty. Employer contributions are separate.", body))
         for line in payroll.lines:
             if line.calculation_method == "Monthly" and line.monthly_pay_basis == "PaidDays":
                 story.append(p(f"{line.full_name}: monthly CTC INR {money(line.base_salary)}; hours/day {line.hours_per_day:g}; daily INR {money(line.per_day_salary)}; hourly INR {money(line.per_hour_salary)}; employee ESI {line.esi_percentage:g}%; employee PF {line.pf_percentage:g}%.", body))
-    else:
+    elif any(line.calculation_method == "Monthly" and line.monthly_pay_basis == "SalaryLessLOP" for line in payroll.lines):
         story.append(p("LOP = absent days - credit leave. Paid days = present + credit leave + government holidays + Sundays. Net = gross - employee ESI - employee PF + overtime amount.", body))
 
     def footer(canvas, document):
@@ -418,7 +429,7 @@ def export_monthly_register_pdf(payroll: Payroll) -> bytes:
 
 
 def export_payroll_pdf(payroll: Payroll) -> bytes:
-    if any(line.calculation_method == "Monthly" for line in payroll.lines):
+    if any(line.calculation_method == "Monthly" or line.esi_employer_contribution or line.pf_employer_contribution for line in payroll.lines):
         return export_monthly_register_pdf(payroll)
     import reportlab
     from reportlab.lib import colors

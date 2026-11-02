@@ -8,14 +8,17 @@ import type { PayrollDraft, PayrollInput } from "@/lib/payroll";
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
-it("lets an excluded employee edit attendance and ESI, automatically includes them, and saves balanced paid days", async () => {
+it("lets an excluded monthly employee enter worked days, applies ESI defaults, and saves without adding Sundays", async () => {
   const draft: PayrollDraft = { company: { id: "dhatu", name: "DONPL" }, employees: [{ assignment_id: "manual", employee_id: "TEST-01", full_name: "Test Employee", role: "Packing", salary: "31000", salary_basis: "Monthly", status: "Completed" }], payroll: null };
   const savedInputs: PayrollInput[] = [];
-  const lineAmounts = { assignment_id: "manual", loss_of_pay: "5.50", sunday_holidays: 4, paid_days: "25.50", per_day_salary: "1000.00", per_hour_salary: "125.00", leave_deduction: "5500.00", overtime_amount: "0.00", effective_overtime_rate: "125.00", gross_wages: "25500.00", esi_deduction: "191.25", esi_employer_contribution: "0.00", pf_deduction: "0.00", pf_employer_contribution: "0.00", payable: "25308.75" };
-  const totals = { employee_count: 1, worked_days: "21.50", paid_days: "25.50", gross_wages: "25500.00", esi_deduction: "191.25", pf_deduction: "0.00", payable: "25308.75" };
+  const lineAmounts = { assignment_id: "manual", loss_of_pay: "5.50", sunday_holidays: 0, paid_days: "25.50", per_day_salary: "1000.00", per_hour_salary: "125.00", leave_deduction: "5500.00", overtime_amount: "0.00", effective_overtime_rate: "125.00", gross_wages: "25500.00", esi_deduction: "192.00", esi_employer_contribution: "829.00", pf_deduction: "0.00", pf_employer_contribution: "0.00", payable: "25308.00" };
+  const totals = { employee_count: 1, worked_days: "25.50", paid_days: "25.50", gross_wages: "25500.00", esi_deduction: "192.00", esi_employer_contribution: "829.00", pf_deduction: "0.00", payable: "25308.00" };
   vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
     const body = JSON.parse(String(init?.body ?? "{}")) as PayrollInput;
-    if (url.endsWith("/preview")) return new Response(JSON.stringify({ lines: body.lines.length ? [lineAmounts] : [], totals }));
+    if (url.endsWith("/preview")) {
+      const employer = body.lines[0]?.esi_employer_percentage === "0" ? "0.00" : "829.00";
+      return new Response(JSON.stringify({ lines: body.lines.length ? [{ ...lineAmounts, esi_employer_contribution: employer }] : [], totals: { ...totals, esi_employer_contribution: employer } }));
+    }
     if (url === "/api/admin/payroll") {
       savedInputs.push(body);
       return new Response(JSON.stringify({ ...body, id: "saved", company_name: "DONPL", company_location: "Mysore", lines: [{ ...draft.employees[0], ...body.lines[0], ...lineAmounts, paid_sundays: 4 }], totals, revision: 1, created_at: "2026-10-31T15:00:00Z", updated_at: "2026-10-31T15:00:00Z" }));
@@ -34,25 +37,38 @@ it("lets an excluded employee edit attendance and ESI, automatically includes th
   });
   try {
     act(() => root.render(<QueryClientProvider client={qc}><PayrollEditor draft={draft} month="2026-10" deleting={false} onDirty={() => {}} onBusy={() => {}} onReload={async () => {}} /></QueryClientProvider>));
-    for (const field of ["worked_days", "days_absent", "credit_leave", "government_holidays", "paid_sundays", "total_paid_days", "esi_percentage", "pf_percentage"]) expect(input(field).disabled).toBe(false);
+    for (const field of ["worked_days", "base_salary", "esi_percentage", "esi_employer_percentage", "pf_percentage"]) expect(input(field).disabled).toBe(false);
+    for (const field of ["days_absent", "credit_leave", "government_holidays", "paid_sundays", "total_paid_days"]) expect(input(field)).toBeNull();
     expect(host.textContent).toContain("This employee is not included yet");
-    enter("esi_percentage", "0.75");
+    expect(input("esi_percentage").value).toBe("0.75");
+    expect(input("esi_employer_percentage").value).toBe("3.25");
+    enter("worked_days", "25.5");
     expect(host.querySelector<HTMLInputElement>('[aria-label="Include Test Employee in payroll"]')!.checked).toBe(true);
-    enter("total_paid_days", "25.5");
-    expect(input("worked_days").value).toBe("21.5");
-    expect(input("days_absent").value).toBe("5.5");
+    expect(input("worked_days").value).toBe("25.5");
     await vi.waitFor(async () => {
       await act(async () => {});
-      expect(host.querySelector('[data-testid="payroll-active-payable"]')?.textContent).toBe("₹25,308.75");
+      expect(host.querySelector('[data-testid="payroll-active-payable"]')?.textContent).toBe("₹25,308.00");
+      expect(host.querySelector('[data-testid="payroll-employer-esi-total"]')?.textContent).toBe("₹829.00");
+    });
+    enter("esi_employer_percentage", "0");
+    await vi.waitFor(async () => {
+      await act(async () => {});
+      expect(host.querySelector('[data-testid="payroll-employer-esi-total"]')?.textContent).toBe("₹0.00");
+      expect(host.querySelector('[data-testid="payroll-active-payable"]')?.textContent).toBe("₹25,308.00");
+    });
+    enter("esi_employer_percentage", "3.25");
+    await vi.waitFor(async () => {
+      await act(async () => {});
+      expect(host.querySelector('[data-testid="payroll-employer-esi-total"]')?.textContent).toBe("₹829.00");
     });
     act(() => host.querySelector<HTMLButtonElement>('[data-testid="payroll-save"]')!.click());
     await vi.waitFor(async () => {
       await act(async () => {});
       expect(savedInputs).toHaveLength(1);
     });
-    expect(savedInputs[0].lines[0]).toMatchObject({ assignment_id: "manual", worked_days: "21.5", days_absent: "5.5", paid_sundays: "4", esi_percentage: "0.75" });
+    expect(savedInputs[0].lines[0]).toMatchObject({ assignment_id: "manual", monthly_pay_basis: "WorkedDays", worked_days: "25.5", days_absent: "5.5", esi_percentage: "0.75", esi_employer_percentage: "3.25", pf_percentage: "0" });
     expect(savedInputs[0].lines[0]).not.toHaveProperty("total_paid_days");
-    expect(input("total_paid_days").value).toBe("25.5");
+    expect(input("worked_days").value).toBe("25.5");
   } finally {
     act(() => root.unmount()); qc.clear(); vi.unstubAllGlobals(); host.remove();
   }

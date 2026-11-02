@@ -41,21 +41,22 @@ it("renders the employee register and the selected employee's editable details w
   expect(html).toContain('data-testid="payroll-days-first"');
   expect(html).not.toContain('data-testid="payroll-days-second"');
   expect(html).toContain("₹24,691.75");
-  expect(html).toContain("₹3,608.25");
+  expect(html).toContain("₹212.25");
+  expect(html).toContain("₹3,396.00");
   expect(html).toContain('value="12.00"');
   expect(html).toContain('aria-label="Select all employees"');
-  expect(html).toContain("Sunday holidays: 4");
+  expect(html).not.toContain("Sunday holidays:");
   expect(html).toContain("Employer ESI");
   expect(html).toContain("Back to employee register");
   client.clear();
 });
 
-it("hides the monthly register and Sunday holidays for other companies", () => {
+it("shows separate employer ESI for daily workers without automatically adding Sundays", () => {
   const employee = { assignment_id: "first", employee_id: "0001", full_name: "Ravi Kumar", role: "Operator", salary: "500.00", salary_basis: "Daily" as const, status: "Active" as const };
   const draft: PayrollDraft = { company: { id: "other", name: "Example Manufacturing" }, employees: [employee], payroll: null };
   const input: PayrollInput = {
     company_id: "other", month: "2026-10", notes: "", cost_responsibility: "Agency", attendance_refs: {},
-    lines: [{ assignment_id: "first", calculation_method: "Daily", worked_days: "0", daily_rate: "500.00", base_salary: "0", days_absent: "0", credit_leave: "0", government_holidays: "0", salary_advance: "0", penalty: "0", allowance: "0", esi_percentage: "0", esi_employer_percentage: "0", pf_percentage: "0", pf_employer_percentage: "0", overtime_hours: "0", overtime_rate: "0" }],
+    lines: [{ assignment_id: "first", calculation_method: "Daily", worked_days: "0", daily_rate: "500.00", base_salary: "0", days_absent: "0", credit_leave: "0", government_holidays: "0", salary_advance: "0", penalty: "0", allowance: "0", esi_percentage: "0.75", esi_employer_percentage: "3.25", pf_percentage: "0", pf_employer_percentage: "0", overtime_hours: "0", overtime_rate: "0" }],
   };
   const totals = { employee_count: 1, worked_days: "0.00", paid_days: "0.00", gross_wages: "0.00", esi_deduction: "0.00", pf_deduction: "0.00", payable: "0.00" };
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
@@ -65,7 +66,9 @@ it("hides the monthly register and Sunday holidays for other companies", () => {
   })));
   expect(html).not.toContain("Sunday holidays:");
   expect(html).not.toContain("Monthly salary register");
-  expect(html).not.toContain("Employer ESI (%)");
-  expect(html).toContain("Gross wages include worked days");
+  expect(html).toContain("Employer ESI (%)");
+  expect(html).toContain('data-testid="payroll-employer-total-box"');
+  expect(html).toContain('data-testid="payroll-employer-box"');
+  expect(html).toContain("Gross salary = worked days");
   client.clear();
 });

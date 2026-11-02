@@ -57,15 +57,13 @@ it("prefills daily rates and monthly salary register values from Company Workfor
   expect(rows[2].selected).toBe(false);
 });
 
-it("keeps the monthly salary register exclusive to Dhatu Organics", () => {
+it("offers calendar-day salary proration to monthly workers at any company", () => {
   expect(isDhatuOrganicsCompany("Dhatu Organics & Naturals Pvt Ltd")).toBe(true);
   expect(isDhatuOrganicsCompany("DONPL")).toBe(true);
   expect(isDhatuOrganicsCompany("Example Manufacturing")).toBe(false);
   const person = employee("monthly", { salary_basis: "Monthly", salary: "15600.00" });
   const rows = payrollRows({ company: { id: "other", name: "Example Manufacturing" }, employees: [person], payroll: null });
-  expect(rows[0].calculation_method).toBe("Daily");
-  expect(rows[0].daily_rate).toBe("");
-  expect(rows[0].base_salary).toBe("0");
+  expect(rows[0]).toMatchObject({ calculation_method: "Monthly", monthly_pay_basis: "WorkedDays", daily_rate: "0", base_salary: "15600.00", esi_percentage: "0.75", esi_employer_percentage: "3.25", pf_percentage: "0" });
 });
 
 it("combines the saved ESI and PF amounts exactly for the summary card", () => {
@@ -89,12 +87,16 @@ it("validates the monthly salary register fields", () => {
 });
 
 
-it("defaults new Dhatu monthly payroll to full calendar pay with editable Sundays and 8 hours", () => {
+it("requires worked days for new monthly payroll and preserves explicit legacy paid-day editing", () => {
   const person = employee("monthly", { salary_basis: "Monthly", salary: "15000" });
   const row = payrollRows({ company: { id: "dhatu", name: "DONPL" }, employees: [person], payroll: null }, "2026-10")[0];
-  expect(row).toMatchObject({ monthly_pay_basis: "PaidDays", base_salary: "15000", worked_days: "27", days_absent: "0", paid_sundays: "4", hours_per_day: "8" });
-  expect(firstPayrollIssue([row], 31, 4)).toBeUndefined();
-  const absent = editPayrollRow(row, "days_absent", "2.5", 31, 4);
+  expect(row).toMatchObject({ monthly_pay_basis: "WorkedDays", base_salary: "15000", worked_days: "", hours_per_day: "8", esi_percentage: "0.75", esi_employer_percentage: "3.25" });
+  expect(firstPayrollIssue([row], 31, 4)?.field).toBe("worked_days");
+  const simple = editPayrollRow(row, "worked_days", "25.5", 31, 4);
+  expect(simple).toMatchObject({ worked_days: "25.5", days_absent: "5.5" });
+  expect(firstPayrollIssue([simple], 31, 4)).toBeUndefined();
+  const legacy = { ...row, monthly_pay_basis: "PaidDays" as const, worked_days: "27" };
+  const absent = editPayrollRow(legacy, "days_absent", "2.5", 31, 4);
   expect(absent.worked_days).toBe("24.5");
   const leave = editPayrollRow(absent, "credit_leave", "1.5", 31, 4);
   expect(leave.days_absent).toBe("1");
@@ -102,6 +104,13 @@ it("defaults new Dhatu monthly payroll to full calendar pay with editable Sunday
   expect(firstPayrollIssue([{ ...leave, worked_days: "28" }], 31, 4)?.field).toBe("worked_days");
   expect(firstPayrollIssue([{ ...leave, paid_sundays: "5" }], 31, 4)?.field).toBe("paid_sundays");
   expect(firstPayrollIssue([{ ...leave, hours_per_day: "0" }], 31, 4)?.field).toBe("hours_per_day");
+});
+
+it("applies standard ESI rates only when the owner explicitly switches a saved register", () => {
+  const old = employee("old", { calculation_method: "Monthly", monthly_pay_basis: "PaidDays", base_salary: "15000", worked_days: "25", esi_percentage: "0", esi_employer_percentage: "0", pf_percentage: "0" });
+  expect(editPayrollRow(old, "monthly_pay_basis", "WorkedDays", 31, 4)).toMatchObject({ monthly_pay_basis: "WorkedDays", worked_days: "25", esi_percentage: "0.75", esi_employer_percentage: "3.25" });
+  expect(editPayrollRow({ ...old, calculation_method: "Daily" }, "calculation_method", "Monthly", 31, 4)).toMatchObject({ calculation_method: "Monthly", monthly_pay_basis: "WorkedDays", esi_percentage: "0.75", esi_employer_percentage: "3.25" });
+  expect(old.esi_percentage).toBe("0");
 });
 
 it("includes an excluded employee when a payroll value is edited", () => {

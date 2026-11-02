@@ -6,7 +6,7 @@ export type PayrollEmployee = {
   salary: string | null; salary_basis: PayrollMethod; status: "Active" | "Completed";
 };
 export type PayrollInputValues = {
-  monthly_pay_basis?: "SalaryLessLOP" | "PaidDays"; hours_per_day?: string; paid_sundays?: string;
+  monthly_pay_basis?: "SalaryLessLOP" | "PaidDays" | "WorkedDays"; hours_per_day?: string; paid_sundays?: string;
   calculation_method: PayrollMethod; worked_days: string; daily_rate: string; base_salary: string;
   days_absent: string; credit_leave: string; government_holidays: string; salary_advance: string;
   penalty: string; allowance: string; esi_percentage: string; esi_employer_percentage: string;
@@ -59,20 +59,19 @@ export function sundayDates(month: string): number[] {
 
 export function payrollRows(draft: PayrollDraft, month = ""): PayrollRow[] {
   const saved = new Map(draft.payroll?.lines.map((line) => [line.assignment_id, line]) ?? []);
-  const monthlyRegisterEnabled = isDhatuOrganicsCompany(draft.company.name);
   return draft.employees.map((person) => {
     const line = saved.get(person.assignment_id);
     const { paid_sundays: savedSundays, ...savedValues } = line ?? {};
-    const method = monthlyRegisterEnabled ? line?.calculation_method ?? person.salary_basis : "Daily";
+    const method = line?.calculation_method ?? person.salary_basis;
     return {
       ...person, ...(line ? savedValues : {}), selected: draft.payroll ? !!line : person.status === "Active",
       calculation_method: method,
       ...(method === "Monthly" ? {
-        monthly_pay_basis: line?.monthly_pay_basis ?? (line ? "SalaryLessLOP" : "PaidDays"),
+        monthly_pay_basis: line?.monthly_pay_basis ?? (line ? "SalaryLessLOP" : "WorkedDays"),
         hours_per_day: line?.hours_per_day ?? (line ? "9" : "8"),
         paid_sundays: String(savedSundays ?? sundayDates(month).length),
       } : {}),
-      worked_days: line?.worked_days ?? (method === "Monthly" && month ? String(new Date(Number(month.slice(0, 4)), Number(month.slice(5)), 0).getDate() - sundayDates(month).length) : ""),
+      worked_days: line?.worked_days ?? "",
       daily_rate: line?.daily_rate ?? (method === "Monthly" ? ZERO : person.salary_basis === "Daily" ? person.salary ?? "" : ""),
       base_salary: line?.base_salary ?? (method === "Monthly" ? person.salary ?? "" : ZERO),
       days_absent: line?.days_absent ?? ZERO,
@@ -81,8 +80,8 @@ export function payrollRows(draft: PayrollDraft, month = ""): PayrollRow[] {
       salary_advance: line?.salary_advance ?? ZERO,
       penalty: line?.penalty ?? ZERO,
       allowance: line?.allowance ?? ZERO,
-      esi_percentage: line?.esi_percentage ?? ZERO,
-      esi_employer_percentage: line?.esi_employer_percentage ?? ZERO,
+      esi_percentage: line ? line.esi_percentage ?? ZERO : "0.75",
+      esi_employer_percentage: line ? line.esi_employer_percentage ?? ZERO : "3.25",
       pf_percentage: line?.pf_percentage ?? ZERO,
       pf_employer_percentage: line?.pf_employer_percentage ?? ZERO,
       overtime_hours: line?.overtime_hours ?? ZERO,
@@ -97,10 +96,17 @@ export function editPayrollRow(row: PayrollRow, field: PayrollEditField, value: 
   const next = { ...row, [field]: value, selected: true } as PayrollRow;
   if (["worked_days", "days_absent", "credit_leave", "government_holidays", "paid_sundays", "monthly_pay_basis", "calculation_method"].includes(field)) next.total_paid_days = undefined;
   if (field === "calculation_method" && value === "Monthly") {
-    next.monthly_pay_basis = "PaidDays";
+    next.monthly_pay_basis = "WorkedDays";
     next.hours_per_day ??= "8";
     next.paid_sundays ??= String(sundays);
     if (!Number(next.base_salary) && row.salary_basis === "Monthly") next.base_salary = row.salary ?? "";
+  }
+  if ((field === "monthly_pay_basis" && value === "WorkedDays") || (field === "calculation_method" && value === "Monthly")) {
+    next.esi_percentage = "0.75";
+    next.esi_employer_percentage = "3.25";
+  }
+  if (next.calculation_method === "Monthly" && next.monthly_pay_basis === "WorkedDays" && field === "worked_days") {
+    next.days_absent = value.trim() ? String(Math.max(0, Math.round((monthDays - Number(value)) * 100) / 100)) : "0";
   }
   if (next.calculation_method !== "Monthly" || next.monthly_pay_basis !== "PaidDays") return next;
   const paidHolidays = Number(next.credit_leave) + Number(next.government_holidays) + Number(next.paid_sundays ?? sundays);
@@ -157,13 +163,15 @@ export function firstPayrollIssue(rows: PayrollRow[], monthDays: number, sundays
     if (row.calculation_method === "Daily" && Number(row.overtime_hours) > 0 && !Number(row.overtime_rate)) {
       return { assignment_id: row.assignment_id, field: "overtime_rate", message: `${row.full_name}: enter an hourly overtime rate greater than 0.` };
     }
-    if (row.calculation_method === "Monthly" && row.monthly_pay_basis === "PaidDays") {
+    if (row.calculation_method === "Monthly" && (row.monthly_pay_basis === "PaidDays" || row.monthly_pay_basis === "WorkedDays")) {
       const hours = row.hours_per_day ?? "";
       if (!DECIMAL.test(hours) || Number(hours) <= 0 || Number(hours) > 24) return { assignment_id: row.assignment_id, field: "hours_per_day", message: `${row.full_name}: enter hours per day above 0 and up to 24.` };
+    }
+    if (row.calculation_method === "Monthly" && row.monthly_pay_basis === "PaidDays") {
       const paidSundays = Number(row.paid_sundays);
       if (!String(row.paid_sundays ?? "").trim() || !Number.isInteger(paidSundays) || paidSundays < 0 || paidSundays > sundays) return { assignment_id: row.assignment_id, field: "paid_sundays", message: `${row.full_name}: enter paid Sundays from 0 to ${sundays}.` };
       if (Math.round((Number(row.worked_days) + Number(row.days_absent) + Number(row.credit_leave) + Number(row.government_holidays) + paidSundays) * 100) > monthDays * 100) return { assignment_id: row.assignment_id, field: "worked_days", message: `${row.full_name}: attendance exceeds ${monthDays} days. Count worked days, paid leave, holidays and Sundays once each.` };
-    } else if (row.calculation_method === "Monthly" && Number(row.credit_leave) > Number(row.days_absent)) {
+    } else if (row.calculation_method === "Monthly" && row.monthly_pay_basis !== "WorkedDays" && Number(row.credit_leave) > Number(row.days_absent)) {
       return { assignment_id: row.assignment_id, field: "credit_leave", message: `${row.full_name}: credit leave cannot exceed absent days.` };
     }
     if (Math.round(Number(row.esi_percentage) * 100) + Math.round(Number(row.pf_percentage) * 100) > 10_000) {
