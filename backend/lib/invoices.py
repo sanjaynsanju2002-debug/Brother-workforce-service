@@ -14,7 +14,8 @@ Quantity = Annotated[Decimal, Field(ge=0, le=1_000_000, decimal_places=2, allow_
 Percentage = Annotated[Decimal, Field(ge=0, le=100, decimal_places=2, allow_inf_nan=False)]
 InvoiceNumber = Annotated[str, Field(min_length=1, max_length=16, pattern=r"^[A-Za-z0-9/-]+$")]
 BillingMode = Literal["managed_services", "services_only"]
-LineKey = Literal["skilled_men", "skilled_women", "semi_men", "semi_women", "unskilled_men", "unskilled_women", "overtime", "other", "men", "women"]
+LineKey = Literal["skilled_men", "skilled_women", "semi_men", "semi_women", "unskilled_men", "unskilled_women", "overtime", "other", "men", "women"] | Annotated[str, Field(pattern=r"^item_[A-Za-z0-9_-]{1,64}$")]
+LineAmount = Annotated[Decimal, Field(ge=0, le=1_000_000_000_000_000, decimal_places=2, allow_inf_nan=False)]
 LINE_LABELS = {
     "skilled_men": ("Skilled", "Men"),
     "skilled_women": ("Skilled", "Women"),
@@ -66,13 +67,24 @@ class InvoiceCompany(InvoiceCompanyInput):
 
 class InvoiceLine(InvoiceModel):
     key: LineKey
+    category: str = Field(default="", max_length=150)
+    description: str = Field(default="", max_length=1000)
     quantity: Quantity = Decimal("0")
     rate: Money = Decimal("0")
+    # None uses quantity x rate. An entered total is retained exactly rather
+    # than inferring a rounded unit rate and changing the invoice by a paise.
+    amount: LineAmount | None = None
+
+    @property
+    def is_custom(self) -> bool:
+        return self.key.startswith("item_")
 
     @model_validator(mode="after")
     def whole_people(self):
-        if self.key not in ("overtime", "other") and self.quantity != self.quantity.to_integral_value():
+        if not self.is_custom and self.key not in ("overtime", "other") and self.quantity != self.quantity.to_integral_value():
             raise ValueError("Worker quantities must be whole numbers")
+        if not self.is_custom and (self.amount is not None or self.category or self.description):
+            raise ValueError("Use a custom invoice item for an entered category, description or amount")
         return self
 
 
@@ -98,7 +110,7 @@ class InvoiceInput(InvoiceModel):
     service_month: str | None = Field(default=None, pattern=MONTH_PATTERN)
     billing_period: str = Field(default="", max_length=100)
     supplier: InvoiceProfile = Field(default_factory=InvoiceProfile)
-    lines: list[InvoiceLine] = Field(default_factory=default_lines, min_length=2, max_length=8)
+    lines: list[InvoiceLine] = Field(default_factory=default_lines, min_length=1, max_length=50)
     service_percentage: Percentage = Decimal("0")
     # Statutory contribution percentages are editable because the applicable
     # rate and wage basis can differ between client agreements.
@@ -119,7 +131,13 @@ class InvoiceInput(InvoiceModel):
 
     @model_validator(mode="after")
     def complete_lines(self):
-        if len(self.lines) != len(self.line_labels) or {line.key for line in self.lines} != set(self.line_labels):
+        custom = [line.is_custom for line in self.lines]
+        if any(custom):
+            if not all(custom):
+                raise ValueError("Do not mix custom invoice items with previous charge rows")
+            if len({line.key for line in self.lines}) != len(self.lines):
+                raise ValueError("Include each invoice item only once")
+        elif len(self.lines) != len(self.line_labels) or {line.key for line in self.lines} != set(self.line_labels):
             raise ValueError("Include each invoice charge row exactly once")
         if self.due_date is not None and self.due_date < self.invoice_date:
             raise ValueError("Payment due date cannot be before the invoice date")
@@ -128,7 +146,8 @@ class InvoiceInput(InvoiceModel):
         if self.service_month and not self.billing_period:
             self.billing_period = month_label(self.service_month)
         # A stable order keeps saved invoices and both exports aligned with the template.
-        self.lines.sort(key=lambda line: list(self.line_labels).index(line.key))
+        if not any(custom):
+            self.lines.sort(key=lambda line: list(self.line_labels).index(line.key))
         if self.billing_mode == "services_only":
             # Wages are only a service-charge reference in this mode, so wage
             # reimbursements and statutory contributions are not receivable.
@@ -180,7 +199,7 @@ def round_money(amount: Decimal) -> Decimal:
 
 
 def calculate_invoice(invoice: InvoiceInput) -> InvoiceTotals:
-    amounts = {line.key: round_money(line.quantity * line.rate) for line in invoice.lines}
+    amounts = {line.key: round_money(line.amount if line.is_custom and line.amount is not None else line.quantity * line.rate) for line in invoice.lines}
     base = sum(amounts.values(), Decimal("0.00"))
     service = round_money(base * invoice.service_percentage / Decimal("100"))
     esi = round_money(base * invoice.esi_percentage / Decimal("100"))

@@ -45,7 +45,15 @@ def input_data(payload: InvoiceInput) -> dict:
 def validate_save(payload: InvoiceInput) -> None:
     if not payload.client_name:
         raise HTTPException(422, "Enter the client / company name")
-    if not any(line.quantity > 0 and line.rate > 0 for line in payload.lines):
+    if payload.lines[0].is_custom:
+        if not any((line.amount if line.amount is not None else line.quantity * line.rate) > 0 for line in payload.lines):
+            raise HTTPException(422, "Enter an amount, or a quantity and rate, in at least one invoice item")
+        for index, line in enumerate(payload.lines, 1):
+            if not line.category or not line.description:
+                raise HTTPException(422, f"Enter a category and description for invoice item {index}")
+            if line.quantity <= 0:
+                raise HTTPException(422, f"Enter a quantity greater than 0 for invoice item {index}")
+    elif not any(line.quantity > 0 and line.rate > 0 for line in payload.lines):
         raise HTTPException(422, "Enter a quantity and rate in at least one charge row")
     if not payload.service_month:
         raise HTTPException(422, "Select the service month this invoice belongs to")

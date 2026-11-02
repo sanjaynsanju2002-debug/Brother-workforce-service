@@ -15,13 +15,13 @@ import { BRAND } from "@/lib/brand";
 import { formatIndianDate } from "@/lib/calendarDate";
 import { monthLabel, previousMonth } from "@/lib/finance";
 import { refreshCompanyQueries } from "@/lib/companyQueries";
-import { INVOICE_BILLING_OPTIONS, invoiceBillingLabel, invoiceRows, type InvoiceBillingMode } from "@/lib/invoice";
+import { INVOICE_BILLING_OPTIONS, createInvoiceItem, editableInvoiceItems, invoiceBillingLabel, type InvoiceBillingMode, type InvoiceItem } from "@/lib/invoice";
 
 type Profile = { name: string; address: string; phone: string; email: string; website: string; gstin: string; payment_details: string };
 type CompanyInput = { name: string; address: string; gstin: string };
 type Company = CompanyInput & { id: string; created_at: string };
 type PaymentStatus = "Pending" | "Partially Paid" | "Paid";
-type Line = { key: string; quantity: string; rate: string };
+type Line = InvoiceItem;
 type Form = { billing_mode: InvoiceBillingMode; company_id: string | null; invoice_number: string; client_name: string; client_address: string; client_gstin: string; invoice_date: string; due_date: string; service_month: string; billing_period: string; supplier: Profile; lines: Line[]; service_percentage: string; esi_percentage: string; pf_percentage: string; cgst_percentage: string | null; sgst_percentage: string | null; gst_amount: string; notes: string };
 type Totals = { line_amounts: Record<string, string>; base_amount: string; service_charge: string; esi_amount: string; pf_amount: string; subtotal: string; cgst_amount: string; sgst_amount: string; gst_amount: string; total: string };
 type Invoice = Omit<Form, "due_date" | "service_month"> & { due_date: string | null; service_month: string | null; id: string; invoice_number: string; revision: number; totals: Totals; payment_status: PaymentStatus; opening_paid_amount?: string | null; payments?: PaymentEntry[]; follow_up_date?: string | null; created_at: string; updated_at: string };
@@ -36,16 +36,16 @@ const normalizedName = (name: string) => name.trim().replace(/\s+/g, " ").toLoca
 function emptyForm(supplier: Profile, company?: Company, billingMode: InvoiceBillingMode = "managed_services"): Form {
   const invoiceDate = today();
   const serviceMonth = previousMonth(invoiceDate);
-  return { billing_mode: billingMode, company_id: company?.id || null, invoice_number: "", client_name: company?.name || "", client_address: company?.address || "", client_gstin: company?.gstin || "", invoice_date: invoiceDate, due_date: "", service_month: serviceMonth, billing_period: monthLabel(serviceMonth), supplier: { ...supplier }, lines: invoiceRows(billingMode).map(([key]) => ({ key, quantity: "0", rate: "0" })), service_percentage: "", esi_percentage: "", pf_percentage: "", cgst_percentage: "", sgst_percentage: "", gst_amount: "0", notes: "" };
+  return { billing_mode: billingMode, company_id: company?.id || null, invoice_number: "", client_name: company?.name || "", client_address: company?.address || "", client_gstin: company?.gstin || "", invoice_date: invoiceDate, due_date: "", service_month: serviceMonth, billing_period: monthLabel(serviceMonth), supplier: { ...supplier }, lines: [createInvoiceItem()], service_percentage: "", esi_percentage: "", pf_percentage: "", cgst_percentage: "", sgst_percentage: "", gst_amount: "0", notes: "" };
 }
 
 function formData(form: Form) {
-  return { ...form, due_date: form.due_date || null, service_month: form.service_month || null, service_percentage: form.service_percentage || "0", esi_percentage: form.esi_percentage || "0", pf_percentage: form.pf_percentage || "0", cgst_percentage: form.cgst_percentage === null ? null : form.cgst_percentage || "0", sgst_percentage: form.sgst_percentage === null ? null : form.sgst_percentage || "0", gst_amount: form.gst_amount || "0", lines: form.lines.map((line) => ({ ...line, quantity: line.quantity || "0", rate: line.rate || "0" })) };
+  return { ...form, due_date: form.due_date || null, service_month: form.service_month || null, service_percentage: form.service_percentage || "0", esi_percentage: form.esi_percentage || "0", pf_percentage: form.pf_percentage || "0", cgst_percentage: form.cgst_percentage === null ? null : form.cgst_percentage || "0", sgst_percentage: form.sgst_percentage === null ? null : form.sgst_percentage || "0", gst_amount: form.gst_amount || "0", lines: form.lines.map((line) => ({ ...line, quantity: line.quantity || "0", rate: line.rate || "0", amount: line.amount === "" ? "0" : line.amount })) };
 }
 
 function fromInvoice(invoice: Invoice): Form {
   const { company_id, invoice_number, client_name, client_address, client_gstin, invoice_date, due_date, service_month, billing_period, supplier, lines, service_percentage, esi_percentage = "0", pf_percentage = "0", cgst_percentage, sgst_percentage, gst_amount, notes } = invoice;
-  return { billing_mode: invoice.billing_mode || "managed_services", company_id: company_id || null, invoice_number, client_name, client_address, client_gstin, invoice_date, due_date: due_date || "", service_month: service_month || "", billing_period, supplier: { ...supplier }, lines: lines.map((line) => ({ ...line })), service_percentage, esi_percentage, pf_percentage, cgst_percentage: cgst_percentage ?? null, sgst_percentage: sgst_percentage ?? null, gst_amount, notes };
+  return { billing_mode: invoice.billing_mode || "managed_services", company_id: company_id || null, invoice_number, client_name, client_address, client_gstin, invoice_date, due_date: due_date || "", service_month: service_month || "", billing_period, supplier: { ...supplier }, lines: editableInvoiceItems(lines, invoice.totals.line_amounts), service_percentage, esi_percentage, pf_percentage, cgst_percentage: cgst_percentage ?? null, sgst_percentage: sgst_percentage ?? null, gst_amount, notes };
 }
 
 function errorMessage(error: unknown) {
@@ -123,12 +123,12 @@ export default function Invoices() {
   const legacyGst = form.cgst_percentage === null && form.sgst_percentage === null;
   const servicesOnly = form.billing_mode === "services_only";
   const editTax = (key: "cgst_percentage" | "sgst_percentage", value: string) => edit({ cgst_percentage: form.cgst_percentage ?? "0", sgst_percentage: form.sgst_percentage ?? "0", gst_amount: "0", [key]: value });
-  const editLine = (key: string, field: "quantity" | "rate", value: string) => edit({ lines: form.lines.map((line) => line.key === key ? { ...line, [field]: value } : line) });
+  const editLine = (key: string, field: Exclude<keyof Line, "key">, value: string) => edit({ lines: form.lines.map((line) => line.key === key ? { ...line, [field]: value, ...(field === "quantity" || field === "rate" ? { amount: null } : {}) } : line) });
   const editSupplier = (key: keyof Profile, value: string) => edit({ supplier: { ...form.supplier, [key]: value } });
 
   const save = useMutation({
     mutationFn: async (format?: "pdf" | "xlsx") => {
-      if (format && saved && !dirty) { await download(saved, format); return { invoice: saved, format }; }
+      if (format && saved && !dirty && saved.lines.every((line) => line.key.startsWith("item_"))) { await download(saved, format); return { invoice: saved, format }; }
       const body = formData(form);
       const invoice = saved
         ? await apiPut<Invoice>(`/admin/invoices/${saved.id}`, { ...body, revision: saved.revision })
@@ -277,6 +277,7 @@ export default function Invoices() {
             <h2 className="mb-2 flex items-center justify-center gap-2 text-center font-semibold text-[#0F2444]" data-testid="invoice-heading"><FileText className="h-4 w-4 shrink-0 text-[#C2410C]" /><span className="min-w-0 break-words">{form.invoice_number || "New invoice"}</span></h2>
             <p className="mb-2 text-center text-sm font-semibold text-[#C2410C]" data-testid="invoice-mode-label">{invoiceBillingLabel(form.billing_mode)}</p>
             <p className="mb-4 text-center text-xs text-slate-500">{saved ? `Payment status: ${saved.payment_status}` : "New invoices are saved as Pending."}{dirty && <span className="ml-2 text-amber-700">Unsaved changes</span>}</p>
+            {saved?.lines.some((line) => !line.key.startsWith("item_")) && <p className="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-950">This saved invoice has been opened as editable items with its recorded row amounts. Review the descriptions. Saving or downloading applies the new item layout.</p>}
             <div className="grid gap-4 sm:grid-cols-2">
               <div><Label htmlFor="invoice-number" className="mb-2 block">Invoice number *</Label><Input id="invoice-number" required maxLength={16} pattern={"[A-Za-z0-9\\/\\-]+"} value={form.invoice_number} onChange={(e) => edit({ invoice_number: e.target.value })} aria-describedby="invoice-number-help" data-testid="invoice-number" /><p id="invoice-number-help" className="mt-1 text-xs text-slate-500">Enter your own invoice number. Use up to 16 letters, numbers, / or -.</p></div>
               <div><Label htmlFor="invoice-client" className="mb-2 block">Client / company name *</Label><Input id="invoice-client" value={form.client_name} readOnly={!!form.company_id} required maxLength={150} onChange={(e) => edit({ client_name: e.target.value })} data-testid="invoice-client" /></div>
@@ -291,21 +292,23 @@ export default function Invoices() {
             </div>
           </div>
           <div className="overflow-hidden rounded-xl border border-slate-200 bg-white p-4 sm:p-6">
-            <h2 className="font-semibold text-[#0F2444]">{servicesOnly ? "Men and women - wage calculation" : "Worker quantities and rates"}</h2>
-            <p className="mb-4 mt-1 text-sm text-slate-500">{servicesOnly ? "Total wages = quantity × wage per person. Service charges are calculated on the wage subtotal. Only service charges and GST are billed." : "Amount = quantity × rate for this billing period. Leave unused rows at 0. For a fixed extra charge, enter quantity 1."}</p>
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-3"><h2 className="font-semibold text-[#0F2444]">Invoice items</h2><Button type="button" variant="outline" size="sm" disabled={form.lines.length >= 50} onClick={() => edit({ lines: [...form.lines, createInvoiceItem()] })} data-testid="invoice-add-item"><Plus className="h-4 w-4" />Add item</Button></div>
+            <p className="mb-4 mt-1 text-sm text-slate-500">Enter your own category and description. Amount = quantity × rate. You can enter an amount manually; changing quantity or rate calculates it again. All amounts are in INR.</p>
+            {servicesOnly && <p className="mb-4 text-xs text-slate-500">Item amounts are wage references. Only service charges and GST are billed.</p>}
             <div className="overflow-x-auto">
-              <table className={`w-full ${servicesOnly ? "min-w-[430px]" : "min-w-[590px]"} text-sm`} data-testid="invoice-lines"><thead className="bg-slate-50 text-left text-slate-600"><tr><th className="p-2">{servicesOnly ? "Men / Women" : "Description"}</th>{!servicesOnly && <th className="p-2">Men / Women</th>}<th className="w-28 p-2 text-center">Quantity</th><th className="w-32 p-2 text-center">{servicesOnly ? "Wages per person (INR)" : "Rate (INR)"}</th><th className="p-2 text-center">{servicesOnly ? "Total wages" : "Amount"}</th></tr></thead>
-                <tbody>{invoiceRows(form.billing_mode).map(([key, label, gender]) => { const line = form.lines.find((item) => item.key === key)!; return <tr key={key} className="border-b border-slate-100">
-                  <td className="p-2 font-medium text-[#0F2444]">{label}</td>{!servicesOnly && <td className="p-2 text-slate-500">{gender}</td>}
-                  <td className="p-2"><Input className="text-center tabular-nums" type="number" inputMode={gender === "Units" ? "decimal" : "numeric"} min="0" max="1000000" step={gender === "Units" ? "0.01" : "1"} value={line.quantity} aria-label={`${label} ${gender} quantity`} onChange={(e) => editLine(key, "quantity", e.target.value)} data-testid={`invoice-${key}-quantity`} /></td>
-                  <td className="p-2"><Input className="text-center tabular-nums" type="number" inputMode="decimal" min="0" max="1000000000" step="0.01" value={line.rate} aria-label={`${label} ${gender} rate`} onChange={(e) => editLine(key, "rate", e.target.value)} data-testid={`invoice-${key}-rate`} /></td>
-                  <td className="whitespace-nowrap p-2 text-center tabular-nums">{totals ? money(totals.line_amounts[key]) : "—"}</td>
+              <table className="w-full min-w-[720px] text-sm" data-testid="invoice-lines"><thead className="bg-slate-50 text-left text-slate-600"><tr><th scope="col" className="w-44 p-2">Category</th><th scope="col" className="p-2">Description</th><th scope="col" className="w-24 p-2 text-center">Quantity</th><th scope="col" className="w-28 p-2 text-center">Rate</th><th scope="col" className="w-32 p-2 text-center">Amount</th></tr></thead>
+                <tbody>{form.lines.map((line, index) => { const key = line.key; return <tr key={key} className="border-b border-slate-100 align-top" data-testid={`invoice-item-${index}`}>
+                  <td className="p-2"><Input required maxLength={150} placeholder="Enter category" value={line.category} aria-label={`Category for item ${index + 1}`} onChange={(e) => editLine(key, "category", e.target.value)} /><Button type="button" variant="ghost" size="sm" className="mt-1 text-xs text-slate-500" disabled={form.lines.length === 1} aria-label={`Remove invoice item ${index + 1}`} onClick={() => edit({ lines: form.lines.filter((item) => item.key !== key) })}><Trash2 className="h-3 w-3" />Remove</Button></td>
+                  <td className="p-2"><Textarea required maxLength={1000} placeholder="Enter description" className="min-h-20" value={line.description} aria-label={`Description for item ${index + 1}`} onChange={(e) => editLine(key, "description", e.target.value)} /></td>
+                  <td className="p-2"><Input required className="text-center tabular-nums" type="number" inputMode="decimal" min="0.01" max="1000000" step="0.01" value={line.quantity} aria-label={`Quantity for item ${index + 1}`} onChange={(e) => editLine(key, "quantity", e.target.value)} /></td>
+                  <td className="p-2"><Input className="text-center tabular-nums" type="number" inputMode="decimal" min="0" max="1000000000" step="0.01" value={line.rate} aria-label={`Rate for item ${index + 1}`} onChange={(e) => editLine(key, "rate", e.target.value)} /></td>
+                  <td className="p-2"><Input required={line.amount !== null} className="text-center tabular-nums" type="number" inputMode="decimal" min="0" max="1000000000000000" step="0.01" value={line.amount ?? totals?.line_amounts[key] ?? ""} aria-label={`Amount for item ${index + 1}`} onChange={(e) => editLine(key, "amount", e.target.value)} />{line.amount !== null && <div className="mt-2 space-y-1 text-center text-xs text-slate-500"><p>Manual total</p><button type="button" className="underline underline-offset-2" onClick={() => edit({ lines: form.lines.map((item) => item.key === key ? { ...item, amount: null } : item) })}>Use quantity × rate</button></div>}</td>
                 </tr>; })}</tbody>
               </table>
             </div>
             <div className="mt-5 grid gap-5 sm:grid-cols-2">
               <div className="space-y-4">
-                <div><Label htmlFor="invoice-service" className="mb-2 block">Service charge (%)</Label><Input className="text-center tabular-nums" id="invoice-service" type="number" inputMode="decimal" min="0" max="100" step="0.01" value={form.service_percentage} onChange={(e) => edit({ service_percentage: e.target.value })} data-testid="invoice-service" /><p className="mt-1 text-xs text-slate-500">{servicesOnly ? "Enter 10 for 10%. Applied to the wage subtotal for Men and Women." : "Enter 10 for 10%. Applied to worker, overtime and other charges before GST."}</p></div>
+                <div><Label htmlFor="invoice-service" className="mb-2 block">Service charge (%)</Label><Input className="text-center tabular-nums" id="invoice-service" type="number" inputMode="decimal" min="0" max="100" step="0.01" value={form.service_percentage} onChange={(e) => edit({ service_percentage: e.target.value })} data-testid="invoice-service" /><p className="mt-1 text-xs text-slate-500">{servicesOnly ? "Enter 10 for 10%. Applied to the wage reference subtotal." : "Enter 10 for 10%. Applied to the item subtotal before GST."}</p></div>
                 {!servicesOnly && <div>
                   <div className="grid grid-cols-2 gap-3">
                     <div><Label htmlFor="invoice-esi" className="mb-2 block">ESI (%)</Label><Input className="text-center tabular-nums" id="invoice-esi" type="number" inputMode="decimal" min="0" max="100" step="0.01" value={form.esi_percentage} onChange={(e) => edit({ esi_percentage: e.target.value })} data-testid="invoice-esi" aria-describedby="invoice-statutory-help" /></div>
