@@ -1,4 +1,5 @@
 import { DashboardTheme, DashboardThemeToggle } from "@/components/dashboard/DashboardTheme";
+import AdminNotificationCenter from "@/components/dashboard/AdminNotificationCenter";
 import { jobSaveError, jobValidationError } from "@/lib/jobValidation";
 import { CandidateDetailsStatus, JobSearchVerification } from "@/components/site/JobReadiness";
 import { useEffect, useState } from "react";
@@ -374,6 +375,7 @@ function Dashboard({
             <p className="text-xs text-slate-500">{account.data ? `${account.data.name} · ${account.data.role === "viewer" ? "View only" : account.data.role}` : "Brothers Workforce Solutions"}</p>
           </div>
           <div className="ml-auto flex w-full gap-2 sm:w-auto">
+            <AdminNotificationCenter onNavigate={setActiveTab} accountKey={account.data?.name || "owner"} />
             <DashboardThemeToggle />
             <Link to="/" className="flex-1 rounded-md border border-slate-200 px-3 py-2 text-center text-sm text-slate-600 hover:text-[#0F2444] sm:flex-none sm:px-4">
               View Site
