@@ -1,0 +1,113 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1350" viewBox="0 0 1080 1350">
+<defs>
+  <linearGradient id="navy" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#071B3F"/><stop offset="1" stop-color="#123A70"/></linearGradient>
+  <linearGradient id="orange" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#F05A12"/><stop offset="1" stop-color="#FF8A00"/></linearGradient>
+  <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%"><feDropShadow dx="0" dy="8" stdDeviation="9" flood-color="#0A2348" flood-opacity=".14"/></filter>
+  <pattern id="grid" width="34" height="34" patternUnits="userSpaceOnUse"><path d="M34 0H0V34" fill="none" stroke="#FFFFFF" stroke-opacity=".07" stroke-width="1"/></pattern>
+</defs>
+<rect width="1080" height="1350" fill="#F4F7FB"/>
+<rect width="1080" height="160" fill="#FFFFFF"/>
+<image x="35" y="15" width="138" height="128" href="data:image/jpeg;base64,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" preserveAspectRatio="xMidYMid meet"/>
+<text x="195" y="76" font-family="Arial,Helvetica,sans-serif" font-size="51" font-weight="800" fill="#09234D" letter-spacing="1">BROTHERS</text>
+<text x="197" y="116" font-family="Arial,Helvetica,sans-serif" font-size="28" font-weight="800" fill="#F05A12" letter-spacing=".4">WORKFORCE <tspan fill="#09234D">SOLUTIONS</tspan></text>
+<rect x="197" y="131" width="260" height="5" rx="2.5" fill="#F05A12"/>
+<text x="197" y="151" font-family="Arial,Helvetica,sans-serif" font-size="13" font-weight="700" fill="#29466D" letter-spacing="2">CONNECTING TALENT. SUPPORTING OPERATIONS.</text>
+
+<rect x="0" y="160" width="1080" height="370" fill="url(#navy)"/>
+<rect x="0" y="160" width="1080" height="370" fill="url(#grid)"/>
+<path d="M0 160H1080L1010 190H0Z" fill="url(#orange)"/>
+<path d="M0 510L1080 420V530H0Z" fill="#061633" opacity=".34"/>
+<circle cx="900" cy="340" r="150" fill="#F05A12" opacity=".14"/>
+<circle cx="900" cy="340" r="112" fill="none" stroke="#FF8A00" stroke-width="3" opacity=".75"/>
+<g transform="translate(780 225)" stroke="#FFFFFF" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" fill="none">
+  <path d="M0 170V70L85 25L170 70V170Z"/>
+  <path d="M32 170V105H70V170M100 170V105H138V170M70 25V0H100V40"/>
+  <path d="M-15 170H185"/>
+  <circle cx="83" cy="82" r="14" fill="#FF8A00" stroke="none"/>
+  <path d="M83 98V143M83 112L54 130M83 112L112 130" />
+  <circle cx="43" cy="55" r="10" fill="#FFFFFF" stroke="none"/>
+  <circle cx="123" cy="55" r="10" fill="#FFFFFF" stroke="none"/>
+</g>
+<text x="62" y="230" font-family="Arial,Helvetica,sans-serif" font-size="23" font-weight="800" fill="#FF8A00" letter-spacing="3">FOR MYSURU BUSINESSES</text>
+<text x="58" y="315" font-family="Arial,Helvetica,sans-serif" font-size="62" font-weight="900" fill="#FFFFFF">BUILD THE RIGHT</text>
+<text x="58" y="390" font-family="Arial,Helvetica,sans-serif" font-size="66" font-weight="900" fill="#FF8A00">WORKFORCE MIX</text>
+<rect x="60" y="420" width="530" height="56" rx="28" fill="#FFFFFF"/>
+<text x="88" y="457" font-family="Arial,Helvetica,sans-serif" font-size="22" font-weight="800" fill="#09234D" letter-spacing=".7">ONE PARTNER. FIVE SUPPORT AREAS.</text>
+<text x="62" y="500" font-family="Arial,Helvetica,sans-serif" font-size="17" font-weight="600" fill="#DCE7F7">Match workforce support to the work your operation needs.</text>
+
+<text x="58" y="590" font-family="Arial,Helvetica,sans-serif" font-size="32" font-weight="900" fill="#09234D">FIVE AREAS OF SUPPORT</text>
+<rect x="58" y="610" width="125" height="7" rx="3.5" fill="url(#orange)"/>
+<text x="58" y="653" font-family="Arial,Helvetica,sans-serif" font-size="18" font-weight="600" fill="#536783">Explore the service categories offered by Brothers Workforce Solutions.</text>
+
+<!-- Service cards -->
+<g filter="url(#shadow)">
+  <rect x="58" y="680" width="300" height="130" rx="20" fill="#FFFFFF"/>
+  <rect x="390" y="680" width="300" height="130" rx="20" fill="#FFFFFF"/>
+  <rect x="722" y="680" width="300" height="130" rx="20" fill="#FFFFFF"/>
+  <rect x="224" y="832" width="300" height="130" rx="20" fill="#FFFFFF"/>
+  <rect x="556" y="832" width="300" height="130" rx="20" fill="#FFFFFF"/>
+</g>
+<g fill="#FFF4EC" stroke="#F05A12" stroke-width="3">
+  <circle cx="118" cy="745" r="39"/><circle cx="450" cy="745" r="39"/><circle cx="782" cy="745" r="39"/><circle cx="284" cy="897" r="39"/><circle cx="616" cy="897" r="39"/>
+</g>
+<!-- Skilled icon -->
+<g fill="none" stroke="#09234D" stroke-width="5" stroke-linecap="round">
+  <circle cx="118" cy="733" r="12"/><path d="M95 775Q97 750 118 750Q139 750 141 775"/>
+  <path d="M99 721Q118 704 137 721"/>
+</g>
+<!-- Semi-skilled icon -->
+<g fill="none" stroke="#09234D" stroke-width="5" stroke-linecap="round">
+  <circle cx="450" cy="745" r="16"/><path d="M450 718V710M450 780V772M423 745H415M485 745H477M431 726L425 720M469 764L475 770M469 726L475 720M431 764L425 770"/>
+  <circle cx="450" cy="745" r="5" fill="#F05A12" stroke="none"/>
+</g>
+<!-- General workforce icon -->
+<g fill="none" stroke="#09234D" stroke-width="5" stroke-linecap="round">
+  <circle cx="765" cy="735" r="10"/><circle cx="799" cy="735" r="10"/><circle cx="782" cy="720" r="10"/>
+  <path d="M749 773Q751 750 765 750Q779 750 781 773M783 773Q785 750 799 750Q813 750 815 773M766 755Q768 738 782 738Q796 738 798 755"/>
+</g>
+<!-- Factory icon -->
+<g fill="none" stroke="#09234D" stroke-width="5" stroke-linejoin="round">
+  <path d="M256 920V881L284 897V881L312 897V920Z"/><path d="M263 881V862H276V888M293 907H303M263 907H273"/>
+</g>
+<!-- Warehouse/logistics icon -->
+<g fill="none" stroke="#09234D" stroke-width="5" stroke-linejoin="round" stroke-linecap="round">
+  <path d="M590 914V880L616 865L642 880V914Z"/><path d="M603 914V890H629V914M603 880H629"/>
+  <path d="M654 914H669V889H655M669 889V878H679V914"/>
+</g>
+<g font-family="Arial,Helvetica,sans-serif" fill="#09234D" font-weight="800" text-anchor="middle">
+  <text x="220" y="750" font-size="24">Skilled Workforce</text>
+  <text x="552" y="750" font-size="24">Semi-Skilled</text><text x="552" y="780" font-size="22">Workforce</text>
+  <text x="884" y="750" font-size="24">General Workforce</text>
+  <text x="386" y="902" font-size="23">Factory &amp; Production</text><text x="386" y="931" font-size="23">Support</text>
+  <text x="718" y="902" font-size="23">Warehouse &amp;</text><text x="718" y="931" font-size="23">Logistics</text>
+</g>
+
+<rect x="0" y="985" width="1080" height="150" fill="#FFFFFF"/>
+<rect x="0" y="985" width="1080" height="8" fill="url(#orange)"/>
+<g font-family="Arial,Helvetica,sans-serif" font-weight="800" fill="#09234D" text-anchor="middle">
+  <text x="135" y="1068" font-size="25">PF &amp; ESI</text>
+  <text x="405" y="1068" font-size="23">GST REGISTERED</text>
+  <text x="675" y="1068" font-size="23">MSME CERTIFIED</text>
+  <text x="945" y="1052" font-size="18">CONTRACT LABOUR</text><text x="945" y="1079" font-size="18">LICENSED</text>
+</g>
+<g fill="#F05A12">
+  <circle cx="135" cy="1028" r="22"/><circle cx="405" cy="1028" r="22"/><circle cx="675" cy="1028" r="22"/><circle cx="945" cy="1028" r="22"/>
+</g>
+<g stroke="#FFFFFF" stroke-width="4" fill="none" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M125 1028L133 1036L147 1019"/>
+  <path d="M397 1018H413V1038H397Z M400 1024H410 M400 1030H410"/>
+  <path d="M665 1028L673 1036L687 1019"/>
+  <path d="M935 1028L943 1036L957 1019"/>
+</g>
+
+<rect x="0" y="1135" width="1080" height="215" fill="url(#navy)"/>
+<path d="M0 1135H1080L1020 1160H0Z" fill="url(#orange)"/>
+<text x="60" y="1210" font-family="Arial,Helvetica,sans-serif" font-size="30" font-weight="900" fill="#FFFFFF">DISCUSS YOUR MANPOWER REQUIREMENT</text>
+<rect x="60" y="1230" width="430" height="60" rx="30" fill="url(#orange)"/>
+<text x="275" y="1268" font-family="Arial,Helvetica,sans-serif" font-size="23" font-weight="900" fill="#FFFFFF" text-anchor="middle">CONNECT WITH BROTHERS WFS</text>
+<g font-family="Arial,Helvetica,sans-serif" fill="#FFFFFF" font-weight="700">
+  <text x="545" y="1250" font-size="22">brothersworkforcesolutions.in</text>
+  <text x="545" y="1292" font-size="28">+91 96063 33542</text>
+  <text x="545" y="1323" font-size="18" fill="#D9E6F8">MYSURU  •  GST REGISTERED  •  MSME CERTIFIED</text>
+</g>
+</svg>
