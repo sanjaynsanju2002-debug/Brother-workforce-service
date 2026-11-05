@@ -38,7 +38,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { apiGet } from "@/lib/api";
 import { BRAND, IMAGES } from "@/lib/brand";
 import { candidateCopy, useCandidateLanguage } from "@/lib/candidateLanguage";
-import { trackVisit } from "@/lib/track";
+import { trackVisit, watchContactActions } from "@/lib/track";
 import type { Client, Job } from "@/types";
 
 const TRUST = [
@@ -92,6 +92,11 @@ const INDUSTRY_CARDS = [
   { name: "Food Processing", icon: Utensils },
   { name: "Packaging", icon: Box },
   { name: "Industrial Operations", icon: Activity },
+  { name: "Retail & Customer Service", icon: ShoppingBag },
+  { name: "Hospitality", icon: Utensils },
+  { name: "Healthcare Support", icon: ShieldCheck },
+  { name: "Construction & Facilities", icon: Wrench },
+  { name: "Offices & Business Services", icon: Users },
 ];
 
 const COMPLIANCE = [
@@ -113,6 +118,7 @@ export default function Home() {
   useEffect(() => {
     document.title = "Brothers Workforce Solutions | Manpower Services in Mysuru, Karnataka";
     trackVisit("/");
+    return watchContactActions();
     const anchor = window.location.hash.slice(1);
     if (anchor) document.getElementById(anchor)?.scrollIntoView({ behavior: "instant" });
 
@@ -172,7 +178,7 @@ export default function Home() {
             </h1>
             <p className="mt-6 max-w-2xl text-base leading-relaxed text-slate-200 sm:text-lg">
               Brothers Workforce Solutions provides dependable skilled, semi-skilled and general manpower supply,
-              contract staffing and workforce solutions for factories, warehouses and industrial operations across Karnataka.
+              contract staffing and workforce solutions for businesses across industries in Karnataka.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
               <Button
@@ -247,8 +253,7 @@ export default function Home() {
               People. Productivity. Partnership. <span className="text-[#C2410C]">Progress.</span>
             </h2>
             <p className="mt-5 max-w-2xl text-base leading-relaxed text-slate-600 sm:text-lg">
-              Reliable workforce support designed around people, process and performance — helping factories,
-              warehouses and industrial teams build stronger operations.
+              Reliable workforce support designed around people, process and performance — helping businesses across industries build stronger teams and reliable operations.
             </p>
             <a href="/api/company-brochure.pdf" className="mt-5 inline-flex min-h-11 items-center rounded-lg border border-[#C2410C] px-5 py-3 font-semibold text-[#C2410C] hover:bg-orange-50">Download company brochure (PDF)</a>
             <div className="mt-7 grid gap-3 sm:grid-cols-3">
@@ -278,7 +283,7 @@ export default function Home() {
             <div className="mt-6 space-y-4 text-base leading-relaxed text-slate-600">
               <p>
                 Brothers Workforce Solutions is a manpower and contract staffing partner providing skilled, semi-skilled
-                and general workforce solutions to factories, warehouses, manufacturing units and businesses across Karnataka.
+                and general workforce solutions to businesses across industries in Karnataka.
               </p>
               <p>
                 We focus on connecting businesses with reliable employees while supporting workforce availability,
@@ -310,7 +315,7 @@ export default function Home() {
 
       {/* SERVICES */}
       <Section id="services" bg="bg-[#F1F5F9]">
-        <Heading overline="Our Services" title="Manpower & Contract Staffing Services" subtitle="Skilled, semi-skilled and general workforce staffing for factories, manufacturing units, warehouses and logistics operations." />
+        <Heading overline="Our Services" title="Manpower & Contract Staffing Services" subtitle="Skilled, semi-skilled and general staffing for operational, technical, service and support roles across industries." />
         <div className="mt-12 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {SERVICES.map((s) => (
             <Card
@@ -343,7 +348,7 @@ export default function Home() {
 
       {/* INDUSTRIES */}
       <Section id="industries" bg="bg-white">
-        <Heading overline="Sectors" title="Industries We Serve" subtitle="Supporting production units and supply chains across Mysore and Karnataka industrial belts." />
+        <Heading overline="Sectors" title="Industries We Serve" subtitle="Tell us your industry, location and roles. We plan staffing around your business requirements." />
         <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {INDUSTRY_CARDS.map((i) => (
             <div
@@ -613,7 +618,7 @@ export default function Home() {
 
       {/* CLIENTS */}
       <Section id="clients" bg="bg-white">
-        <Heading overline="Our Clients" title="Businesses We Support" subtitle="Serving production units and supply chains across Mysore industrial belts." />
+        <Heading overline="Our Clients" title="Businesses We Support" subtitle="Workforce partnerships across Mysore and Karnataka. Client details are shared with permission." />
         <div className="mx-auto mt-12 grid max-w-5xl gap-6 sm:grid-cols-2" data-testid="clients-grid">
           {clientsQuery.isPending ? (
             <p className="sm:col-span-2 text-center text-sm text-slate-500" role="status">Loading client profiles…</p>

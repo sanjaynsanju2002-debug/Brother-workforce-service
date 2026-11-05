@@ -11,13 +11,14 @@ from pymongo import ASCENDING, DESCENDING, IndexModel
 load_dotenv(Path(__file__).parent.parent / ".env")
 
 mongo_url = os.environ["MONGO_URL"]
-client = AsyncIOMotorClient(mongo_url)
+client = AsyncIOMotorClient(mongo_url, serverSelectionTimeoutMS=5000, connectTimeoutMS=5000)
 db = client[os.environ["DB_NAME"]]
 
 logger = logging.getLogger(__name__)
 
 # One entry per collection: every field a route filters, sorts, or dedupes on. Applied by ensure_indexes() at startup.
 INDEXES: dict[str, list[IndexModel]] = {
+    "public_rate_limits": [IndexModel([("expires_at", 1)], expireAfterSeconds=0)],
     "attendance": [IndexModel([("id", 1)], unique=True), IndexModel([("company_id", 1), ("attendance_date", 1)]), IndexModel([("status", 1), ("attendance_date", 1)])],
     "staffing_requirements": [IndexModel([("id", 1)], unique=True), IndexModel([("company_id", 1), ("status", 1)])],
     "recruitment": [IndexModel([("id", 1)], unique=True), IndexModel([("worker_id", 1)]), IndexModel([("follow_up_date", 1)])],
@@ -94,6 +95,7 @@ INDEXES: dict[str, list[IndexModel]] = {
         IndexModel([("id", ASCENDING)], name="id", unique=True),
         IndexModel([("report_date", DESCENDING), ("status", ASCENDING)], name="date_status"),
     ],
+    "journey_events": [IndexModel([("created_at", ASCENDING)], name="expires_90_days", expireAfterSeconds=7776000), IndexModel([("event", ASCENDING), ("created_at", DESCENDING)], name="event_date")],
     "visits": [IndexModel([("created_at", DESCENDING)], name="created_desc")],
     "cron_runs": [
         IndexModel([("run_id", ASCENDING)], name="run_id", unique=True),
@@ -108,9 +110,14 @@ INDEXES: dict[str, list[IndexModel]] = {
 
 
 async def ensure_indexes() -> None:
+    failed = []
     for collection, models in INDEXES.items():
         for model in models:  # one at a time so a bad spec skips only itself
             try:
                 await db[collection].create_indexes([model])
-            except Exception as exc:  # never block boot on an index; the log line names what to fix
-                logger.error("ensure_indexes(%s.%s): %s", collection, model.document["name"], exc)
+            except Exception:  # fail readiness instead of silently losing uniqueness guarantees
+                name = f"{collection}.{model.document["name"]}"
+                failed.append(name)
+                logger.error("Required database index could not be created: %s", name)
+    if failed:
+        raise RuntimeError("Required indexes unavailable: " + ", ".join(failed))

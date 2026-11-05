@@ -18,6 +18,7 @@ from fastapi.responses import StreamingResponse
 
 from lib.auth import require_owner, set_pin, uses_setup_pin, require_admin
 from lib.db import db
+from lib.ledger import today
 from lib.notify import email_configured
 from models.bws import (
     ActiveUpdate,
@@ -128,14 +129,15 @@ async def change_pin(payload: PinChange, response: Response) -> SecurityInfo:
     return SecurityInfo(is_default=False)
 
 
-@router.get("/workers", response_model=list[Worker])
+@router.get("/workers", response_model=list[Worker] | dict)
 async def list_workers(
     skill_category: str | None = Query(None),
     location: str | None = Query(None),
     availability: str | None = Query(None),
     status: str | None = Query(None),
-    q: str | None = Query(None),
-) -> list[Worker]:
+    q: str | None = Query(None, max_length=150),
+    page: int | None = Query(None, ge=1),
+) -> list[Worker] | dict:
     query: dict = {"source": {"$ne": "Talent Bank"}}
     if skill_category:
         query["skill_category"] = skill_category
@@ -162,8 +164,11 @@ async def list_workers(
             query = {"$and": [{"$or": query.pop("$or")}, {"$or": clause}], **query}
         else:
             query["$or"] = clause
-    docs = await db.workers.find(query).sort("created_at", -1).to_list(500)
-    return [Worker(**d) for d in docs]
+    cursor = db.workers.find(query).sort([("created_at", -1), ("id", 1)])
+    if page is None:
+        return [Worker(**d) for d in await cursor.to_list(500)]
+    docs = await cursor.skip((page - 1) * 50).limit(50).to_list(50)
+    return {"items": [Worker(**d) for d in docs], "total": await db.workers.count_documents(query), "page": page, "page_size": 50}
 
 
 @router.get("/worker-filters", response_model=WorkerFilters)
@@ -464,10 +469,13 @@ async def delete_talent(worker_id: str) -> Ok:
     return Ok(ok=True)
 
 
-@router.get("/company-requests", response_model=list[CompanyRequest])
-async def list_requests() -> list[CompanyRequest]:
-    docs = await db.company_requests.find().sort("created_at", -1).to_list(500)
-    return [CompanyRequest(**d) for d in docs]
+@router.get("/company-requests", response_model=list[CompanyRequest] | dict)
+async def list_requests(page: int | None = Query(None, ge=1)):
+    cursor = db.company_requests.find().sort([("created_at", -1), ("id", 1)])
+    if page is None:
+        return [CompanyRequest(**d) for d in await cursor.to_list(500)]
+    docs = await cursor.skip((page - 1) * 50).limit(50).to_list(50)
+    return {"items": [CompanyRequest(**d) for d in docs], "total": await db.company_requests.count_documents({}), "page": page, "page_size": 50}
 
 
 @router.patch("/company-requests/{req_id}", response_model=CompanyRequest)
@@ -498,7 +506,7 @@ async def admin_jobs() -> list[Job]:
 
 @router.post("/jobs", response_model=Job)
 async def create_job(payload: JobCreate) -> Job:
-    job = Job(**payload.model_dump())
+    job = Job(**payload.model_dump(), active=False)
     await db.jobs.insert_one(job.model_dump())
     return job
 
@@ -516,6 +524,16 @@ async def edit_job(job_id: str, payload: JobCreate) -> Job:
 
 @router.patch("/jobs/{job_id}", response_model=Job)
 async def toggle_job(job_id: str, payload: ActiveUpdate) -> Job:
+    if payload.active:
+        existing = await db.jobs.find_one({"id": job_id})
+        if not existing:
+            raise HTTPException(404, "Job not found")
+        required = ("salary", "salary_basis", "shift", "working_hours", "qualification", "benefits", "description", "closing_date")
+        missing = [field.replace("_", " ") for field in required if not str(existing.get(field) or "").strip()]
+        if missing:
+            raise HTTPException(422, "Before publishing, confirm: " + ", ".join(missing))
+        if existing["closing_date"] < today():
+            raise HTTPException(422, "Set a current closing date before publishing")
     doc = await db.jobs.find_one_and_update(
         {"id": job_id}, {"$set": {"active": payload.active, "updated_at": datetime.now(timezone.utc)}}, return_document=True
     )
@@ -527,8 +545,8 @@ async def toggle_job(job_id: str, payload: ActiveUpdate) -> Job:
 
 @router.delete("/jobs/{job_id}", response_model=Ok)
 async def delete_job(job_id: str) -> Ok:
-    res = await db.jobs.delete_one({"id": job_id})
-    if res.deleted_count == 0:
+    result = await db.jobs.update_one({"id": job_id}, {"$set": {"active": False, "updated_at": datetime.now(timezone.utc)}})
+    if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Not found")
     return Ok(ok=True)
 

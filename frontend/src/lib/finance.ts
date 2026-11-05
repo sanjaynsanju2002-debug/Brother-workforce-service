@@ -33,6 +33,7 @@ export interface ExpensePage {
 }
 
 export interface ProfitLoss {
+  payroll_cost: string; operating_expenses: string; salary_cash_expenses: string; missing_payroll_companies: number;
   month: string;
   revenue: string;
   expenses: string;

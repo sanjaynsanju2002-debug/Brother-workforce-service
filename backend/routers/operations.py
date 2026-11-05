@@ -74,15 +74,38 @@ async def roster(company_id, day):
 
 
 def attendance_row_payroll_ready(sheet: dict, row: dict) -> bool:
-    """A full owner approval or a completed employee check-out can feed payroll."""
-    return sheet.get("status") == "Approved" or bool(row.get("employee_approved_at"))
+    """Only a manager-approved sheet may feed payroll. Employee punches are submissions."""
+    return sheet.get("status") == "Approved"
+
+
+def attendance_review_issues(rows):
+    issues = []
+    for row in rows:
+        if not row.get("check_in_at") or row.get("status") not in {"Present", "Half-day"}:
+            continue
+        name = row.get("full_name", "Employee")
+        if not row.get("check_out_at"):
+            issues.append(f"{name}: missing check-out")
+            continue
+        try:
+            start = datetime.fromisoformat(str(row["check_in_at"]).replace("Z", "+00:00"))
+            end = datetime.fromisoformat(str(row["check_out_at"]).replace("Z", "+00:00"))
+            hours = (end - start).total_seconds() / 3600
+            if hours < 4 or hours > 16:
+                issues.append(f"{name}: recorded shift is {hours:.1f} hours; review the paid status")
+        except (ValueError, TypeError):
+            issues.append(f"{name}: invalid punch times")
+    return issues
 
 
 @router.get("/attendance-companies")
-async def attendance_companies():
+async def attendance_companies(request: Request):
     """Minimal company list for the separately hosted attendance application."""
+    query = {"archived": {"$ne": True}}
+    if request.state.admin["role"] == "attendance":
+        query["id"] = {"$in": request.state.admin.get("company_ids", [])}
     docs = await db.clients.find(
-        {"archived": {"$ne": True}}, {"_id": 0, "id": 1, "name": 1},
+        query, {"_id": 0, "id": 1, "name": 1},
     ).sort("sort_order", 1).to_list(200)
     return [{"id": row["id"], "name": row["name"]} for row in docs]
 
@@ -92,7 +115,7 @@ async def attendance_draft(company_id: str, attendance_date: date):
     c = await company(company_id, active=False)
     day = attendance_date.isoformat()
     saved = await db.attendance.find_one({"id": key("attendance", company_id, day)}, {"_id": 0})
-    return {"company_name": c["name"], "employees": await roster(company_id, day), "sheet": saved}
+    return {"company_name": c["name"], "employees": await roster(company_id, day), "sheet": saved, "review_warnings": attendance_review_issues(saved.get("rows", [])) if saved else []}
 
 
 @router.get("/attendance-daily-report")
@@ -170,6 +193,8 @@ async def attendance_action(sheet_id: str, action: str, payload: VersionInput, r
     if action == "approve":
         if doc["status"] != "Draft" or doc["attendance_date"] > today():
             raise HTTPException(422, "Only a draft for today or an earlier date can be approved")
+        if attendance_review_issues(doc["rows"]) and len((doc.get("notes") or "").strip()) < 10:
+            raise HTTPException(422, "Review short/long shifts or missing check-outs and save a reason in Attendance notes (at least 10 characters) before approval.")
         if any(r["status"] == "Unmarked" for r in doc["rows"]):
             raise HTTPException(422, "Mark every employee before approving attendance")
         if {r["assignment_id"] for r in doc["rows"]} != {r["id"] for r in await roster(doc["company_id"], doc["attendance_date"])}:
@@ -518,35 +543,8 @@ async def activity(page: int = Query(1, ge=1), q: str = Query("", max_length=100
 
 @router.get("/profitability")
 async def profitability(month: str = Query(pattern=MONTH_PATTERN)):
-    companies = await db.clients.find({}, {"id": 1, "name": 1, "archived": 1}).to_list(None)
-    rows = {c["id"]: {"company_id": c["id"], "company_name": c["name"], "archived": c.get("archived", False),
-            "revenue": Decimal("0"), "payroll_cost": Decimal("0"), "operating_expenses": Decimal("0"), "salary_cash_expenses": Decimal("0"), "payroll_registers": 0, "invoice_count": 0} for c in companies}
-    def row_for(cid, name):
-        return rows.setdefault(cid or "unassigned", {"company_id": cid, "company_name": name if cid else "Unassigned company", "archived": False,
-            "revenue": Decimal("0"), "payroll_cost": Decimal("0"), "operating_expenses": Decimal("0"), "salary_cash_expenses": Decimal("0"), "payroll_registers": 0, "invoice_count": 0})
-    unassigned_month = Decimal("0")
-    async for inv in db.invoices.find({}, {"company_id": 1, "client_name": 1, "totals": 1, "service_month": 1, "billing_period": 1}):
-        attributed = service_month(inv)
-        if attributed is None:
-            unassigned_month += amount(inv["totals"]["subtotal"])
-        elif attributed == month:
-            r = row_for(inv.get("company_id"), inv.get("client_name", "Company"))
-            r["revenue"] += amount(inv["totals"]["subtotal"])
-            r["invoice_count"] += 1
-    async for p in db.payroll.find({"month": month}, {"company_id": 1, "company_name": 1, "totals": 1, "cost_responsibility": 1}):
-        r = row_for(p["company_id"], p["company_name"])
-        r["payroll_registers"] += 1
-        if p.get("cost_responsibility", "Agency") == "Agency":
-            r["payroll_cost"] += amount(p["totals"]["gross_wages"])
-    async for e in db.expenses.find({"month": month}, {"company_id": 1, "company_name": 1, "amount_paise": 1, "cost_type": 1}):
-        r = row_for(e.get("company_id"), e.get("company_name", "Company"))
-        r["salary_cash_expenses" if e.get("cost_type") == "Payroll" else "operating_expenses"] += Decimal(e["amount_paise"]) / 100
-    data = []
-    for r in rows.values():
-        r["profit"] = r["revenue"] - r["payroll_cost"] - r["operating_expenses"]
-        if r["invoice_count"] or r["payroll_registers"] or r["operating_expenses"] or r["salary_cash_expenses"]:
-            data.append({k: money(v) if isinstance(v, Decimal) else v for k, v in r.items()})
-    return {"month": month, "items": sorted(data, key=lambda r: r["company_name"].casefold()), "unassigned_month_revenue": money(unassigned_month)}
+    from lib.profitability import profit_report
+    return await profit_report(db, month)
 
 
 @router.get("/overview")

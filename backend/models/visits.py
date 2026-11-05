@@ -8,12 +8,12 @@ from pydantic import BaseModel, Field
 
 
 class VisitCreate(BaseModel):
-    path: Optional[str] = None
+    path: Optional[str] = Field(default=None, max_length=160, pattern=r"^/(?:jobs/[A-Za-z0-9-]{1,80})?$")
 
 
 class Visit(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    path: Optional[str] = None
+    path: Optional[str] = Field(default=None, max_length=160, pattern=r"^/(?:jobs/[A-Za-z0-9-]{1,80})?$")
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 

@@ -34,7 +34,7 @@ def register_rows(register: dict):
     sheets = {sheet["attendance_date"]: sheet for sheet in register["sheets"]}
     lookups = {day: {row["assignment_id"]: row for row in sheet.get("rows", [])} for day, sheet in sheets.items()}
     payroll_ready_days = sum(
-        sheet.get("status") == "Approved" or any(row.get("employee_approved_at") for row in sheet.get("rows", []))
+        sheet.get("status") == "Approved"
         for sheet in sheets.values()
     )
     rows = []
@@ -44,7 +44,7 @@ def register_rows(register: dict):
             key = f"{register['month']}-{day:02d}"
             attendance_row = lookups.get(key, {}).get(employee["assignment_id"])
             sheet = sheets.get(key)
-            payroll_ready = bool(attendance_row and sheet and (sheet.get("status") == "Approved" or attendance_row.get("employee_approved_at")))
+            payroll_ready = bool(attendance_row and sheet and sheet.get("status") == "Approved")
             status = attendance_row.get("status", "Unmarked") if payroll_ready else "Unmarked"
             statuses.append(STATUS_SHORT.get(status, "-"))
             if status != "Unmarked":
@@ -605,7 +605,7 @@ def export_attendance_weekly_pdf(report: dict, supplier: InvoiceProfile) -> byte
         story.extend(p(f"{_weekly_day_label(day['date'])} ({day['status']}): {day['notes']}", small) for day in notes)
     story.extend([Spacer(1, 6), p(
         "Legend: P Present | A Absent | HD Half day | PL Paid leave | UL Unpaid leave | H Government holiday | WO Weekly off. "
-        "Shift: G General | M Morning | AF Afternoon | N Night. Totals include owner-approved rows and completed employee check-outs.", small,
+        "Shift: G General | M Morning | AF Afternoon | N Night. Totals include manager-approved attendance only.", small,
     )])
 
     def footer(canvas, document):

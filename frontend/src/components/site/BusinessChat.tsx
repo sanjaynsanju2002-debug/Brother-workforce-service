@@ -15,6 +15,7 @@ const STARTERS = ["What services do you offer?", "How do I apply for a job?", "I
 
 export default function BusinessChat({ jobs, clients }: { jobs: Job[] | null; clients: Client[] | null }) {
   const [open, setOpen] = useState(false);
+  const [kannada, setKannada] = useState(false);
   const [draft, setDraft] = useState("");
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
@@ -76,7 +77,7 @@ export default function BusinessChat({ jobs, clients }: { jobs: Job[] | null; cl
               <MessageCircle className="h-5 w-5" aria-hidden="true" />
             </span>
             <div className="min-w-0 flex-1">
-              <h2 className="text-sm font-semibold">Ask Brothers Workforce</h2>
+              <h2 className="text-sm font-semibold">Ask Brothers Workforce</h2><button type="button" aria-pressed={kannada} className="mt-1 underline" onClick={() => setKannada(!kannada)}>{kannada ? "English" : "ಕನ್ನಡ"}</button>
               <p className="text-xs text-slate-300">Website information and helpful links</p>
             </div>
             <button type="button" onClick={close} aria-label="Close chat" className="rounded-lg p-2 hover:bg-white/15 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white">
@@ -112,7 +113,7 @@ export default function BusinessChat({ jobs, clients }: { jobs: Job[] | null; cl
             ))}
             {messages.length === 1 && (
               <div className="flex flex-wrap gap-2" aria-label="Suggested questions">
-                {STARTERS.map((question) => (
+                {(kannada ? ["ಉದ್ಯೋಗಕ್ಕೆ ಅರ್ಜಿ ಹೇಗೆ ಸಲ್ಲಿಸಬೇಕು?", "ಸಿಬ್ಬಂದಿ ಬೇಕು", "ಸಂಬಳದ ಮಾಹಿತಿ", "ಸಂಪರ್ಕ ವಿವರಗಳು"] : STARTERS).map((question) => (
                   <button key={question} type="button" onClick={() => ask(question)} className="rounded-full border border-slate-200 bg-white px-3 py-2 text-left text-xs font-medium text-[#0F2444] shadow-sm hover:border-[#EA580C] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#EA580C]">
                     {question}
                   </button>

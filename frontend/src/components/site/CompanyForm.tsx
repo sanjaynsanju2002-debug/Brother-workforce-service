@@ -1,3 +1,4 @@
+import { trackJourney } from "@/lib/track";
 import React from "react";
 import { useId, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -48,6 +49,7 @@ export default function CompanyForm() {
   const mutation = useMutation({
     mutationFn: (payload: CompanyRequestCreate) => apiPost<CompanyRequest>("/company-requests", { ...payload, request_id: requestId.current }),
     onSuccess: (saved) => {
+      trackJourney("employer_saved");
       setReceipt(saved);
       setForm(EMPTY);
       toast.success("Manpower request submitted");
@@ -82,6 +84,7 @@ export default function CompanyForm() {
 
   return (
     <form
+      onFocus={() => trackJourney("employer_start")}
       className="bws-premium-form grid gap-5 sm:grid-cols-2"
       data-testid="company-manpower-request-form"
       onSubmit={(e) => {

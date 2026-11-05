@@ -208,7 +208,7 @@ async def list_invoices(
         term = {"$regex": re.escape(q.strip()), "$options": "i"}
         filters.append({"$or": [{"client_name": term}, {"invoice_number": term}]})
     if payment_status:
-        filters.append({"payment_status": {"$in": [None, "Pending"]} if payment_status == "Pending" else "Paid"})
+        filters.append({"payment_status": {"$in": [None, "Pending"]} if payment_status == "Pending" else payment_status})
     query = {"$and": filters} if filters else {}
     total = await db.invoices.count_documents(query)
     docs = await db.invoices.find(query, {"_id": 0}).sort("created_at", -1).skip((page - 1) * 50).limit(50).to_list(50)
@@ -306,21 +306,8 @@ async def update_invoice(invoice_id: str, payload: InvoiceUpdate):
 
 @router.patch("/{invoice_id}/status", response_model=Invoice)
 async def update_invoice_status(invoice_id: str, payload: InvoiceStatusUpdate):
-    old = await find_invoice(invoice_id)
-    if old.payments:
-        raise HTTPException(409, "Payment status follows the receipts register. Add or void a payment there.")
-    # Legacy status changes remain available until the invoice has receipts.
-    invoice = old.model_copy(update={
-        "payment_status": payload.payment_status, "opening_paid_amount": old.totals.total if payload.payment_status == "Paid" else amount(0), "revision": payload.revision + 1,
-        "updated_at": datetime.now(timezone.utc),
-    })
-    changes = invoice.model_dump(mode="json", include={"payment_status", "opening_paid_amount", "revision", "updated_at"})
-    result = await db.invoices.update_one(
-        {"id": invoice_id, "revision": payload.revision}, {"$set": changes},
-    )
-    if result.matched_count == 0:
-        raise HTTPException(409, "This invoice changed in another session. Refresh the saved invoices and try again.")
-    return invoice
+    await find_invoice(invoice_id)
+    raise HTTPException(409, "Record a dated receipt in Open / payments. Payment status is calculated from receipts; existing opening balances are preserved.")
 
 
 @router.get("/{invoice_id}/download/{format}")

@@ -17,6 +17,14 @@ function mentions(question: string, ...terms: string[]) {
 
 /** Answers use only approved website facts. No visitor message is sent to a server. */
 export function getBusinessAnswer(rawQuestion: string, jobs: Job[] | null, clients: Client[] | null = null): ChatAnswer {
+  if (/[\u0C80-\u0CFF]/.test(rawQuestion)) {
+    if (/ಪಿನ್|ಪಾಸ್|ಲಾಗಿನ್/.test(rawQuestion)) return { text: "ಖಾತೆ ಅಥವಾ ಪಿನ್ ಸಹಾಯಕ್ಕಾಗಿ ನಮ್ಮ ತಂಡವನ್ನು ನೇರವಾಗಿ ಸಂಪರ್ಕಿಸಿ.", actions: [contact] };
+    if (/ಶುಲ್ಕ|ಹಣ/.test(rawQuestion)) return { text: "ಉದ್ಯೋಗಕ್ಕಾಗಿ ಅಭ್ಯರ್ಥಿಗಳಿಂದ ಸೇವಾ ಅಥವಾ ಅರ್ಜಿ ಶುಲ್ಕ ಪಡೆಯುವುದಿಲ್ಲ. ಸಂಸ್ಥೆಗಳ ಸೇವಾ ದರವು ಕೆಲಸದ ಅಗತ್ಯವನ್ನು ಅವಲಂಬಿಸಿರುತ್ತದೆ.", actions: [whatsapp] };
+    if (/ಸಂಬಳ|ವೇತನ/.test(rawQuestion)) return { text: "ಸಂಬಳವು ಹುದ್ದೆ ಮತ್ತು ಉದ್ಯೋಗದಾತರನ್ನು ಅವಲಂಬಿಸಿರುತ್ತದೆ. ದೃಢಪಟ್ಟ ವಿವರಗಳನ್ನು ಉದ್ಯೋಗ ಪಟ್ಟಿಯಲ್ಲಿ ನೋಡಿ ಅಥವಾ ನಮ್ಮ ತಂಡವನ್ನು ಸಂಪರ್ಕಿಸಿ.", actions: [jobsLink, whatsapp] };
+    if (/ಕೆಲಸಗಾರ|ಸಿಬ್ಬಂದಿ|ಕಾರ್ಮಿಕ/.test(rawQuestion)) return { text: "ನಿಮ್ಮ ಸಂಸ್ಥೆಗೆ ಬೇಕಾದ ಹುದ್ದೆ, ಸಿಬ್ಬಂದಿ ಸಂಖ್ಯೆ, ಸ್ಥಳ ಮತ್ತು ಪಾಳಿಯ ವಿವರಗಳನ್ನು ಕಳುಹಿಸಿ. ವಿವಿಧ ಉದ್ಯಮಗಳಿಗೆ ಮಾನವ ಸಂಪನ್ಮೂಲ ಸೇವೆಯನ್ನು ಒದಗಿಸುತ್ತೇವೆ.", actions: [request, whatsapp] };
+    if (/ಕೆಲಸ|ಉದ್ಯೋಗ|ಅರ್ಜಿ/.test(rawQuestion)) return { text: "ಲಭ್ಯವಿರುವ ಉದ್ಯೋಗಗಳನ್ನು ನೋಡಿ ಮತ್ತು ಹೆಸರು, ಮೊಬೈಲ್ ಸಂಖ್ಯೆ, ಸ್ಥಳ ಹಾಗೂ ಕೌಶಲ್ಯದ ವಿವರಗಳೊಂದಿಗೆ ಅರ್ಜಿ ಸಲ್ಲಿಸಿ. ಸ್ವವಿವರ ಪತ್ರ ಐಚ್ಛಿಕವಾಗಿದೆ. ಉದ್ಯೋಗ ಖಚಿತವಲ್ಲ; ನಮ್ಮ ತಂಡ ಅರ್ಜಿಯನ್ನು ಪರಿಶೀಲಿಸುತ್ತದೆ.", actions: [jobsLink, apply] };
+    return { text: "ಉದ್ಯೋಗ ಅರ್ಜಿ, ಸಿಬ್ಬಂದಿ ಅಗತ್ಯ, ಸೇವೆಗಳು ಅಥವಾ ಸಂಪರ್ಕ ವಿವರಗಳ ಬಗ್ಗೆ ಸಹಾಯ ಮಾಡಬಹುದು. ಹೆಚ್ಚಿನ ಮಾಹಿತಿಗಾಗಿ ನಮ್ಮ ತಂಡವನ್ನು ಸಂಪರ್ಕಿಸಿ.", actions: [jobsLink, request, whatsapp] };
+  }
   const q = rawQuestion.toLowerCase().replace(/[^a-z0-9₹]+/g, " ").trim();
 
   if (mentions(q, "pin", "password", "admin", "login", "log in")) {
@@ -55,7 +63,7 @@ export function getBusinessAnswer(rawQuestion: string, jobs: Job[] | null, clien
 
   if (mentions(q, "resume", "cv", "upload", "file size", "2 mb", "2mb")) {
     return {
-      text: "Use the worker registration form to create your profile and upload a resume. PDF, DOC, DOCX, PNG and JPG files are accepted, up to 2 MB. The upload is optional, so you can still register if your resume is not ready.",
+      text: "Use the worker registration form to create your profile and upload a resume. PDF, DOCX, PNG and JPG files are accepted, up to 2 MB. The upload is optional, so you can still register if your resume is not ready.",
       actions: [apply],
     };
   }
@@ -83,7 +91,7 @@ export function getBusinessAnswer(rawQuestion: string, jobs: Job[] | null, clien
 
   if (mentions(q, "apply", "application", "register", "find a job", "looking for job", "need a job", "job seeker", "candidate", "iti", "sslc", "puc", "degree", "qualification")) {
     return {
-      text: "Job seekers can complete the worker registration form with their location, education, skills and experience. Add a resume if you have one. Our team matches profiles with current and upcoming factory, warehouse and technical roles across Karnataka; each opening may have its own requirements.",
+      text: "Job seekers can complete the worker registration form with their location, education, skills and experience. Add a resume if you have one. Our team matches profiles with current and upcoming operational, technical, customer service and support roles across industries in Karnataka; each opening may have its own requirements.",
       actions: [apply, jobsLink],
     };
   }

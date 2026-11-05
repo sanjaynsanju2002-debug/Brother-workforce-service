@@ -22,6 +22,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from lib.auth import require_admin
 from lib.applications import worker_input, company_input
 from lib.db import db
+from lib.submission_limits import limit_submission
 from lib.jobs import open_jobs_query
 from lib.notify import build_html, send_notification
 from models.bws import (
@@ -67,7 +68,8 @@ def receipt(doc: dict, token: str) -> WorkerReceipt:
 
 
 @router.post("/workers", response_model=WorkerReceipt)
-async def create_worker(payload: WorkerSubmission, background: BackgroundTasks) -> WorkerReceipt:
+async def create_worker(payload: WorkerSubmission, background: BackgroundTasks, request: Request) -> WorkerReceipt:
+    await limit_submission(db, request, "worker")
     if not payload.consent_to_share:
         raise HTTPException(status_code=400, detail="Please agree to recruitment use of your profile")
     job_title = None
@@ -162,7 +164,8 @@ async def upload_resume(worker_id: str, request: Request, file: UploadFile = Fil
     safe = re.sub(r"[^A-Za-z0-9._-]", "_", Path(file.filename or "resume").name)
     object_key = f"resumes/{worker_id}/{safe}"
 
-    content_type = file.content_type or "application/octet-stream"
+    from lib.resume_validation import resume_media
+    content_type = resume_media(ext, contents)
     stored_in_r2 = False
 
     # Prefer R2 when it is healthy, but never block a job application because
@@ -268,8 +271,9 @@ class CompanySubmission(CompanyRequestCreate):
 
 @router.post("/company-requests", response_model=CompanyRequest)
 async def create_company_request(
-    payload: CompanySubmission, background: BackgroundTasks
+    payload: CompanySubmission, background: BackgroundTasks, request: Request
 ) -> CompanyRequest:
+    await limit_submission(db, request, "company")
     data = company_input(payload.model_dump(exclude={"request_id"}))
     fingerprint = hashlib.sha256(json.dumps(data, sort_keys=True).encode()).hexdigest()
     request_id = str(payload.request_id) if payload.request_id else None
@@ -329,8 +333,9 @@ async def get_job(job_id: str) -> Job:
 
 
 @router.post("/visits", response_model=Ok)
-async def record_visit(payload: VisitCreate) -> Ok:
+async def record_visit(payload: VisitCreate, request: Request) -> Ok:
     """Anonymous visit counter — no IP, cookie or personal data is stored."""
+    await limit_submission(db, request, "visit", limit=150)
     visit = Visit(path=payload.path)
     await db.visits.insert_one(visit.model_dump())
     return Ok(ok=True)

@@ -14,7 +14,7 @@ os.environ.setdefault("DB_NAME", "bws_finance_test")
 
 from lib import auth
 from lib.months import parse_billing_period
-from routers import expenses, finance, invoices
+from routers import expenses, finance, invoices, payments
 from server import app
 from tests.test_admin_session_and_application import FakeDB
 from tests.test_invoices import InvoiceCollection, payload
@@ -92,11 +92,12 @@ class Collection(InvoiceCollection):
 def db(monkeypatch):
     fake = FakeDB()
     fake.expenses = Collection()
+    fake.payroll = Collection()
     fake.invoices = Collection()
     fake.invoice_counters = Collection()
     fake.invoice_companies = Collection()
     fake.clients = Collection()
-    for module in (auth, expenses, finance, invoices):
+    for module in (auth, expenses, finance, invoices, payments):
         monkeypatch.setattr(module, "db", fake)
     return fake
 
@@ -245,15 +246,20 @@ async def test_service_month_controls_revenue_and_payment_status_only_controls_r
         assert (await client.get("/api/admin/profit-loss?month=2026-09")).json()["revenue"] == "50000.00"
         assert (await client.get("/api/admin/profit-loss?month=2026-11")).json()["revenue"] == "0.00"
         assert (await client.get("/api/admin/profit-loss?month=2026-12")).json()["revenue"] == "123.45"
-        paid = await client.patch(f"/api/admin/invoices/{invoice['id']}/status", json={"revision": 1, "payment_status": "Paid"})
-        assert paid.status_code == 200
+        receipt_id = str(uuid4())
+        paid = await client.post(f"/api/admin/operations/invoices/{invoice['id']}/payments", json={
+            "request_id": receipt_id, "revision": 1, "payment_date": "2026-11-05",
+            "amount": invoice["totals"]["total"], "method": "Bank", "reference": "TEST-RECEIPT", "notes": ""})
+        assert paid.status_code == 200, paid.text
         result = (await client.get("/api/admin/profit-loss?month=2026-10")).json()
         assert result["revenue"] == "112000.00" and result["unpaid_invoice_amount"] == "0.00"
         assert (await client.delete(f"/api/admin/invoices/{invoice['id']}?revision=2")).status_code == 409
-        assert (await client.patch(f"/api/admin/invoices/{invoice['id']}/status", json={"revision": 2, "payment_status": "Pending"})).status_code == 200
-        assert (await client.delete(f"/api/admin/invoices/{invoice['id']}?revision=3")).status_code == 204
+        voided = await client.post(f"/api/admin/operations/invoices/{invoice['id']}/payments/{receipt_id}/void", json={"revision": 2, "reason": "Incorrect test receipt"})
+        assert voided.status_code == 200, voided.text
+        assert (await client.delete(f"/api/admin/invoices/{invoice['id']}?revision=3")).status_code == 409
         result = (await client.get("/api/admin/profit-loss?month=2026-10")).json()
-        assert result["revenue"] == "2000.00" and result["profit_loss"] == "-99000.00"
+        assert result["revenue"] == "112000.00" and result["unpaid_invoice_amount"] == "129800.00"
+
 
 
 @pytest.mark.parametrize("period,expected", [("October 2026", "2026-10"), ("Oct-2026", "2026-10"), ("10/2026", "2026-10"), ("2026-10", "2026-10"), ("December 2026", "2026-12"), ("October", None), ("Service period", None), ("13/2026", None)])

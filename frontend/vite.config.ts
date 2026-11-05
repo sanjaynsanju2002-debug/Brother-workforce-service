@@ -34,13 +34,13 @@ if (!hotReloadDisabled) {
 }
 
 // https://vite.dev/config/
-export default defineConfig(async () => {
-  const emergentOverlay = await loadEmergentOverlay();
+export default defineConfig(async ({ command }) => {
+  const emergentOverlay = command === "serve" ? await loadEmergentOverlay() : null;
   return {
     plugins: [
       react(),
       tailwindcss(),
-      ...(visualEditsDisabled ? [] : [visualEdits()]),
+      ...(command === "serve" && !visualEditsDisabled ? [visualEdits()] : []),
       ...(emergentOverlay ? [emergentOverlay] : []),
     ],
     resolve: {

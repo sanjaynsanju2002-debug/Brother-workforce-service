@@ -408,27 +408,17 @@ async def test_status_persists_without_altering_amounts_and_rejects_stale_update
         assert result["total"] == 1
         assert result["items"][0]["payment_status"] == "Pending"
         changed = await client.patch(f"{path}/status", json={"payment_status": "Paid", "revision": 1})
-        assert changed.status_code == 200, changed.text
-        assert changed.json()["payment_status"] == "Paid"
-        assert changed.json()["revision"] == 2
-        assert changed.json()["totals"] == original["totals"]
-        for key in ("client_name", "lines", "service_percentage", "invoice_number", "created_at"):
-            assert changed.json()[key] == original[key]
+        assert changed.status_code == 409, changed.text
+        assert "dated receipt" in changed.json()["detail"]
+        current = (await client.get(path)).json()
+        assert current["payment_status"] == "Pending" and current["revision"] == 1
+        assert current["totals"] == original["totals"]
+        # Historical paid snapshots remain intact, but cannot be reset with a toggle.
+        fake.invoices.records[0]["payment_status"] = "Paid"
         assert (await client.get(path)).json()["payment_status"] == "Paid"
-        assert (await client.get("/api/admin/invoices", params={"company_id": company["id"], "payment_status": "Pending"})).json()["total"] == 0
-        assert (await client.get("/api/admin/invoices", params={"company_id": company["id"], "payment_status": "Paid", "q": "BWS/26-27"})).json()["total"] == 1
         assert (await client.patch(f"{path}/status", json={"payment_status": "Pending", "revision": 1})).status_code == 409
-        assert (await client.patch(f"{path}/status", json={"payment_status": "Overdue", "revision": 2})).status_code == 422
-        update = {key: value for key, value in changed.json().items() if key in invoices.InvoiceUpdate.model_fields}
-        update.update(company_id=company["id"], service_percentage="8")
-        assert (await client.put(path, json=update)).status_code == 422  # cannot reduce below the recorded receipt
-        pending = await client.patch(f"{path}/status", json={"payment_status": "Pending", "revision": 2})
-        assert pending.status_code == 200
-        update["revision"] = 3
-        edited = await client.put(path, json=update)
-        assert edited.status_code == 200, edited.text
-        assert edited.json()["payment_status"] == "Pending"
-        assert edited.json()["totals"] != original["totals"]
+        assert (await client.get(path)).json()["payment_status"] == "Paid"
+
 
 
 @pytest.mark.asyncio
@@ -453,7 +443,7 @@ async def test_delete_is_private_checks_revision_and_preserves_other_records_and
         target, other = created
         path = f"/api/admin/invoices/{target['id']}"
         if payment_status == "Paid":
-            target = (await client.patch(f"{path}/status", json={"payment_status": "Paid", "revision": 1})).json()
+            next(row for row in fake.invoices.records if row["id"] == target["id"]).update(payment_status="Paid", opening_paid_amount=target["totals"]["total"])
         revision = target["revision"]
         assert (await client.delete(path)).status_code == 422
         assert (await client.delete(path, params={"revision": 0})).status_code == 422
@@ -462,9 +452,9 @@ async def test_delete_is_private_checks_revision_and_preserves_other_records_and
         assert len(fake.invoices.records) == 2
         if payment_status == "Paid":
             assert (await client.delete(path, params={"revision": revision})).status_code == 409
-            corrected = await client.patch(f"{path}/status", json={"payment_status": "Pending", "revision": revision})
-            assert corrected.status_code == 200
-            revision = corrected.json()["revision"]
+            assert (await client.patch(f"{path}/status", json={"payment_status": "Pending", "revision": revision})).status_code == 409
+            assert len(fake.invoices.records) == 2
+            return
         response = await client.delete(path, params={"revision": revision})
         assert response.status_code == 204
         assert response.content == b""

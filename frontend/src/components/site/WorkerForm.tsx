@@ -1,3 +1,4 @@
+import { trackJourney } from "@/lib/track";
 import { useEffect, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { CheckCircle2, Loader2, Upload } from "lucide-react";
@@ -93,6 +94,7 @@ export default function WorkerForm({ job, language = "en" }: { job?: Job; langua
       return { worker, resumeUploaded };
     },
     onSuccess: ({ worker, resumeUploaded }) => {
+      trackJourney("candidate_saved");
       setSavedReceipt(worker);
       setResumeFailed(!resumeUploaded);
       setDone(true);
@@ -142,6 +144,7 @@ export default function WorkerForm({ job, language = "en" }: { job?: Job; langua
 
   return (
     <form
+      onFocus={() => trackJourney("candidate_start")}
       className="bws-premium-form grid gap-5 sm:grid-cols-2"
       data-testid="worker-registration-form"
       onSubmit={(e) => {

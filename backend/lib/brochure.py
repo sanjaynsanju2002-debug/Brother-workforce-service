@@ -30,7 +30,7 @@ def company_brochure() -> bytes:
     story = [Paragraph("BROTHERS<br/>WORKFORCE SOLUTIONS", ParagraphStyle("title", parent=heading, fontSize=28, leading=32)),
              Paragraph("Connecting Talent Creating Success", ParagraphStyle("tagline", parent=body, textColor=orange, fontSize=12)),
              Spacer(1, 7 * mm), Paragraph("Workforce support in Mysore &amp; across Karnataka", heading),
-             Paragraph("Staffing and recruitment support for factories, production units, warehouses and technical operations. Talk to our team about your role, location, shift and workforce requirement.", body), Spacer(1, 7 * mm)]
+             Paragraph("Staffing and recruitment support for businesses across industries, including operational, technical, service and support roles. Talk to our team about your role, location, shift and workforce requirement.", body), Spacer(1, 7 * mm)]
     cards = [
         ("Skilled &amp; technical roles", "Machine operators, technicians, electricians, welders and fitters."),
         ("Production &amp; assembly", "Semi-skilled production, assembly, quality support and packaging roles."),

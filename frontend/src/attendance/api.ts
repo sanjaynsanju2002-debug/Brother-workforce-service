@@ -1,6 +1,9 @@
 const DEFAULT_API_BASE = "https://brothersworkforcesolutions.in/api";
 const API_BASE = (import.meta.env.VITE_ATTENDANCE_API_BASE_URL || DEFAULT_API_BASE).replace(/\/$/, "");
 const TOKEN_KEY = "bws-attendance-session";
+// Bearer credentials are deliberately memory-only. Reloading requires sign-in.
+let sessionToken: string | null = null;
+try { localStorage.removeItem(TOKEN_KEY); } catch { /* Storage may be disabled. */ }
 
 export class ApiError extends Error {
   status: number;
@@ -15,20 +18,20 @@ export class ApiError extends Error {
 }
 
 export function setAttendanceToken(token: string) {
-  localStorage.setItem(TOKEN_KEY, token);
+  sessionToken = token;
 }
 
 export function hasAttendanceToken() {
-  return Boolean(localStorage.getItem(TOKEN_KEY));
+  return Boolean(sessionToken);
 }
 
 export function clearAttendanceToken() {
-  localStorage.removeItem(TOKEN_KEY);
+  sessionToken = null;
 }
 
 export async function attendanceFetch(path: string, init: RequestInit = {}) {
   const headers = new Headers(init.headers);
-  const token = localStorage.getItem(TOKEN_KEY);
+  const token = sessionToken;
   if (token) headers.set("Authorization", `Bearer ${token}`);
   const response = await fetch(`${API_BASE}${path}`, { ...init, headers, cache: "no-store" });
   if (response.status === 401 && path !== "/admin/attendance-login") {

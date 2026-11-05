@@ -60,6 +60,16 @@ class Collection:
         for key, value in changes.get("$inc", {}).items():
             record[key] = record.get(key, 0) + value
 
+    async def find_one_and_update(self, query, changes, **kwargs):
+        row = next((r for r in self.records if all(r.get(k) == v for k, v in query.items())), None)
+        if row is None:
+            if not kwargs.get("upsert"): return None
+            row = {**query, **changes.get("$setOnInsert", {})}
+            self.records.append(row)
+        row.update(changes.get("$set", {}))
+        for k, v in changes.get("$inc", {}).items(): row[k] = row.get(k, 0) + v
+        return row.copy()
+
     async def delete_one(self, query):
         before = len(self.records)
         self.records = [record for record in self.records if not all(record.get(k) == v for k, v in query.items())]
@@ -76,11 +86,15 @@ class Collection:
 
 
 class FakeDB:
+    def __getitem__(self, name):
+        return getattr(self, name)
+
     def __init__(self):
         self.settings = Collection([{"id": "admin", "pin": "123456"}])
         self.admin_login_attempts = Collection()
         self.admin_sessions = Collection()
         self.audit_events = Collection()
+        self.public_rate_limits = Collection()
         self.jobs = Collection([{
             "id": "job-1", "title": "Machine Operator", "location": "Mysuru",
             "skill_category": "Skilled", "active": True,

@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { DateInput } from "@/components/ui/date-input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { ApiError, apiDelete, apiGet, apiPatch, apiPost, apiPut } from "@/lib/api";
+import { ApiError, apiDelete, apiGet, apiPost, apiPut } from "@/lib/api";
 import { BRAND } from "@/lib/brand";
 import { formatIndianDate } from "@/lib/calendarDate";
 import { monthLabel, previousMonth } from "@/lib/finance";
@@ -162,16 +162,6 @@ export default function Invoices() {
     },
     onError: (error) => { const message = errorMessage(error); setCompanyProblem(message); toast.error(message); },
   });
-  const changeStatus = useMutation({
-    mutationFn: ({ invoice, status }: { invoice: Invoice; status: PaymentStatus }) => apiPatch<Invoice>(`/admin/invoices/${invoice.id}/status`, { payment_status: status, revision: invoice.revision }),
-    onSuccess: (invoice) => {
-      setSaved((current) => current?.id === invoice.id ? invoice : current);
-      qc.invalidateQueries({ queryKey: ["invoices"] });
-      qc.invalidateQueries({ queryKey: ["admin-profit-loss"] });
-      toast.success(`${invoice.invoice_number} marked ${invoice.payment_status.toLowerCase()}`);
-    },
-    onError: (error) => { qc.invalidateQueries({ queryKey: ["invoices"] }); toast.error(errorMessage(error)); },
-  });
   const remove = useMutation({
     mutationFn: (invoice: Invoice) => apiDelete<void>(`/admin/invoices/${invoice.id}?revision=${invoice.revision}`),
     onSuccess: (_, invoice) => {
@@ -194,7 +184,7 @@ export default function Invoices() {
     onSuccess: () => { startForCompany(); refreshCompanyQueries(qc); toast.success("Company removed from active lists. You can restore it below."); },
     onError: (e) => toast.error(errorMessage(e)),
   });
-  const busy = removeCompany.isPending || save.isPending || addCompany.isPending || changeStatus.isPending || remove.isPending;
+  const busy = removeCompany.isPending || save.isPending || addCompany.isPending || remove.isPending;
   const confirmDelete = (invoice: Invoice) => {
     const unsaved = saved?.id === invoice.id && dirty ? " Unsaved changes to this invoice will also be discarded." : "";
     if (window.confirm(`Permanently delete invoice ${invoice.invoice_number} for ${invoice.client_name}? This cannot be undone.${unsaved}`)) remove.mutate(invoice);
@@ -367,7 +357,7 @@ export default function Invoices() {
         <div className="space-y-3" data-testid="invoice-history">{history.data?.items.map((invoice) => <div key={invoice.id} className="grid items-center gap-4 rounded-lg border border-slate-200 p-4 text-center sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(7rem,auto)_8rem_10rem]" data-testid={`invoice-row-${invoice.id}`}>
           <div className="min-w-0"><p className="break-words text-center font-medium text-[#0F2444]" data-testid={`invoice-number-${invoice.id}`}>{invoice.invoice_number}</p><p className="mt-1 break-words text-xs text-slate-500">{invoice.client_name}</p><p className="mt-1 text-xs font-medium text-[#C2410C]">{invoiceBillingLabel(invoice.billing_mode)}</p><p className="mt-1 text-xs text-slate-500">{formatIndianDate(invoice.invoice_date)}{invoice.service_month ? ` · Services: ${monthLabel(invoice.service_month)}` : invoice.billing_period && ` · ${invoice.billing_period}`}</p>{!invoice.service_month && <p className="mt-1 text-xs font-medium text-amber-700">Open this invoice to set its service month.</p>}</div>
           <div><p className="mb-1 text-xs text-slate-500">Total</p><p className="text-center text-sm font-semibold tabular-nums">{money(invoice.totals.total)}</p></div>
-          <div><Label htmlFor={`invoice-status-${invoice.id}`} className="mb-1 block text-xs text-slate-500">Payment status</Label><select id={`invoice-status-${invoice.id}`} className={`${selectStyle} text-center font-medium ${invoice.payment_status === "Paid" ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-amber-200 bg-amber-50 text-amber-800"}`} value={invoice.payment_status} disabled={busy || !!invoice.payments?.length} data-testid={`invoice-status-${invoice.id}`} onChange={(event) => changeStatus.mutate({ invoice, status: event.target.value as PaymentStatus })}><option value="Pending">Pending</option>{invoice.payment_status === "Partially Paid" && <option value="Partially Paid">Partially Paid</option>}<option value="Paid">Paid</option></select><p className="mt-1 text-xs text-slate-500">Balance {money(invoiceBalance(invoice))}</p></div>
+          <div><Label htmlFor={`invoice-status-${invoice.id}`} className="mb-1 block text-xs text-slate-500">Payment status</Label><p id={`invoice-status-${invoice.id}`} className="font-semibold" data-testid={`invoice-status-${invoice.id}`}>{invoice.payment_status}</p><p className="mt-1 text-xs text-slate-500">Balance {money(invoiceBalance(invoice))}</p></div>
           <div className="flex flex-wrap justify-center gap-2">
             <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => changeInvoice(invoice)} data-testid={`invoice-open-${invoice.id}`}>Open / payments</Button>
             <Button type="button" variant="outline" size="sm" className="border-red-200 text-red-700 hover:bg-red-50" disabled={busy} aria-label={`Delete invoice ${invoice.invoice_number}`} onClick={() => confirmDelete(invoice)} data-testid={`invoice-delete-${invoice.id}`}><Trash2 className="mr-1 h-4 w-4" /> Delete</Button>

@@ -67,7 +67,7 @@ it("starts attendance unmarked, saves every employee and only approves a reviewe
   const writes: { url: string; body: Record<string, unknown> }[] = [];
   vi.stubGlobal("confirm", vi.fn(() => true));
   vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
-    if (url === "/api/admin/clients") return new Response(JSON.stringify([{ id: "company", name: "QA Factory" }]));
+    if (url === "/api/admin/operations/attendance-companies") return new Response(JSON.stringify([{ id: "company", name: "QA Factory" }]));
     if (!init?.method || init.method === "GET") return new Response(JSON.stringify({ company_name: "QA Factory", employees: [{ id: "assignment", full_name: "QA Employee", role: "Assembler" }], sheet }));
     const body = JSON.parse(String(init.body)); writes.push({ url, body });
     sheet = url.endsWith("/approve") ? { ...sheet, revision: 2, status: "Approved", approved_by: "Owner" } : { id: "sheet", revision: 1, status: "Draft", rows: [{ ...body.rows[0], full_name: "QA Employee", role: "Assembler" }], notes: "" };
@@ -96,7 +96,7 @@ it("links recruitment to an existing candidate and saves interview and follow-up
   let write: Record<string, unknown> | undefined;
   vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
     if (init?.method === "PUT") { write = JSON.parse(String(init.body)); return new Response(JSON.stringify({ ...write, id: "progress" })); }
-    const data = url === "/api/admin/clients" ? [{ id: "company", name: "QA Factory" }] : url === "/api/admin/talents" ? [{ id: "worker", full_name: "QA Candidate", education: "ITI", mobile: "0000000000", status: "Available" }] : [];
+    const data = url === "/api/admin/operations/attendance-companies" ? [{ id: "company", name: "QA Factory" }] : url === "/api/admin/talents" ? [{ id: "worker", full_name: "QA Candidate", education: "ITI", mobile: "0000000000", status: "Available" }] : [];
     return new Response(JSON.stringify(data));
   }));
   const cleanup = mount(<Recruitment />);
