@@ -120,10 +120,13 @@ export default function PayrollEditor({ draft, month, deleting, onDirty, onBusy,
       qc.setQueryData<PayrollDraft>(["payroll-draft", draft.company.id, month], (value) => value ? { ...value, payroll: record } : value);
       void qc.invalidateQueries({ queryKey: ["payroll-history"] });
       void qc.invalidateQueries({ queryKey: ["payroll-companies"] });
+      void qc.invalidateQueries({ queryKey: ["admin-expenses"] });
+      void qc.invalidateQueries({ queryKey: ["admin-profit-loss"] });
+      void qc.invalidateQueries({ queryKey: ["ops"] });
       if (format) await downloadPayroll(record, format);
       return record;
     },
-    onSuccess: () => toast.success("Payroll saved"),
+    onSuccess: () => toast.success("Payroll saved. Expenses and Profit & Loss updated."),
     onError: (error) => { const message = payrollError(error); setProblem(message); toast.error(message); },
     onSettled: () => onBusy(false),
   });
@@ -177,7 +180,7 @@ export default function PayrollEditor({ draft, month, deleting, onDirty, onBusy,
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
             <h2 className="break-words text-lg font-semibold">{draft.company.name} · {monthLabel(month)}</h2>
-            <p className="mt-1 text-xs text-slate-500">{selected} included employees · {saved ? "Saved payroll" : "New payroll"}{dirty && " · Unsaved changes"}</p>
+            <p className="mt-1 text-xs text-slate-500">{selected} included employees · {saved ? "Saved payroll" : "New payroll"}{dirty && " · Unsaved changes"}</p><p className="mt-1 text-xs text-slate-500">Saving agency-paid payroll automatically updates Expenses and Profit &amp; Loss for this payroll month.</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <Button type="button" variant="outline" onClick={() => void onReload()} aria-label="Reload payroll"><RotateCcw className="h-4 w-4" /></Button>

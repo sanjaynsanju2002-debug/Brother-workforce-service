@@ -40,6 +40,9 @@ export default function Payroll() {
       qc.removeQueries({ queryKey: key, exact: true });
       void qc.invalidateQueries({ queryKey: ["payroll-history"] });
       void qc.invalidateQueries({ queryKey: ["payroll-companies"] });
+      void qc.invalidateQueries({ queryKey: ["admin-expenses"] });
+      void qc.invalidateQueries({ queryKey: ["admin-profit-loss"] });
+      void qc.invalidateQueries({ queryKey: ["ops"] });
       toast.success(`Payroll for ${record.company_name} · ${monthLabel(record.month)} deleted`);
     },
     onError: (error) => { void qc.invalidateQueries({ queryKey: ["payroll-history"] }); toast.error(payrollError(error)); },

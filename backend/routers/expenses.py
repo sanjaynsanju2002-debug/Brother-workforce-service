@@ -3,6 +3,7 @@
 import hashlib
 import json
 import re
+from calendar import monthrange
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from pathlib import Path
@@ -18,6 +19,8 @@ from pymongo.errors import DuplicateKeyError
 from lib.auth import require_admin
 from lib.db import db
 from lib.months import MONTH_PATTERN
+from lib.profitability import payroll_cost
+from lib.ledger import money as decimal_money
 from models.bws import Ok
 
 router = APIRouter(prefix="/admin/expenses", dependencies=[Depends(require_admin)])
@@ -35,6 +38,8 @@ class Expense(BaseModel):
     company_id: str | None = None
     company_name: str | None = None
     cost_type: Literal["Operating", "Payroll"] = "Operating"
+    source: Literal["Manual", "Payroll"] = "Manual"
+    payroll_id: str | None = None
     revision: int
     created_at: datetime
 
@@ -46,6 +51,9 @@ class ExpensePage(BaseModel):
     total: int
     page: int
     page_size: int = PAGE_SIZE
+    payroll_amount: str = "0.00"
+    operating_amount: str = "0.00"
+    salary_cash_amount: str = "0.00"
 
 
 def money(paise: int) -> str:
@@ -105,11 +113,37 @@ async def list_expenses(month: str = Query(pattern=MONTH_PATTERN), page: int = Q
         {"$match": query}, {"$group": {"_id": None, "total": {"$sum": 1}, "amount": {"$sum": "$amount_paise"}}},
     ]).to_list(1)
     summary = summary[0] if summary else {"total": 0, "amount": 0}
+    operating = await db.expenses.aggregate([
+        {"$match": {**query, "cost_type": {"$ne": "Payroll"}}},
+        {"$group": {"_id": None, "amount": {"$sum": "$amount_paise"}}},
+    ]).to_list(1)
+    operating_paise = operating[0]["amount"] if operating else 0
+    # Project directly from the saved register. A second collection write could
+    # fail after payroll saved, race an edit, or leave stale costs after deletion.
+    # The saved payroll itself is the durable expense; no backfill is required.
+    payrolls = await db.payroll.find({"month": month, "cost_responsibility": {"$ne": "Client"}}, {
+        "id": 1, "company_id": 1, "company_name": 1, "totals": 1, "revision": 1,
+        "created_at": 1, "cost_responsibility": 1,
+    }).to_list(None)
+    year, month_number = map(int, month.split("-"))
+    expense_date = f"{month}-{monthrange(year, month_number)[1]:02d}"
+    linked = [Expense(id=f"payroll:{p['id']}", expense_date=expense_date,
+        description=f"Payroll · {p['company_name']} · {month}", amount=decimal_money(payroll_cost(p)),
+        company_id=p["company_id"], company_name=p["company_name"], cost_type="Payroll", source="Payroll",
+        payroll_id=p["id"], revision=p["revision"], created_at=p["created_at"]) for p in payrolls]
+    payroll_total = sum((payroll_cost(p) for p in payrolls), Decimal("0"))
+    end = page * PAGE_SIZE
     docs = await db.expenses.find(query, {"_id": 0, "bill_data": 0}).sort([
         ("expense_date", -1), ("created_at", -1), ("id", 1),
-    ]).skip((page - 1) * PAGE_SIZE).limit(PAGE_SIZE).to_list(PAGE_SIZE)
-    return ExpensePage(items=[expense_record(doc) for doc in docs], month=month,
-                       total_amount=money(summary["amount"]), total=summary["total"], page=page)
+    ]).limit(end).to_list(end)
+    entries = [expense_record(doc) for doc in docs] + linked
+    entries.sort(key=lambda e: e.id)
+    entries.sort(key=lambda e: (e.expense_date, e.created_at.timestamp()), reverse=True)
+    return ExpensePage(items=entries[end - PAGE_SIZE:end], month=month,
+        total_amount=decimal_money(Decimal(operating_paise) / 100 + payroll_total),
+        total=summary["total"] + len(linked), page=page,
+        payroll_amount=decimal_money(payroll_total), operating_amount=money(operating_paise),
+        salary_cash_amount=money(summary["amount"] - operating_paise))
 
 
 @router.post("", response_model=Expense)

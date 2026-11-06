@@ -4,6 +4,15 @@ from lib.ledger import amount, money, received
 from lib.months import service_month
 
 
+def payroll_cost(payroll):
+    """Agency cost, shared by Expenses and both profit reports."""
+    if payroll.get("cost_responsibility", "Agency") != "Agency":
+        return Decimal("0")
+    return sum((amount(payroll["totals"].get(k)) for k in (
+        "gross_wages", "esi_employer_contribution", "pf_employer_contribution",
+    )), Decimal("0"))
+
+
 async def profit_report(db, month):
     companies = await db.clients.find({}, {"id": 1, "name": 1, "archived": 1}).to_list(None)
     rows = {c["id"]: {"company_id": c["id"], "company_name": c["name"], "archived": c.get("archived", False),
@@ -28,8 +37,7 @@ async def profit_report(db, month):
     async for p in db.payroll.find({"month": month}, {"company_id": 1, "company_name": 1, "totals": 1, "cost_responsibility": 1}):
         r = row_for(p["company_id"], p["company_name"])
         r["payroll_registers"] += 1
-        if p.get("cost_responsibility", "Agency") == "Agency":
-            r["payroll_cost"] += sum((amount(p["totals"].get(k)) for k in ("gross_wages", "esi_employer_contribution", "pf_employer_contribution")), Decimal("0"))
+        r["payroll_cost"] += payroll_cost(p)
     async for e in db.expenses.find({"month": month}, {"company_id": 1, "company_name": 1, "amount_paise": 1, "cost_type": 1}):
         r = row_for(e.get("company_id"), e.get("company_name", "Company"))
         r["salary_cash_expenses" if e.get("cost_type") == "Payroll" else "operating_expenses"] += Decimal(e["amount_paise"]) / 100
