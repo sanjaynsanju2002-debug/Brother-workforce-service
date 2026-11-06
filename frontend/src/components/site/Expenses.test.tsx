@@ -67,3 +67,28 @@ it("saves and edits historical dates, then displays the expense in its new month
     act(() => root.unmount()); qc.clear(); vi.unstubAllGlobals(); document.body.innerHTML = "";
   }
 });
+
+it("shows linked payroll as a managed expense and keeps manual salary cash separate", async () => {
+  vi.stubGlobal("fetch", vi.fn(async () => new Response("[]")));
+  const month = indiaToday().slice(0, 7);
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: Infinity } } });
+  qc.setQueryData(["ops", "companies"], []);
+  qc.setQueryData(["admin-expenses", month, 1], { items: [
+    { id: "payroll:run", payroll_id: "run", expense_date: `${month}-28`, description: "Payroll · Example company", amount: "10325.00", company_name: "Example company", source: "Payroll", cost_type: "Payroll", bill_filename: null, revision: 2, created_at: "2026-10-01T00:00:00Z" },
+    { id: "cash", expense_date: `${month}-01`, description: "Salary payment record", amount: "5000.00", source: "Manual", cost_type: "Payroll", bill_filename: null, revision: 1, created_at: "2026-10-01T00:00:00Z" },
+  ], month, total: 2, total_amount: "10325.00", payroll_amount: "10325.00", operating_amount: "0.00", salary_cash_amount: "5000.00", page: 1, page_size: 50 });
+  const host = document.createElement("div"); document.body.appendChild(host);
+  const root = createRoot(host);
+  try {
+    act(() => root.render(<QueryClientProvider client={qc}><Expenses /></QueryClientProvider>));
+    expect(host.querySelector("[data-testid='expenses-total']")?.textContent).toBe("₹10,325.00");
+    const payrollRow = Array.from(host.querySelectorAll("tbody tr")).find((row) => row.textContent?.includes("Automatic payroll cost"))!;
+    expect(payrollRow.textContent).toContain("Example company");
+    expect(payrollRow.querySelector("a")?.getAttribute("href")).toBe("/admin?tab=payroll");
+    expect(payrollRow.querySelectorAll("button")).toHaveLength(0);
+    expect(host.textContent).toContain("Salary cash record · excluded from total business costs");
+    expect(host.querySelector("button[aria-label='Edit Salary payment record']")).not.toBeNull();
+  } finally {
+    act(() => root.unmount()); qc.clear(); host.remove(); vi.unstubAllGlobals();
+  }
+});

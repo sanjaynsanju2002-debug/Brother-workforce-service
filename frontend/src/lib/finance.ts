@@ -19,6 +19,8 @@ export interface Expense {
   company_id?: string | null;
   company_name?: string | null;
   cost_type?: "Operating" | "Payroll";
+  source?: "Manual" | "Payroll";
+  payroll_id?: string | null;
   revision: number;
   created_at: string;
 }
@@ -27,6 +29,9 @@ export interface ExpensePage {
   items: Expense[];
   month: string;
   total_amount: string;
+  payroll_amount?: string;
+  operating_amount?: string;
+  salary_cash_amount?: string;
   total: number;
   page: number;
   page_size: number;

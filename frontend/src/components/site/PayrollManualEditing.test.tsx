@@ -26,6 +26,7 @@ it("lets an excluded monthly employee enter worked days, applies ESI defaults, a
     throw new Error(`Unexpected request ${url}`);
   }));
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const invalidations = vi.spyOn(qc, "invalidateQueries");
   const host = document.createElement("div"); document.body.appendChild(host);
   const root = createRoot(host);
   const input = (name: string) => host.querySelector<HTMLInputElement>(`input[name="${name}"]`)!;
@@ -69,6 +70,9 @@ it("lets an excluded monthly employee enter worked days, applies ESI defaults, a
     expect(savedInputs[0].lines[0]).toMatchObject({ assignment_id: "manual", monthly_pay_basis: "WorkedDays", worked_days: "25.5", days_absent: "5.5", esi_percentage: "0.75", esi_employer_percentage: "3.25", pf_percentage: "0" });
     expect(savedInputs[0].lines[0]).not.toHaveProperty("total_paid_days");
     expect(input("worked_days").value).toBe("25.5");
+    for (const key of ["admin-expenses", "admin-profit-loss", "ops"]) {
+      expect(invalidations).toHaveBeenCalledWith({ queryKey: [key] });
+    }
   } finally {
     act(() => root.unmount()); qc.clear(); vi.unstubAllGlobals(); host.remove();
   }
