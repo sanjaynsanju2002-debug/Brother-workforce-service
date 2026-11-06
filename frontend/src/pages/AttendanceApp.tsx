@@ -1,3 +1,4 @@
+import AttendanceEntry, { type EntryMode } from "@/components/operations/AttendanceEntry";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -428,17 +429,18 @@ function EmployeeAccess({ companyId, companyName }: { companyId: string; company
 }
 
 function DailyAttendance({ companyId, day, onDay }: { companyId: string; day: string; onDay: (day: string) => void }) {
+  const [entryMode, setEntryMode] = useState<EntryMode>("all");
   const query = useQuery({ queryKey: ["attendance-daily", companyId, day], queryFn: () => apiGet<AttendanceDraft>(`${OPS}/attendance?company_id=${encodeURIComponent(companyId)}&attendance_date=${day}`), refetchOnWindowFocus: false });
   return <section className="space-y-4">
     <div className="grid gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:grid-cols-[minmax(0,18rem)_1fr] sm:p-5">
       <div><Label htmlFor="attendance-day" className="mb-2 flex items-center gap-2"><CalendarDays className="h-4 w-4 text-[#EA580C]" />Attendance date</Label><DateInput id="attendance-day" value={day} onValueChange={(value) => value ? onDay(value) : false} /></div>
       <div className="flex items-end"><p className="rounded-lg bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600"><strong>Payroll rule:</strong> Present, paid leave, government holiday and weekly off count as 1 payable day. Half day counts as 0.5. Absent and unpaid leave count as 0.</p></div>
     </div>
-    {query.isPending ? <LoadingCard label="Loading employees from Company Workforce…" /> : query.isError ? <ErrorCard text={message(query.error)} retry={() => query.refetch()} /> : query.data && <DailyEditor key={`${companyId}:${day}:${query.data.sheet?.revision ?? 0}:${query.dataUpdatedAt}`} companyId={companyId} day={day} draft={query.data} reload={() => query.refetch()} />}
+    {query.isPending ? <LoadingCard label="Loading employees from Company Workforce…" /> : query.isError ? <ErrorCard text={message(query.error)} retry={() => query.refetch()} /> : query.data && <DailyEditor key={`${companyId}:${day}:${query.data.sheet?.revision ?? 0}:${query.dataUpdatedAt}`} companyId={companyId} day={day} draft={query.data} entryMode={entryMode} onMode={setEntryMode} reload={() => query.refetch()} />}
   </section>;
 }
 
-function DailyEditor({ companyId, day, draft, reload }: { companyId: string; day: string; draft: AttendanceDraft; reload: () => Promise<unknown> }) {
+export function DailyEditor({ companyId, day, draft, reload, entryMode, onMode }: { companyId: string; day: string; draft: AttendanceDraft; entryMode: EntryMode; onMode: (mode: EntryMode) => void; reload: () => Promise<unknown> }) {
   const queryClient = useQueryClient();
   const existing = draft.sheet;
   const saved = new Map(existing?.rows.map((row) => [row.assignment_id, row]));
@@ -530,15 +532,18 @@ function DailyEditor({ companyId, day, draft, reload }: { companyId: string; day
     <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
       <div className="border-b border-slate-200 p-4 sm:p-5">
         <div className="flex flex-wrap items-start justify-between gap-4"><div><div className="flex flex-wrap items-center gap-2"><h2 className="text-lg font-semibold">{draft.company_name}</h2><span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${locked ? "bg-emerald-100 text-emerald-800" : existing ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-600"}`}>{locked ? "Approved" : existing ? "Draft" : "New"}</span></div><p className="mt-1 text-sm text-slate-500">{marked} of {rows.length} employees marked{locked && existing?.approved_by ? ` · Approved by ${existing.approved_by}` : ""}</p></div><Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => { if (!dirty || window.confirm("Discard unsaved changes and reload the workforce?")) void reload(); }}><RefreshCw className="h-4 w-4" />Reload employees</Button></div>
+        {entryMode === "all" && <>
         <div className="mt-4 flex gap-2 overflow-x-auto pb-1">{SHIFTS.map((item) => <button key={item} type="button" onClick={() => setShift(item)} className={`min-h-9 shrink-0 rounded-lg px-3 text-sm font-medium ${shift === item ? "bg-[#0F2444] text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>{item}{item !== "All" ? ` (${rows.filter((row) => row.shift === item).length})` : ` (${rows.length})`}</button>)}</div>
         <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto]">
           <div className="relative"><Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-slate-400" /><Input className="pl-9" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search employee, ID or role" /></div>
           {!locked && <div className="flex flex-wrap gap-2"><span className="self-center text-xs font-medium text-slate-500">Mark {visible.length} visible:</span>{(["Present", "Absent", "Holiday", "Weekly off"] as const).map((status) => <Button key={status} type="button" variant="outline" size="sm" disabled={busy || !visible.length} onClick={() => bulk(status)}>{status}</Button>)}</div>}
-        </div>
+        </div></>}
       </div>
 
       {problem && <div role="alert" className="m-4 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700 sm:m-5">{problem}</div>}
+      <div className="p-4 sm:p-5"><AttendanceEntry rows={rows} mode={entryMode} onMode={(mode) => { setShift("All"); setSearch(""); onMode(mode); }} disabled={!!locked || busy} onChange={(next) => { setRows(next); touch(); }}>
       {!visible.length ? <p className="p-8 text-center text-sm text-slate-500">No employees match this shift or search.</p> : <div className="divide-y divide-slate-100">{visible.map((row) => <EmployeeAttendanceCard key={row.assignment_id} row={row} locked={locked || busy} onEdit={(changes) => edit(row.assignment_id, changes)} />)}</div>}
+      </AttendanceEntry></div>
 
       <div className="border-t border-slate-200 bg-slate-50/70 p-4 sm:p-5">
         <Label htmlFor="attendance-notes" className="mb-2 block">Day notes</Label><Textarea id="attendance-notes" value={notes} maxLength={1000} disabled={locked || busy} onChange={(event) => { setNotes(event.target.value); touch(); }} placeholder="Holiday name, shift changes, absence reasons or other notes (optional)" />
