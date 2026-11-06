@@ -109,3 +109,34 @@ it("links recruitment to an existing candidate and saves interview and follow-up
     expect(write).not.toHaveProperty("worker_name");
   } finally { cleanup(); }
 });
+
+it("saves leave-only entry with remaining staff present and keeps holidays without auto-approving", async () => {
+  const employees = [{ id: "a", full_name: "QA Present", role: "Operator" }, { id: "b", full_name: "QA Leave", role: "Helper" }, { id: "c", full_name: "QA Holiday", role: "Helper" }];
+  let sheet = { id: "leave-sheet", revision: 1, status: "Draft", notes: "", rows: employees.map((employee, index) => ({ assignment_id: employee.id, full_name: employee.full_name, role: employee.role, shift: "General", overtime_hours: index === 0 ? "2" : "0", status: index === 0 ? "Present" : index === 1 ? "Unmarked" : "Holiday" })) };
+  const writes: { method: string; body: typeof sheet }[] = [];
+  vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+    if (url === "/api/admin/operations/attendance-companies") return new Response(JSON.stringify([{ id: "company", name: "QA Company" }]));
+    if (init?.method === "PUT") { const body = JSON.parse(String(init.body)); writes.push({ method: init.method, body }); sheet = { ...sheet, ...body, revision: 2, status: "Draft" }; return new Response(JSON.stringify(sheet)); }
+    return new Response(JSON.stringify({ company_name: "QA Company", employees, sheet }));
+  }));
+  const cleanup = mount(<Attendance />);
+  try {
+    await waitFor(() => expect(document.querySelector('[aria-label="Attendance company"]')?.textContent).toContain("QA Company"));
+    enter("Attendance company", "company");
+    await waitFor(() => expect(document.querySelector('[aria-label="Attendance for QA Leave"]')).toBeTruthy());
+    clickText("Leave-only entry");
+    await waitFor(() => expect(document.querySelector('[data-testid="attendance-entry"]')?.textContent).toContain("2 present"));
+    enter("Employee on leave", "b"); enter("New leave type", "Paid leave"); clickText("Add leave");
+    expect(writes).toEqual([]);
+    submitText("Save draft");
+    await waitFor(() => expect(writes).toHaveLength(1));
+    expect(writes[0].body.rows).toEqual([
+      { assignment_id: "a", shift: "General", status: "Present", overtime_hours: "2" },
+      { assignment_id: "b", shift: "General", status: "Paid leave", overtime_hours: "0" },
+      { assignment_id: "c", shift: "General", status: "Holiday", overtime_hours: "0" },
+    ]);
+    await waitFor(() => expect(document.querySelector('[aria-label="Leave type for QA Leave"]')).toBeTruthy());
+    expect(Array.from(document.querySelectorAll("button")).find(button => button.textContent === "Leave-only entry")?.getAttribute("aria-pressed")).toBe("true");
+    expect(writes[0].method).toBe("PUT");
+  } finally { cleanup(); }
+});
