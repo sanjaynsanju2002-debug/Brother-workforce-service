@@ -7,7 +7,7 @@ import type { JobCreate } from "@/types";
 export const completedCandidateJob: JobCreate = {
   title: "Customer service agent", location: "Mysore", skill_category: "Skilled", openings: 2,
   salary: "16000", salary_basis: "Gross monthly", qualification: "Degree or equivalent experience",
-  working_hours: "8 hours/day, 6 days/week", benefits: "Confirm with the hiring team",
+  closing_date: "2027-12-31", shift: "General", working_hours: "8 hours/day, 6 days/week", benefits: "Confirm with the hiring team",
   description: "Handle customer queries, record requests accurately, follow the service process and communicate clearly with the team. ".repeat(2),
   description_kn: "ಗ್ರಾಹಕರ ಪ್ರಶ್ನೆಗಳಿಗೆ ಸಹಾಯ ಮಾಡಿ, ವಿವರಗಳನ್ನು ದಾಖಲಿಸಿ ಮತ್ತು ತಂಡದೊಂದಿಗೆ ಸಂವಹನ ಮಾಡಿ.",
   employer_name: "", schema_ready: true,

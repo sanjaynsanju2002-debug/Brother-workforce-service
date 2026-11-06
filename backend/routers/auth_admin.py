@@ -1,7 +1,7 @@
 """Admin session lifecycle. The PIN is accepted only in a JSON request body."""
 
 from fastapi import APIRouter, Depends, Request, Response
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from lib.auth import SESSION_SECONDS, login_for_attendance, login_with_pin, logout, require_admin
 from models.bws import Ok
@@ -10,8 +10,8 @@ router = APIRouter(prefix="/admin")
 
 
 class LoginRequest(BaseModel):
-    pin: str
-    username: str | None = None
+    pin: str = Field(min_length=1, max_length=128)
+    username: str | None = Field(default=None, max_length=50)
 
 
 class AttendanceLoginResponse(Ok):

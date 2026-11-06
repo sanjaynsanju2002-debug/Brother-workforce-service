@@ -244,7 +244,7 @@ async def test_daily_attendance_report_times_shifts_downloads_and_safe_email(sto
         response = await c.get(f"{route}/attendance-daily-report", params={"company_id": co["id"], "report_date": "2026-01-26"})
         assert response.status_code == 200, response.text
         report = response.json()
-        assert report["totals"] == {"employees": 2, "worked": 1, "completed": 1, "missing_check_out": 0, "payroll_ready": 1, "worked_hours": "8.50"}
+        assert report["totals"] == {"employees": 2, "worked": 1, "completed": 1, "missing_check_out": 0, "payroll_ready": 0, "worked_hours": "8.50"}
         rows = {row["full_name"]: row for row in report["rows"]}
         assert rows["Night Worker"]["check_in_time"] == "10:00 PM"
         assert rows["Night Worker"]["check_out_time"] == "06:30 AM"
@@ -307,7 +307,7 @@ async def test_daily_report_email_is_separate_per_company_and_idempotent(store, 
 
 
 @pytest.mark.asyncio
-async def test_employee_pin_check_in_check_out_is_private_and_payroll_ready(store):
+async def test_employee_checkout_requires_manager_review_before_payroll(store):
     async with session() as c:
         await login(c)
         co = await company(c)
@@ -345,16 +345,26 @@ async def test_employee_pin_check_in_check_out_is_private_and_payroll_ready(stor
 
         checked_out = await c.post("/api/employee-attendance/check-out", headers=employee_headers)
         assert checked_out.status_code == 200, checked_out.text
-        assert checked_out.json()["today"]["state"] == "completed" and checked_out.json()["today"]["payroll_ready"] is True
+        assert checked_out.json()["today"]["state"] == "completed" and checked_out.json()["today"]["payroll_ready"] is False
         assert (await c.post("/api/employee-attendance/check-out", headers=employee_headers)).status_code == 409
 
+        pending = (await c.get(f"{operations_route}/attendance-summary", params={"company_id": co["id"], "month": today()[:7]})).json()
+        assert pending["approved_days"] == 0 and pending["lines"] == []
+        draft = (await c.get(f"{operations_route}/attendance", params={"company_id": co["id"], "attendance_date": today()})).json()
+        assert draft["review_warnings"]  # rapid checkout must be explained
+        sheet = draft["sheet"]
+        approval = f"{operations_route}/attendance/{sheet['id']}/approve"
+        assert (await c.post(approval, json={"revision": sheet["revision"]})).status_code == 422
+        saved = await c.put(f"{operations_route}/attendance", json={"company_id": co["id"], "attendance_date": today(), "rows": [{k: row[k] for k in ("assignment_id", "status", "shift", "overtime_hours") if k in row} for row in sheet["rows"]], "notes": "Manager verified shift against the signed attendance record.", "revision": sheet["revision"]})
+        assert saved.status_code == 200, saved.text
+        assert (await c.post(approval, json={"revision": saved.json()["revision"]})).status_code == 200
         summary = (await c.get(f"{operations_route}/attendance-summary", params={"company_id": co["id"], "month": today()[:7]})).json()
         assert summary["approved_days"] == 1 and summary["lines"][0]["worked_days"] == "1.00"
         monday = (date.fromisoformat(today()) - timedelta(days=date.fromisoformat(today()).weekday())).isoformat()
         weekly = (await c.get(f"{operations_route}/attendance-weekly-report", params={"company_id": co["id"], "week_start": monday})).json()
         report_row = next(row for row in weekly["employees"] if row["assignment_id"] == worker["id"])
         assert weekly["payroll_ready_days"] == 1
-        assert next(day for day in weekly["calendar_days"] if day["date"] == today())["status"] == "Partially approved"
+        assert next(day for day in weekly["calendar_days"] if day["date"] == today())["status"] == "Approved"
         assert next(day for day in report_row["days"] if day["date"] == today())["sheet_status"] == "Approved"
 
         assert (await c.put(f"{access}/{worker['id']}", json={"pin": "777777"})).status_code == 200

@@ -1,3 +1,4 @@
+import SystemStatus from "./SystemStatus";
 import { useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -7,9 +8,9 @@ import { Label } from "@/components/ui/label";
 import { ApiError, apiGet, apiPatch, apiPost, apiPut } from "@/lib/api";
 import { formatIndianDateTime } from "@/lib/calendarDate";
 
-type Staff = { id: string; name: string; username: string; role: "operator" | "viewer"; disabled: boolean };
+type Staff = { id: string; name: string; username: string; role: "operator" | "viewer" | "recruiter" | "attendance" | "finance"; company_ids?: string[]; disabled: boolean };
 type Preview = { sha256: string; created_at: string; missing_resumes: number; counts: Record<string, { new: number; existing: number }> };
-const emptyStaff = { name: "", username: "", pin: "", role: "operator" as Staff["role"] };
+const emptyStaff = { name: "", username: "", pin: "", role: "recruiter" as Staff["role"], company_ids: [] as string[] };
 const message = (e: unknown) => e instanceof ApiError && typeof (e.body as { detail?: string })?.detail === "string" ? (e.body as { detail: string }).detail : "Could not complete this request. Please try again.";
 
 async function backupPost<T>(path: string, file: File, sha?: string): Promise<T> {
@@ -20,11 +21,13 @@ async function backupPost<T>(path: string, file: File, sha?: string): Promise<T>
 
 export default function AdminControls() {
   const qc = useQueryClient();
+  const companies = useQuery({ queryKey: ["staff-company-options"], queryFn: () => apiGet<{ id: string; name: string }[]>("/admin/operations/attendance-companies") });
   const staff = useQuery({ queryKey: ["admin-team"], queryFn: () => apiGet<Staff[]>("/admin/team") });
   const [form, setForm] = useState(emptyStaff);
   const [responseTarget, setResponseTarget] = useState("");
   const service = useQuery({ queryKey: ["service-info"], queryFn: () => apiGet<{ enquiry_response_target: string }>("/service-info") });
   const saveTarget = useMutation({ mutationFn: () => apiPut("/admin/service-info", { enquiry_response_target: responseTarget }), onSuccess: () => { void qc.invalidateQueries({ queryKey: ["service-info"] }); setResponseTarget(""); toast.success("Published enquiry response target updated"); }, onError: (e) => toast.error(message(e)) });
+  const [editingAccess, setEditingAccess] = useState<Staff | null>(null);
   const [resetUser, setResetUser] = useState<Staff | null>(null);
   const [resetPin, setResetPin] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -33,7 +36,7 @@ export default function AdminControls() {
   const [result, setResult] = useState("");
   const input = useRef<HTMLInputElement>(null);
   const create = useMutation({ mutationFn: () => apiPost<Staff>("/admin/team", form), onSuccess: () => { setForm(emptyStaff); void staff.refetch(); toast.success("Staff account created. Share the account and PIN privately."); }, onError: (e) => toast.error(message(e)) });
-  const change = useMutation({ mutationFn: ({ id, ...body }: { id: string; disabled?: boolean; role?: Staff["role"]; pin?: string }) => apiPatch<Staff>(`/admin/team/${id}`, body), onSuccess: () => { void staff.refetch(); toast.success("Staff access updated. Their sessions were signed out."); }, onError: (e) => toast.error(message(e)) });
+  const change = useMutation({ mutationFn: ({ id, ...body }: { id: string; disabled?: boolean; role?: Staff["role"]; company_ids?: string[]; pin?: string }) => apiPatch<Staff>(`/admin/team/${id}`, body), onSuccess: () => { void staff.refetch(); toast.success("Staff access updated. Their sessions were signed out."); }, onError: (e) => toast.error(message(e)) });
   async function downloadBackup() {
     setBusy(true); setResult("");
     try {
@@ -55,16 +58,23 @@ export default function AdminControls() {
     try { const r = await backupPost<{ added: number; skipped: number }>("restore", file, preview.sha256); setResult(`Restore complete: ${r.added} records added; ${r.skipped} existing or conflicting records kept.`); setPreview(null); setFile(null); if (input.current) input.current.value = ""; void qc.invalidateQueries(); } catch (e) { toast.error(message(e)); } finally { setBusy(false); }
   }
   return <div className="grid gap-6 lg:col-span-2">
-    <section className="rounded-xl border bg-white p-5 sm:p-6"><h3 className="text-lg font-semibold text-[#0F2444]">Staff accounts</h3><p className="mt-2 text-sm text-slate-600">Give each team member their own account. Operators can manage business records; viewers can only read them. Only the owner can change security, email settings, staff access or backups.</p>
+    <SystemStatus />
+    <section className="rounded-xl border bg-white p-5 sm:p-6"><h3 className="text-lg font-semibold text-[#0F2444]">Staff accounts</h3><p className="mt-2 text-sm text-slate-600">Give each team member their own account. Recruiters manage applications; operators manage recruitment and workforce; attendance staff work only with assigned companies; finance staff manage billing and payroll; viewers can read non-financial records. Permanent removal is owner-only. Only the owner can change security, email settings, staff access or backups.</p>
       <form className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5" onSubmit={(e) => { e.preventDefault(); create.mutate(); }}>
         <div><Label htmlFor="staff-name">Staff name</Label><Input id="staff-name" required maxLength={100} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
         <div><Label htmlFor="staff-username">Account name</Label><Input id="staff-username" required autoComplete="off" pattern="[a-zA-Z0-9][a-zA-Z0-9._-]{2,49}" value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} /></div>
         <div><Label htmlFor="staff-pin">New PIN (8–12 digits)</Label><Input id="staff-pin" required type="password" inputMode="numeric" autoComplete="new-password" pattern="[0-9]{8,12}" value={form.pin} onChange={(e) => setForm({ ...form, pin: e.target.value })} /></div>
-        <div><Label htmlFor="staff-role">Access</Label><select id="staff-role" className="h-11 w-full rounded-lg border px-3 text-sm" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as Staff["role"] })}><option value="operator">Operator</option><option value="viewer">View only</option></select></div>
-        <Button className="self-end" disabled={create.isPending}>Add staff account</Button>
+        <div><Label htmlFor="staff-role">Access</Label><select id="staff-role" className="h-11 w-full rounded-lg border px-3 text-sm" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value as Staff["role"] })}><option value="recruiter">Recruitment</option><option value="operator">Workforce operator</option><option value="attendance">Attendance manager</option><option value="finance">Finance</option><option value="viewer">View only (non-financial)</option></select></div>
+        {form.role === "attendance" && <fieldset className="sm:col-span-2 lg:col-span-5"><legend className="text-sm font-medium">Assigned companies (select at least one)</legend><div className="mt-2 flex flex-wrap gap-4">{companies.data?.map((c) => <label key={c.id} className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.company_ids.includes(c.id)} onChange={(e) => setForm({ ...form, company_ids: e.target.checked ? [...form.company_ids, c.id] : form.company_ids.filter((id) => id !== c.id) })} />{c.name}</label>)}</div></fieldset>}
+        <Button className="self-end" disabled={create.isPending || form.role === "attendance" && !form.company_ids.length}>Add staff account</Button>
       </form>
       {staff.isError && <p role="alert" className="mt-3 text-red-700">Could not load staff accounts.</p>}
-      <div className="mt-4 space-y-3">{staff.data?.map((s) => <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3" key={s.id}><div><p className="font-semibold">{s.name}</p><p className="text-sm text-slate-600">{s.username} · {s.role} · {s.disabled ? "Disabled" : "Active"}</p></div><div className="flex flex-wrap gap-2"><Button variant="outline" disabled={change.isPending} onClick={() => { setResetUser(s); setResetPin(""); }}>Reset PIN</Button><Button variant="outline" disabled={change.isPending} onClick={() => { if (window.confirm(`${s.disabled ? "Enable" : "Disable"} access for ${s.name}?`)) change.mutate({ id: s.id, disabled: !s.disabled }); }}>{s.disabled ? "Enable" : "Disable"}</Button></div></div>)}</div>
+      <div className="mt-4 space-y-3">{staff.data?.map((s) => <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3" key={s.id}><div><p className="font-semibold">{s.name}</p><p className="text-sm text-slate-600">{s.username} · {s.role} · {s.disabled ? "Disabled" : "Active"}</p></div><div className="flex flex-wrap gap-2"><Button variant="outline" disabled={change.isPending} onClick={() => setEditingAccess({ ...s, company_ids: s.company_ids || [] })}>Edit access</Button><Button variant="outline" disabled={change.isPending} onClick={() => { setResetUser(s); setResetPin(""); }}>Reset PIN</Button><Button variant="outline" disabled={change.isPending} onClick={() => { if (window.confirm(`${s.disabled ? "Enable" : "Disable"} access for ${s.name}?`)) change.mutate({ id: s.id, disabled: !s.disabled }); }}>{s.disabled ? "Enable" : "Disable"}</Button></div></div>)}</div>
+      {editingAccess && <form className="mt-4 space-y-3 rounded-lg border p-4" onSubmit={(e) => { e.preventDefault(); change.mutate({ id: editingAccess.id, role: editingAccess.role, company_ids: editingAccess.company_ids }, { onSuccess: () => setEditingAccess(null) }); }}>
+        <Label htmlFor="edit-staff-role">Access for {editingAccess.name}</Label><select id="edit-staff-role" className="h-11 w-full rounded-lg border px-3" value={editingAccess.role} onChange={(e) => setEditingAccess({ ...editingAccess, role: e.target.value as Staff["role"] })}><option value="recruiter">Recruitment</option><option value="operator">Workforce operator</option><option value="attendance">Attendance manager</option><option value="finance">Finance</option><option value="viewer">View only (non-financial)</option></select>
+        {editingAccess.role === "attendance" && <fieldset><legend>Assigned companies</legend><div className="mt-2 flex flex-wrap gap-4">{companies.data?.map((c) => <label key={c.id} className="flex items-center gap-2"><input type="checkbox" checked={editingAccess.company_ids?.includes(c.id) || false} onChange={(e) => setEditingAccess({ ...editingAccess, company_ids: e.target.checked ? [...(editingAccess.company_ids || []), c.id] : editingAccess.company_ids?.filter((id) => id !== c.id) })} />{c.name}</label>)}</div></fieldset>}
+        <div className="flex gap-2"><Button disabled={change.isPending || editingAccess.role === "attendance" && !editingAccess.company_ids?.length}>Save access</Button><Button type="button" variant="outline" onClick={() => setEditingAccess(null)}>Cancel</Button></div>
+      </form>}
       {resetUser && <form className="mt-4 flex flex-wrap items-end gap-3 rounded-lg border p-4" onSubmit={(e) => { e.preventDefault(); change.mutate({ id: resetUser.id, pin: resetPin }, { onSuccess: () => { setResetUser(null); setResetPin(""); } }); }}><div><Label htmlFor="reset-staff-pin">New PIN for {resetUser.name} (8–12 digits)</Label><Input id="reset-staff-pin" type="password" autoComplete="new-password" inputMode="numeric" required pattern="[0-9]{8,12}" value={resetPin} onChange={(e) => setResetPin(e.target.value)} /></div><Button disabled={change.isPending}>Save new PIN</Button><Button type="button" variant="outline" onClick={() => { setResetUser(null); setResetPin(""); }}>Cancel</Button></form>}
     </section>
     <section className="rounded-xl border bg-white p-5 sm:p-6"><h3 className="text-lg font-semibold text-[#0F2444]">Enquiry response target</h3><p className="mt-2 text-sm text-slate-600">Publish a response timeframe only when your team has agreed it and can meet it. It appears on the employer's enquiry receipt.</p><p className="mt-2 text-sm">Current target: {service.data?.enquiry_response_target || "Not published"}</p><form className="mt-4 flex flex-wrap gap-3" onSubmit={(e) => { e.preventDefault(); saveTarget.mutate(); }}><div className="min-w-0 flex-1"><Label htmlFor="enquiry-response-target">New target (leave blank to clear)</Label><Input id="enquiry-response-target" maxLength={160} value={responseTarget} onChange={(e) => setResponseTarget(e.target.value)} placeholder="Enter your agreed response timeframe" /></div><Button className="self-end" disabled={saveTarget.isPending}>Save target</Button></form></section>

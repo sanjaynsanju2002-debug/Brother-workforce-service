@@ -20,5 +20,5 @@ export function salaryText(job: JobCreate, language: CandidateLanguage): string 
   return `${salary} · ${job.salary_basis ? jobText(job.salary_basis, language) : language === "kn" ? "ಒಟ್ಟು / ಕೈಗೆ ಸಿಗುವ ಮೊತ್ತ ದೃಢಪಡಿಸಿ" : "Confirm gross / take-home basis"}`;
 }
 export function missingJobDetails(job: JobCreate): string[] {
-  return [["salary", job.salary], ["salary basis", job.salary_basis], ["description", job.description], ["qualification", job.qualification], ["working hours", job.working_hours], ["benefits", job.benefits], ["Kannada description", job.description_kn]].filter(([, v]) => !v?.trim()).map(([k]) => k!);
+  return [["closing date", job.closing_date], ["shift", job.shift], ["salary", job.salary], ["salary basis", job.salary_basis], ["description", job.description], ["qualification", job.qualification], ["working hours", job.working_hours], ["benefits", job.benefits], ["Kannada description", job.description_kn]].filter(([, v]) => !v?.trim()).map(([k]) => k!);
 }

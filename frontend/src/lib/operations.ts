@@ -30,7 +30,7 @@ export async function downloadPrivate(path: string, filename: string) {
   const a = document.createElement("a"); a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
   window.setTimeout(() => URL.revokeObjectURL(url), 30_000);
 }
-export const getCompanies = () => apiGet<CompanyOption[]>("/admin/clients");
+export const getCompanies = () => apiGet<CompanyOption[]>("/admin/operations/attendance-companies");
 
 export const selectClass = "min-h-10 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-[#0F2444] disabled:opacity-60";
 export const box = "rounded-xl border border-slate-200 bg-white p-5 sm:p-6";

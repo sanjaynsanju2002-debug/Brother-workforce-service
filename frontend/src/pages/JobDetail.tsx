@@ -8,7 +8,7 @@ import Footer from "@/components/site/Footer";
 import CandidateLanguageToggle from "@/components/site/CandidateLanguageToggle";
 import WorkerForm from "@/components/site/WorkerForm";
 import { ApiError, apiGet } from "@/lib/api";
-import { trackVisit } from "@/lib/track";
+import { trackVisit, trackJourney, watchContactActions } from "@/lib/track";
 import { BRAND } from "@/lib/brand";
 import { candidateCopy, useCandidateLanguage } from "@/lib/candidateLanguage";
 import type { Job } from "@/types";
@@ -17,7 +17,7 @@ export default function JobDetail() {
   const [language, setLanguage] = useCandidateLanguage();
   const copy = candidateCopy[language];
   const { jobId } = useParams();
-  useEffect(() => { trackVisit(window.location.pathname); }, []);
+  useEffect(() => { trackVisit(window.location.pathname); trackJourney("job_view"); return watchContactActions(); }, []);
   const job = useQuery({
     queryKey: ["job-detail", jobId],
     queryFn: () => apiGet<Job>(`/jobs/${encodeURIComponent(jobId ?? "")}`),

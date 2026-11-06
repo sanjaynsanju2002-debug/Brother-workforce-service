@@ -100,7 +100,7 @@ async def daily_attendance_report_data(company_id: str, report_date: date | str)
         if shift not in shifts:
             shift = "General"
         hours = _worked_hours(source.get("check_in_at"), source.get("check_out_at"))
-        payroll_ready = bool(sheet and (sheet.get("status") == "Approved" or source.get("employee_approved_at")))
+        payroll_ready = bool(sheet and sheet.get("status") == "Approved")
         state = _record_state(source, status)
         worked = status in WORKED_STATUSES
         if status != "Unmarked":

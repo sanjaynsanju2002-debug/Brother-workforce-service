@@ -8,7 +8,7 @@ const job: JobCreate = {
   salary: "16000", salary_basis: "Gross monthly", qualification: "Discuss during screening",
   description: "Assemble components, follow work instructions and inspect completed items. ".repeat(3),
   description_kn: "ಬಿಡಿಭಾಗಗಳನ್ನು ಜೋಡಿಸಿ ಮತ್ತು ಗುಣಮಟ್ಟವನ್ನು ಪರಿಶೀಲಿಸಿ.",
-  working_hours: "8 hours/day", benefits: "Discuss during screening", employer_name: "", schema_ready: true,
+  closing_date: "2027-12-31", shift: "General", working_hours: "8 hours/day", benefits: "Discuss during screening", employer_name: "", schema_ready: true,
 };
 
 describe("job form readiness messages", () => {

@@ -38,4 +38,9 @@ export const INDUSTRIES = [
   "Food Processing",
   "Packaging",
   "Industrial Operations",
+  "Retail & Customer Service",
+  "Hospitality",
+  "Healthcare Support",
+  "Construction & Facilities",
+  "Offices & Business Services",
 ];

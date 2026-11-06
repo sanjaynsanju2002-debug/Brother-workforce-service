@@ -19,8 +19,8 @@ ATTENDANCE_SCOPE = "attendance"
 
 
 def env_pin() -> str:
-    # Kept for existing installations. The dashboard prompts a change if it is still active.
-    return os.environ.get("ADMIN_PIN", "246810")
+    # A fresh installation must configure its own credential. Never ship a default.
+    return os.environ.get("ADMIN_PIN", "").strip()
 
 
 def _hash_pin(pin: str, salt: str) -> str:
@@ -44,15 +44,24 @@ async def verify_pin(pin: str) -> None:
                 {"$set": {"pin_hash": _hash_pin(pin, salt), "pin_salt": salt}, "$unset": {"pin": ""}},
             )
     else:
-        valid = hmac.compare_digest(pin, env_pin())
+        configured = env_pin()
+        if not configured:
+            raise HTTPException(503, "Owner sign-in is not configured. Set ADMIN_PIN securely in hosting or restore the owner credential.")
+        valid = bool(pin) and hmac.compare_digest(pin, configured)
     if not valid:
         raise HTTPException(status_code=401, detail="Invalid PIN")
+    if len(pin) < 8:
+        await db.settings.update_one({"id": ADMIN_DOC_ID}, {"$set": {"pin_requires_change": True}}, upsert=True)
 
 
 async def uses_setup_pin() -> bool:
     doc = await db.settings.find_one({"id": ADMIN_DOC_ID}, {"_id": 0})
     if not doc:
         return True
+    if doc.get("pin_requires_change"):
+        return True
+    if doc.get("pin_updated_at"):
+        return False
     if doc.get("pin_hash") and doc.get("pin_salt"):
         return hmac.compare_digest(_hash_pin(env_pin(), doc["pin_salt"]), doc["pin_hash"])
     return not doc.get("pin") or hmac.compare_digest(str(doc["pin"]), env_pin())
@@ -62,7 +71,7 @@ async def set_pin(new_pin: str) -> None:
     salt = secrets.token_hex(16)
     await db.settings.update_one(
         {"id": ADMIN_DOC_ID},
-        {"$set": {"id": ADMIN_DOC_ID, "pin_hash": _hash_pin(new_pin, salt), "pin_salt": salt}, "$unset": {"pin": ""}},
+        {"$set": {"id": ADMIN_DOC_ID, "pin_hash": _hash_pin(new_pin, salt), "pin_salt": salt, "pin_updated_at": datetime.now(timezone.utc)}, "$unset": {"pin": "", "pin_requires_change": ""}},
         upsert=True,
     )
     # Changing the PIN signs out every browser, including the current one.
@@ -82,7 +91,7 @@ async def _create_session(pin: str, request: Request, username: str | None = Non
             staff = await db.admin_users.find_one({"username": username.strip().lower(), "disabled": False})
             if not staff or not hmac.compare_digest(_hash_pin(pin, staff["pin_salt"]), staff["pin_hash"]):
                 raise HTTPException(401, "Invalid account or PIN")
-            principal = {"user_id": staff["id"], "name": staff["name"], "role": staff["role"]}
+            principal = {"user_id": staff["id"], "name": staff["name"], "role": staff["role"], "company_ids": staff.get("company_ids", [])}
         else:
             await verify_pin(pin)
     except HTTPException:
@@ -153,10 +162,14 @@ async def require_admin(request: Request) -> None:
         staff = await db.admin_users.find_one({"id": session["user_id"], "disabled": False})
         if not staff:
             raise HTTPException(401, "Account disabled. Contact the owner.")
-        principal = {"user_id": staff["id"], "name": staff["name"], "role": staff["role"]}
+        principal = {"user_id": staff["id"], "name": staff["name"], "role": staff["role"], "company_ids": staff.get("company_ids", [])}
     else:
         principal = {"user_id": None, "name": "Owner", "role": "owner"}
+    from lib.permissions import enforce
+    await enforce(principal, request, db)
     request.state.admin = principal
+    from lib.audit_snapshot import capture
+    await capture(request, db)
     if request.headers.get("content-type", "").startswith("application/json") and request.method in {"POST", "PUT", "PATCH"} and not any(p in request.url.path for p in ("security", "login", "email")):
         try:
             body = await request.json()

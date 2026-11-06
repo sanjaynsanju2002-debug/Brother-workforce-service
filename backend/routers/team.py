@@ -20,17 +20,25 @@ class StaffCreate(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     username: str = Field(min_length=3, max_length=50)
     pin: str = Field(pattern=r"^\d{8,12}$")
-    role: Literal["operator", "viewer"] = "operator"
+    role: Literal["operator", "viewer", "recruiter", "attendance", "finance"] = "recruiter"
+    company_ids: list[str] = Field(default_factory=list, max_length=200)
 
 
 class StaffUpdate(BaseModel):
+    company_ids: list[str] | None = Field(default=None, max_length=200)
     disabled: bool | None = None
-    role: Literal["operator", "viewer"] | None = None
+    role: Literal["operator", "viewer", "recruiter", "attendance", "finance"] | None = None
     pin: str | None = Field(default=None, pattern=r"^\d{8,12}$")
 
 
+async def validate_companies(company_ids):
+    for cid in set(company_ids):
+        if not await db.clients.find_one({"id": cid, "archived": {"$ne": True}}, {"id": 1}):
+            raise HTTPException(422, "Choose an active company from the list")
+
+
 def public_user(row):
-    return {key: row[key] for key in ("id", "name", "username", "role", "disabled", "created_at")}
+    return {**{key: row[key] for key in ("id", "name", "username", "role", "disabled", "created_at")}, "company_ids": row.get("company_ids", [])}
 
 
 @router.get("")
@@ -47,9 +55,12 @@ async def create_staff(payload: StaffCreate):
         raise HTTPException(422, "Enter the staff member's name")
     if await db.admin_users.find_one({"username": username}):
         raise HTTPException(409, "This account name is already used")
+    if payload.role == "attendance" and not payload.company_ids:
+        raise HTTPException(422, "Assign at least one company to attendance staff")
+    await validate_companies(payload.company_ids)
     salt = secrets.token_hex(16)
     user = {"id": str(uuid4()), "name": payload.name.strip(), "username": username, "role": payload.role,
-            "pin_salt": salt, "pin_hash": _hash_pin(payload.pin, salt), "disabled": False,
+            "pin_salt": salt, "pin_hash": _hash_pin(payload.pin, salt), "disabled": False, "company_ids": list(dict.fromkeys(payload.company_ids)),
             "created_at": datetime.now(timezone.utc)}
     try:
         await db.admin_users.insert_one({"_id": username, **user})
@@ -64,6 +75,10 @@ async def update_staff(user_id: str, payload: StaffUpdate):
     if not before:
         raise HTTPException(404, "Staff account not found")
     changes = payload.model_dump(exclude_none=True, exclude={"pin"})
+    if (payload.role or before["role"]) == "attendance" and not (payload.company_ids if payload.company_ids is not None else before.get("company_ids", [])):
+        raise HTTPException(422, "Assign at least one company to attendance staff")
+    if payload.company_ids is not None:
+        await validate_companies(payload.company_ids)
     if payload.pin:
         salt = secrets.token_hex(16)
         changes.update(pin_salt=salt, pin_hash=_hash_pin(payload.pin, salt))

@@ -24,40 +24,25 @@ class ProfitLoss(BaseModel):
     unpaid_invoice_count: int
     unassigned_invoice_count: int
     unassigned_invoice_revenue: str
+    payroll_cost: str = "0.00"
+    operating_expenses: str = "0.00"
+    salary_cash_expenses: str = "0.00"
+    missing_payroll_companies: int = 0
 
 
 @router.get("/profit-loss", response_model=ProfitLoss)
 async def monthly_profit_loss(month: str = Query(pattern=MONTH_PATTERN)):
-    # Saved invoice subtotals are decimal strings. Sum Decimal values, never floats.
-    # October services belong to October even when invoiced or paid in November.
-    # Read legacy billing periods without guessing a month from the issue date.
-    query = {"$or": [{"service_month": month}, {"service_month": None}]}
-    revenue = Decimal("0.00")
-    unpaid = Decimal("0.00")
-    invoice_count = unpaid_count = 0
-    unassigned_count = 0
-    unassigned_revenue = Decimal("0.00")
-    async for invoice in db.invoices.find(query, {"totals": 1, "payment_status": 1, "service_month": 1, "billing_period": 1, "payments": 1, "opening_paid_amount": 1}):
-        attributed_month = service_month(invoice)
-        if attributed_month is None:
-            unassigned_count += 1
-            unassigned_revenue += Decimal(str(invoice["totals"]["subtotal"]))
-            continue
-        if attributed_month != month:
-            continue
-        revenue += Decimal(str(invoice["totals"]["subtotal"]))
-        invoice_count += 1
-        balance = max(Decimal("0"), Decimal(str(invoice["totals"]["total"])) - received(invoice))
-        if balance > 0:
-            unpaid += balance
-            unpaid_count += 1
-    summary = await db.expenses.aggregate([
-        {"$match": {"month": month}},
-        {"$group": {"_id": None, "count": {"$sum": 1}, "amount": {"$sum": "$amount_paise"}}},
-    ]).to_list(1)
-    summary = summary[0] if summary else {"count": 0, "amount": 0}
-    expenses = Decimal(summary["amount"]) / 100
-    return ProfitLoss(month=month, revenue=f"{revenue:.2f}", expenses=f"{expenses:.2f}",
-        profit_loss=f"{revenue - expenses:.2f}", invoice_count=invoice_count,
-        expense_count=summary["count"], unpaid_invoice_amount=f"{unpaid:.2f}", unpaid_invoice_count=unpaid_count,
-        unassigned_invoice_count=unassigned_count, unassigned_invoice_revenue=f"{unassigned_revenue:.2f}")
+    from lib.profitability import profit_report
+    report = await profit_report(db, month)
+    rows = report["items"]
+    def total(field):
+        return sum((Decimal(str(r[field])) for r in rows), Decimal("0"))
+    costs = total("payroll_cost") + total("operating_expenses")
+    return ProfitLoss(month=month, revenue=f"{total('revenue'):.2f}", expenses=f"{costs:.2f}",
+        profit_loss=f"{total('profit'):.2f}", invoice_count=sum(r["invoice_count"] for r in rows),
+        expense_count=sum(r["expense_count"] for r in rows), unpaid_invoice_amount=f"{total('unpaid'):.2f}",
+        unpaid_invoice_count=sum(r["unpaid_count"] for r in rows),
+        unassigned_invoice_count=report["unassigned_invoice_count"], unassigned_invoice_revenue=report["unassigned_month_revenue"],
+        payroll_cost=f"{total('payroll_cost'):.2f}", operating_expenses=f"{total('operating_expenses'):.2f}",
+        salary_cash_expenses=f"{total('salary_cash_expenses'):.2f}",
+        missing_payroll_companies=sum(r["invoice_count"] > 0 and r["payroll_registers"] == 0 for r in rows))

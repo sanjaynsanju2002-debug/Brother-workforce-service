@@ -1,3 +1,5 @@
+import JourneyCounts from "@/components/site/JourneyCounts";
+import { adminGroups, allowedTab } from "@/lib/adminNavigation";
 import { DashboardTheme, DashboardThemeToggle } from "@/components/dashboard/DashboardTheme";
 import AdminNotificationCenter from "@/components/dashboard/AdminNotificationCenter";
 import { jobSaveError, jobValidationError } from "@/lib/jobValidation";
@@ -193,6 +195,9 @@ function Dashboard({
   const account = useQuery({ queryKey: ["admin-me"], queryFn: () => apiGet<{ name: string; role: string }>("/admin/me") });
   const q = "";
   const [filters, setFilters] = useState(EMPTY_FILTERS);
+  const [workerPage, setWorkerPage] = useState(1);
+  const [requestPage, setRequestPage] = useState(1);
+  useEffect(() => { setWorkerPage(1); }, [filters]);
   const [matchJobId, setMatchJobId] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeTab, setActiveTab] = useState(() => {
@@ -200,8 +205,16 @@ function Dashboard({
     return requested || "overview";
   });
 
+  useEffect(() => {
+    if (account.data && !allowedTab(account.data.role, activeTab)) {
+      setActiveTab(account.data.role === "finance" ? "invoices" : account.data.role === "attendance" ? "attendance" : "workers");
+    }
+  }, [account.data, activeTab]);
+  const sectionEnabled = (...tabs: string[]) => !!account.data && allowedTab(account.data.role, activeTab) && tabs.includes(activeTab);
+
   const shortlists = useQuery({
     queryKey: ["admin-shortlists", pin],
+    enabled: sectionEnabled("workers", "shortlists"),
     queryFn: () => apiGet<Shortlist[]>(`/admin/shortlists${q}`),
   });
 
@@ -216,39 +229,39 @@ function Dashboard({
     onError: () => toast.error("Could not add to shortlist"),
   });
 
-  const stats = useQuery({ queryKey: ["admin-stats", pin], queryFn: () => apiGet<AdminStats>(`/admin/stats${q}`) });
+  const stats = useQuery({ queryKey: ["admin-stats", pin], enabled: sectionEnabled("overview"), queryFn: () => apiGet<AdminStats>(`/admin/stats${q}`) });
   const trafficQ = useQuery({
     queryKey: ["admin-traffic", pin],
-    queryFn: () => apiGet<TrafficStats>(`/admin/traffic${q}`),
+    enabled: sectionEnabled("overview"), queryFn: () => apiGet<TrafficStats>(`/admin/traffic${q}`),
   });
   const workers = useQuery({
-    queryKey: ["admin-workers", pin, filters],
-    queryFn: () => {
-      const p = new URLSearchParams();
+    queryKey: ["admin-workers", pin, filters, workerPage],
+    enabled: sectionEnabled("workers"), queryFn: () => {
+      const p = new URLSearchParams({ page: String(workerPage) });
       if (filters.skill_category) p.set("skill_category", filters.skill_category);
       if (filters.location) p.set("location", filters.location);
       if (filters.availability) p.set("availability", filters.availability);
       if (filters.status) p.set("status", filters.status);
       if (filters.q) p.set("q", filters.q);
-      return apiGet<Worker[]>(`/admin/workers?${p.toString()}`);
+      return apiGet<{ items: Worker[]; total: number }>(`/admin/workers?${p.toString()}`);
     },
   });
   const filterOptions = useQuery({
     queryKey: ["admin-worker-filters", pin],
-    queryFn: () => apiGet<WorkerFilters>(`/admin/worker-filters${q}`),
+    enabled: sectionEnabled("workers"), queryFn: () => apiGet<WorkerFilters>(`/admin/worker-filters${q}`),
   });
   const requests = useQuery({
-    queryKey: ["admin-requests", pin],
-    queryFn: () => apiGet<CompanyRequest[]>(`/admin/company-requests${q}`),
+    queryKey: ["admin-requests", pin, requestPage],
+    enabled: sectionEnabled("requests"), queryFn: () => apiGet<{ items: CompanyRequest[]; total: number }>(`/admin/company-requests?page=${requestPage}`),
   });
-  const jobs = useQuery({ queryKey: ["admin-jobs", pin], queryFn: () => apiGet<Job[]>(`/admin/jobs${q}`) });
+  const jobs = useQuery({ queryKey: ["admin-jobs", pin], enabled: sectionEnabled("jobs", "workers"), queryFn: () => apiGet<Job[]>(`/admin/jobs${q}`) });
   const applicationsByJob = useQuery({
     queryKey: ["admin-job-applications", pin],
-    queryFn: () => apiGet<JobApplicationCount[]>("/admin/job-applications"),
+    enabled: sectionEnabled("overview"), queryFn: () => apiGet<JobApplicationCount[]>("/admin/job-applications"),
   });
   const enquiryAging = useQuery({
     queryKey: ["admin-enquiry-aging", pin],
-    queryFn: () => apiGet<EnquiryAging>("/admin/enquiry-aging"),
+    enabled: sectionEnabled("overview"), queryFn: () => apiGet<EnquiryAging>("/admin/enquiry-aging"),
   });
 
   const invalidate = () => {
@@ -315,7 +328,7 @@ function Dashboard({
     onSuccess: () => {
       invalidate();
       setJobProblem("");
-      toast.success("Job posted");
+      toast.success("Job saved as a draft. Complete its details before activating.");
     },
     onError: showJobError,
   });
@@ -324,13 +337,14 @@ function Dashboard({
     mutationFn: (v: { id: string; active: boolean }) =>
       apiPatch<Job>(`/admin/jobs/${v.id}${q}`, { active: v.active }),
     onSuccess: invalidate,
+    onError: showJobError,
   });
 
   const removeJob = useMutation({
     mutationFn: (id: string) => apiDelete<Ok>(`/admin/jobs/${id}${q}`),
     onSuccess: () => {
       invalidate();
-      toast.success("Job removed");
+      toast.success("Job archived. Applications and history are preserved.");
     },
   });
 
@@ -375,7 +389,7 @@ function Dashboard({
             <p className="text-xs text-slate-500">{account.data ? `${account.data.name} · ${account.data.role === "viewer" ? "View only" : account.data.role}` : "Brothers Workforce Solutions"}</p>
           </div>
           <div className="ml-auto flex w-full gap-2 sm:w-auto">
-            <AdminNotificationCenter onNavigate={setActiveTab} accountKey={account.data?.name || "owner"} />
+            {account.data?.role === "owner" && <AdminNotificationCenter onNavigate={setActiveTab} accountKey={account.data.name} />}
             <DashboardThemeToggle />
             <Link to="/" className="flex-1 rounded-md border border-slate-200 px-3 py-2 text-center text-sm text-slate-600 hover:text-[#0F2444] sm:flex-none sm:px-4">
               View Site
@@ -396,32 +410,16 @@ function Dashboard({
             <div id="admin-sidebar-menu" className={`${sidebarOpen ? "block" : "hidden"} mt-2 lg:mt-0 lg:block`}>
               <p className="mb-2 hidden px-3 text-xs font-bold uppercase tracking-widest text-slate-500 lg:block">Dashboard</p>
               <TabsList className="flex h-auto w-full flex-col items-stretch gap-1 rounded-xl border border-slate-200 bg-white p-2 shadow-sm group-data-vertical/tabs:h-auto" data-testid="admin-sidebar" onClick={() => setSidebarOpen(false)}>
-                <TabsTrigger value="overview" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-overview">Overview</TabsTrigger>
-                <TabsTrigger value="workers" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-workers">Worker Applications</TabsTrigger>
-                <TabsTrigger value="talents" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-talents">Talent Bank</TabsTrigger>
-                <TabsTrigger value="workforce" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-workforce">Company Workforce</TabsTrigger>
-                <TabsTrigger value="attendance" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-attendance">Attendance Tracker</TabsTrigger>
-                <TabsTrigger value="payroll" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-payroll">Payroll</TabsTrigger>
-                <TabsTrigger value="requests" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-requests">Company Enquiries</TabsTrigger>
-                <TabsTrigger value="clients" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-clients">Clients</TabsTrigger>
-                <TabsTrigger value="invoices" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-invoices">Invoices</TabsTrigger>
-                <TabsTrigger value="expenses" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-expenses">Expenses</TabsTrigger>
-                <TabsTrigger value="profit-loss" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-profit-loss">Profit &amp; Loss</TabsTrigger>
-                <TabsTrigger value="jobs" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-jobs">Job Postings</TabsTrigger>
-                <TabsTrigger value="email" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-email">Email Settings</TabsTrigger>
-                <TabsTrigger value="security" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-security">Security</TabsTrigger>
-                <TabsTrigger value="requirements" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-requirements">Staffing Requirements</TabsTrigger>
-                <TabsTrigger value="recruitment" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-recruitment">Recruitment Progress</TabsTrigger>
-                <TabsTrigger value="salary-payments" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-salary-payments">Salary Payments</TabsTrigger>
-                <TabsTrigger value="documents" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-documents">Documents & Reminders</TabsTrigger>
-                <TabsTrigger value="company-profitability" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-company-profitability">Company Profitability</TabsTrigger>
-                {account.data?.role === "owner" && <TabsTrigger value="activity" className="min-h-10 w-full justify-start px-3 text-left" data-testid="admin-tab-activity">Staff Activity</TabsTrigger>}
-                <TabsTrigger value="shortlists" className="min-h-10 w-full justify-start px-3 text-left whitespace-normal" data-testid="admin-tab-shortlists">Shortlists</TabsTrigger>
+                {adminGroups.map((group) => {
+                  const tabs = group.tabs.filter(([key]) => allowedTab(account.data?.role, key));
+                  return tabs.length ? <div key={group.label} className="w-full"><p className="px-3 pb-1 pt-4 text-xs font-bold uppercase tracking-wide text-slate-500">{group.label}</p>{tabs.map(([key, label]) => <TabsTrigger key={key} value={key} className="min-h-10 w-full justify-start whitespace-normal px-3 text-left" data-testid={`admin-tab-${key}`}>{label}</TabsTrigger>)}</div> : null;
+                })}
               </TabsList>
             </div>
           </aside>
           <div className="min-w-0">
             <TabsContent value="overview" className="mt-0">
+            {account.data?.role === "owner" && <JourneyCounts />}
               <div className="mb-5">
                 <h1 className="text-2xl font-bold text-[#0F2444]">Overview</h1>
                 <div className="mt-6"><BusinessOverview onNavigate={setActiveTab} /></div>
@@ -553,8 +551,8 @@ function Dashboard({
                 </Button>
               </div>
               <p className="mt-3 text-xs text-slate-500" data-testid="worker-filter-count">
-                Showing {(workers.data ?? []).length} candidate
-                {(workers.data ?? []).length === 1 ? "" : "s"}
+                Showing {(workers.data?.items ?? []).length} candidate
+                {(workers.data?.items ?? []).length === 1 ? "" : "s"}
               </p>
             </div>
             <div className="mb-4 flex justify-end">
@@ -582,14 +580,14 @@ function Dashboard({
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {(workers.data ?? []).length === 0 && (
+                    {(workers.data?.items ?? []).length === 0 && (
                       <TableRow>
                         <TableCell colSpan={8} className="py-10 text-center text-slate-500">
                           No worker applications yet.
                         </TableCell>
                       </TableRow>
                     )}
-                    {(workers.data ?? []).map((w) => (
+                    {(workers.data?.items ?? []).map((w) => (
                       <TableRow key={w.id} data-testid={`admin-worker-row-${w.id}`}>
                         <TableCell className="font-medium text-[#0F2444]">{w.full_name}</TableCell>
                         <TableCell>{w.mobile}</TableCell>
@@ -685,6 +683,7 @@ function Dashboard({
                 </Table>
               </CardContent>
             </Card>
+          <div className="mt-4 flex flex-wrap items-center gap-3"><Button variant="outline" disabled={workerPage === 1 || workers.isFetching} onClick={() => setWorkerPage((n) => n - 1)}>Previous</Button><span className="text-sm">Page {workerPage} · {workers.data?.total ?? 0} records</span><Button variant="outline" disabled={workers.isFetching || workerPage * 50 >= (workers.data?.total ?? 0)} onClick={() => setWorkerPage((n) => n + 1)}>Next</Button></div>
           </TabsContent>
 
           <TabsContent value="talents" className="mt-6">
@@ -716,14 +715,14 @@ function Dashboard({
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {(requests.data ?? []).length === 0 && (
+                    {(requests.data?.items ?? []).length === 0 && (
                       <TableRow>
                         <TableCell colSpan={7} className="py-10 text-center text-slate-500">
                           No company enquiries yet.
                         </TableCell>
                       </TableRow>
                     )}
-                    {(requests.data ?? []).map((r) => (
+                    {(requests.data?.items ?? []).map((r) => (
                       <TableRow key={r.id} data-testid={`admin-request-row-${r.id}`}>
                         <TableCell className="font-medium text-[#0F2444]">{r.company_name}<span className="block text-xs text-slate-500">{r.reference || r.id}</span></TableCell>
                         <TableCell>
@@ -789,6 +788,7 @@ function Dashboard({
                 </Table>
               </CardContent>
             </Card>
+          <div className="mt-4 flex flex-wrap items-center gap-3"><Button variant="outline" disabled={requestPage === 1 || requests.isFetching} onClick={() => setRequestPage((n) => n - 1)}>Previous</Button><span className="text-sm">Page {requestPage} · {requests.data?.total ?? 0} records</span><Button variant="outline" disabled={requests.isFetching || requestPage * 50 >= (requests.data?.total ?? 0)} onClick={() => setRequestPage((n) => n + 1)}>Next</Button></div>
           </TabsContent>
 
           <TabsContent value="jobs" className="mt-6 grid gap-6 lg:grid-cols-[1fr_1.4fr]">
@@ -949,7 +949,7 @@ function Dashboard({
                     className="w-full bg-[#C2410C] text-white hover:bg-[#9A3412]"
                     data-testid="admin-job-submit"
                   >
-                    <Plus className="mr-2 h-4 w-4" /> {editingJobId ? "Save Changes" : "Post Job"}
+                    <Plus className="mr-2 h-4 w-4" /> {editingJobId ? "Save Changes" : "Save Job Draft"}
                   </Button>
                   {editingJobId && (
                     <Button type="button" variant="outline" className="w-full" onClick={() => {
@@ -1019,7 +1019,8 @@ function Dashboard({
                             <Button
                               size="icon-xs"
                               variant="destructive"
-                              onClick={() => removeJob.mutate(j.id)}
+                              aria-label={`Archive ${j.title}`}
+                              onClick={() => { if (window.confirm(`Archive ${j.title}? Applications and history will be kept. You can reactivate it after completing its details.`)) removeJob.mutate(j.id); }}
                               data-testid={`admin-job-delete-${j.id}`}
                             >
                               <Trash2 className="h-3.5 w-3.5" />

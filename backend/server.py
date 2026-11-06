@@ -17,60 +17,14 @@ load_dotenv(ROOT_DIR / '.env')
 
 # MongoDB connection
 from lib.db import client, db, ensure_indexes
-from lib.workforce import reconcile_companies, reconcile_workforce
-from lib.job_translations import translate_known_job
-from lib.job_descriptions import fill_missing_job_descriptions
 
 
 # Startup runs before the yield, shutdown after it. Add your own setup/teardown here.
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    app.state.index_task = asyncio.create_task(ensure_indexes())  # background: a big index build must not block boot
-    # Correct the existing public post without changing its role or pay range.
-    await db.jobs.update_many({"title": "Telicaller"}, {"$set": {"title": "Telecaller"}})
-    await db.jobs.update_many({"salary": "20,000-25000"}, {"$set": {"salary": "₹20,000–₹25,000"}})
-    # Add only details the owner already supplied for the Telecaller role. Do not
-    # overwrite a fuller description entered by an administrator later.
-    await db.jobs.update_many(
-        {"title": "Telecaller", "location": "Mysore", "salary": "₹20,000–₹25,000", "shift": "General shift", "$or": [{"description": None}, {"description": ""}]},
-        {"$set": {
-            "description": "Qualification: Any degree.\nRequired skill: Good speaking English.\nSalary: ₹20,000–₹25,000.\nLocation: Mysore.\nShift: General shift.",
-            "description_kn": "ವಿದ್ಯಾರ್ಹತೆ: ಯಾವುದೇ ಪದವಿ.\nಅಗತ್ಯ ಕೌಶಲ್ಯ: ಇಂಗ್ಲಿಷ್‌ನಲ್ಲಿ ಚೆನ್ನಾಗಿ ಮಾತನಾಡುವ ಸಾಮರ್ಥ್ಯ.\nಸಂಬಳ: ₹20,000–₹25,000.\nಸ್ಥಳ: ಮೈಸೂರು.\nಪಾಳಿ: ಸಾಮಾನ್ಯ ಪಾಳಿ.",
-            "updated_at": datetime.now(timezone.utc),
-        }},
-    )
-    # Older installs seeded illustrative industry cards as public "clients".
-    # Hide only untouched samples; retain any card that an admin has enriched.
-    sample_clients = [
-        ("Auto Component Manufacturer", "Nanjangud Industrial Area"),
-        ("Precision Engineering Works", "Hebbal Industrial Estate"),
-        ("FMCG Packaging Unit", "Belagola Industrial Area"),
-        ("Logistics & Warehousing Hub", "Kadakola Industrial Corridor"),
-        ("Your Company Could Be Here", "Mysore & across Karnataka"),
-    ]
-    await db.clients.update_many(
-        {
-            "$or": [{"name": name, "location": location} for name, location in sample_clients],
-            "logo_filename": None,
-            "headcount": {"$in": [None, ""]},
-            "service_summary": {"$in": [None, ""]},
-            "outcome": {"$in": [None, ""]},
-        },
-        {"$set": {"visible": False}},
-    )
-    # Migration is retryable: deterministic IDs and name+phone matching prevent duplicates.
-    try:
-        descriptions = await fill_missing_job_descriptions(db)
-        logging.getLogger(__name__).info("Job descriptions completed: %s", descriptions)
-    except Exception:
-        logging.getLogger(__name__).exception("Job descriptions will retry on next startup")
-    try:
-        await translate_known_job(db)
-        await reconcile_companies(db)
-        result = await reconcile_workforce(db)
-        logging.getLogger(__name__).info("Workforce reconciliation: %s", result)
-    except Exception:
-        logging.getLogger(__name__).exception("Workforce reconciliation will retry on next startup")
+    app.state.database_ready = False
+    await ensure_indexes()
+    app.state.database_ready = True
     from lib.attendance_report_email import attendance_report_scheduler
     report_scheduler_enabled = os.environ.get("ATTENDANCE_REPORT_SCHEDULER_ENABLED", "true").lower() not in {"0", "false", "no"}
     app.state.attendance_report_task = asyncio.create_task(attendance_report_scheduler()) if report_scheduler_enabled else None
@@ -83,7 +37,7 @@ async def lifespan(app: FastAPI):
 
 
 # Create the main app without a prefix
-app = FastAPI(lifespan=lifespan)
+app = FastAPI(lifespan=lifespan, docs_url=None, redoc_url=None, openapi_url=None)
 
 
 @app.middleware("http")
@@ -92,9 +46,10 @@ async def response_headers(request, call_next):
     from lib.audit import log_admin_change
     await log_admin_change(request, response.status_code)
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'")
     response.headers.setdefault("X-Frame-Options", "DENY")
     response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
-    if request.url.path == "/admin" or request.url.path.startswith(("/admin/", "/api/admin/", "/api/employee-attendance")):
+    if request.url.path == "/admin" or request.url.path.startswith(("/admin/", "/api/admin/", "/api/employee-attendance", "/api/workers")):
         response.headers["X-Robots-Tag"] = "noindex, nofollow"
         response.headers.setdefault("Cache-Control", "private, no-store")
     return response
@@ -103,31 +58,22 @@ async def response_headers(request, call_next):
 api_router = APIRouter(prefix="/api")
 
 
-# Define Models
-class StatusCheck(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    client_name: str
-    timestamp: datetime = Field(default_factory=datetime.utcnow)
+@api_router.get("/health/live", include_in_schema=False)
+async def liveness():
+    return {"status": "alive"}
 
-class StatusCheckCreate(BaseModel):
-    client_name: str
 
-# Add your routes to the router instead of directly to app
-@api_router.get("/")
-async def root():
-    return {"message": "Hello World"}
+@api_router.get("/health/ready", include_in_schema=False)
+async def readiness():
+    from fastapi.responses import JSONResponse
+    try:
+        if not getattr(app.state, "database_ready", False):
+            raise RuntimeError("not ready")
+        await asyncio.wait_for(db.command("ping"), timeout=2)
+    except Exception:
+        return JSONResponse({"status": "unavailable"}, status_code=503, headers={"Cache-Control": "no-store"})
+    return JSONResponse({"status": "ready"}, headers={"Cache-Control": "no-store"})
 
-@api_router.post("/status", response_model=StatusCheck)
-async def create_status_check(input: StatusCheckCreate):
-    status_dict = input.model_dump()
-    status_obj = StatusCheck(**status_dict)
-    _ = await db.status_checks.insert_one(status_obj.model_dump())
-    return status_obj
-
-@api_router.get("/status", response_model=List[StatusCheck])
-async def get_status_checks():
-    status_checks = await db.status_checks.find().to_list(1000)
-    return [StatusCheck(**status_check) for status_check in status_checks]
 
 from routers.public import router as public_router  # noqa: E402
 from routers.admin import router as admin_router  # noqa: E402
@@ -162,6 +108,10 @@ api_router.include_router(employee_attendance_router)
 api_router.include_router(employee_attendance_admin_router)
 api_router.include_router(payments_router)
 api_router.include_router(service_info_router)
+from routers.system_admin import router as system_router
+api_router.include_router(system_router)
+from routers.journey import router as journey_router
+api_router.include_router(journey_router)
 api_router.include_router(team_router)
 api_router.include_router(backups_router)
 api_router.include_router(clients_router)

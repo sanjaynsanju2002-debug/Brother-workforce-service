@@ -127,7 +127,7 @@ def _state(sheet: dict | None, row: dict | None, fallback_date: str) -> dict:
             "shift": None, "check_in_at": None, "check_out_at": None, "payroll_ready": False,
         }
     payroll_ready = attendance_row_payroll_ready(sheet, row)
-    state = "checked_in" if row.get("check_in_at") and not row.get("check_out_at") else "completed" if payroll_ready else "not_checked_in"
+    state = "checked_in" if row.get("check_in_at") and not row.get("check_out_at") else "completed" if row.get("check_out_at") or payroll_ready else "not_checked_in"
     return {
         "attendance_date": sheet["attendance_date"], "state": state, "status": row.get("status", "Unmarked"),
         "shift": row.get("shift") or "General", "check_in_at": row.get("check_in_at"),
@@ -212,12 +212,14 @@ async def _change_attendance(assignment: dict, attendance_date: str, action: str
             row.pop("check_out_at", None)
             row.pop("employee_approved_at", None)
         else:
+            if sheet.get("status") == "Approved":
+                raise HTTPException(409, "Attendance is already approved. Contact your manager for a correction.")
             if not row.get("check_in_at"):
                 raise HTTPException(409, "Check in before checking out")
             if row.get("check_out_at"):
                 raise HTTPException(409, "You are already checked out")
             row.update({
-                "status": "Present", "check_out_at": now, "employee_approved_at": now,
+                "status": "Present", "check_out_at": now,
                 "attendance_source": "Employee self-service",
             })
         values = {field: value for field, value in clean(sheet).items() if field not in {"id", "revision", "created_at", "updated_at"}}

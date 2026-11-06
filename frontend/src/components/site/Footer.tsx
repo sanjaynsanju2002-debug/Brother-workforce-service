@@ -13,7 +13,7 @@ export default function Footer() {
           <p className="mt-1 text-sm text-slate-400">{BRAND.tagline}</p>
           <p className="mt-4 max-w-sm text-sm leading-relaxed text-slate-400">
             A trusted manpower supply partner providing skilled, semi-skilled and general workforce solutions
-            to factories and businesses across Karnataka.
+            to businesses across industries in Karnataka.
           </p>
         </div>
 
