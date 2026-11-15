@@ -18,7 +18,7 @@ it("opens one menu group at a time without changing the page, then navigates to 
   }
   const button = (id: string) => host.querySelector<HTMLButtonElement>(`[data-testid="${id}"]`)!;
   const click = (id: string) => act(() => button(id).click());
-  const visible = (id: string) => !button(id).closest("[hidden]");
+  const visible = (id: string) => !button(id).closest('[aria-hidden="true"]');
   try {
     act(() => root.render(<Dashboard />));
     expect(host.querySelectorAll('h2 button[aria-expanded="false"]')).toHaveLength(5);
@@ -54,7 +54,7 @@ it("keeps role restrictions when opening groups", () => {
     expect(host.querySelector('[data-testid="admin-tab-workforce"]')).toBeNull();
     expect(host.querySelector('[data-testid="admin-tab-activity"]')).toBeNull();
     act(() => host.querySelector<HTMLButtonElement>('[data-testid="admin-group-workforce-toggle"]')!.click());
-    expect(host.querySelector('[data-testid="admin-tab-attendance"]')?.closest("[hidden]")).toBeNull();
+    expect(host.querySelector('[data-testid="admin-tab-attendance"]')?.closest('[aria-hidden="true"]')).toBeNull();
     expect(host.querySelector('[data-testid="admin-tab-security"]')).not.toBeNull();
   } finally { act(() => root.unmount()); host.remove(); }
 });
