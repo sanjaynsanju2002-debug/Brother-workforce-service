@@ -1,5 +1,5 @@
 import JourneyCounts from "@/components/site/JourneyCounts";
-import { adminGroups, allowedTab } from "@/lib/adminNavigation";
+import { allowedTab } from "@/lib/adminNavigation";
 import { DashboardTheme, DashboardThemeToggle } from "@/components/dashboard/DashboardTheme";
 import AdminNotificationCenter from "@/components/dashboard/AdminNotificationCenter";
 import { jobSaveError, jobValidationError } from "@/lib/jobValidation";
@@ -7,7 +7,7 @@ import { CandidateDetailsStatus, JobSearchVerification } from "@/components/site
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Briefcase, Building2, Download, Eye, FileText, Loader2, Lock, MailWarning, Menu, MessageSquare, Plus, Trash2, TrendingUp, Users } from "lucide-react";
+import { ArrowLeft, Briefcase, Building2, Download, Eye, FileText, Loader2, Lock, MailWarning, MessageSquare, Plus, Trash2, TrendingUp, Users } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,7 +16,7 @@ import { Input } from "@/components/ui/input";
 import { DateInput } from "@/components/ui/date-input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { AdminNavigation, AdminSection } from "@/components/dashboard/AdminNavigation";
 import EmailSettings from "@/components/site/EmailSettings";
 import ClientsManager from "@/components/site/ClientsManager";
 import WorkforceManager from "@/components/site/WorkforceManager";
@@ -199,7 +199,6 @@ function Dashboard({
   const [requestPage, setRequestPage] = useState(1);
   useEffect(() => { setWorkerPage(1); }, [filters]);
   const [matchJobId, setMatchJobId] = useState<string | null>(null);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeTab, setActiveTab] = useState(() => {
     const requested = new URLSearchParams(window.location.search).get("tab");
     return requested || "overview";
@@ -402,23 +401,10 @@ function Dashboard({
       </header>
 
       <main className="w-full px-3 py-5 sm:px-6 sm:py-6" data-testid="admin-workspace">
-        <Tabs value={activeTab} onValueChange={(value) => { if (value) setActiveTab(value); }} orientation="vertical" className="flex flex-col gap-5 lg:grid lg:grid-cols-[224px_minmax(0,1fr)]">
-          <aside className="min-w-0 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:self-start lg:overflow-y-auto" aria-label="Admin sections">
-            <button type="button" className="flex w-full items-center justify-between rounded-lg border border-slate-200 bg-white px-4 py-3 font-semibold text-[#0F2444] lg:hidden" onClick={() => setSidebarOpen((open) => !open)} aria-expanded={sidebarOpen} aria-controls="admin-sidebar-menu" data-testid="admin-sidebar-toggle">
-              Dashboard menu <Menu className="h-5 w-5" />
-            </button>
-            <div id="admin-sidebar-menu" className={`${sidebarOpen ? "block" : "hidden"} mt-2 lg:mt-0 lg:block`}>
-              <p className="mb-2 hidden px-3 text-xs font-bold uppercase tracking-widest text-slate-500 lg:block">Dashboard</p>
-              <TabsList className="flex h-auto w-full flex-col items-stretch gap-1 rounded-xl border border-slate-200 bg-white p-2 shadow-sm group-data-vertical/tabs:h-auto" data-testid="admin-sidebar" onClick={() => setSidebarOpen(false)}>
-                {adminGroups.map((group) => {
-                  const tabs = group.tabs.filter(([key]) => allowedTab(account.data?.role, key));
-                  return tabs.length ? <div key={group.label} className="w-full"><p className="px-3 pb-1 pt-4 text-xs font-bold uppercase tracking-wide text-slate-500">{group.label}</p>{tabs.map(([key, label]) => <TabsTrigger key={key} value={key} className="min-h-10 w-full justify-start whitespace-normal px-3 text-left" data-testid={`admin-tab-${key}`}>{label}</TabsTrigger>)}</div> : null;
-                })}
-              </TabsList>
-            </div>
-          </aside>
+        <div className="flex flex-col gap-5 lg:grid lg:grid-cols-[224px_minmax(0,1fr)]">
+          <AdminNavigation role={account.data?.role} activeTab={activeTab} onNavigate={setActiveTab} />
           <div className="min-w-0">
-            <TabsContent value="overview" className="mt-0">
+            <AdminSection activeTab={activeTab} value="overview" className="mt-0">
             {account.data?.role === "owner" && <JourneyCounts />}
               <div className="mb-5">
                 <h1 className="text-2xl font-bold text-[#0F2444]">Overview</h1>
@@ -501,8 +487,8 @@ function Dashboard({
                   </div>
                 </div>
               )}
-            </TabsContent>
-          <TabsContent value="workers" className="mt-6">
+            </AdminSection>
+          <AdminSection activeTab={activeTab} value="workers" className="mt-6">
             <div className="mb-4 rounded-lg border border-slate-200 bg-white p-4" data-testid="worker-filters">
               <div className="flex flex-wrap items-end gap-3">
                 <div className="w-full min-w-0 flex-1 sm:min-w-[200px]">
@@ -684,13 +670,13 @@ function Dashboard({
               </CardContent>
             </Card>
           <div className="mt-4 flex flex-wrap items-center gap-3"><Button variant="outline" disabled={workerPage === 1 || workers.isFetching} onClick={() => setWorkerPage((n) => n - 1)}>Previous</Button><span className="text-sm">Page {workerPage} · {workers.data?.total ?? 0} records</span><Button variant="outline" disabled={workers.isFetching || workerPage * 50 >= (workers.data?.total ?? 0)} onClick={() => setWorkerPage((n) => n + 1)}>Next</Button></div>
-          </TabsContent>
+          </AdminSection>
 
-          <TabsContent value="talents" className="mt-6">
+          <AdminSection activeTab={activeTab} value="talents" className="mt-6">
             <TalentBank pin={pin} />
-          </TabsContent>
+          </AdminSection>
 
-          <TabsContent value="requests" className="mt-6">
+          <AdminSection activeTab={activeTab} value="requests" className="mt-6">
             <div className="mb-4 flex justify-end">
               <a
                 href={`/api/admin/export/company-requests.csv${q}`}
@@ -789,9 +775,9 @@ function Dashboard({
               </CardContent>
             </Card>
           <div className="mt-4 flex flex-wrap items-center gap-3"><Button variant="outline" disabled={requestPage === 1 || requests.isFetching} onClick={() => setRequestPage((n) => n - 1)}>Previous</Button><span className="text-sm">Page {requestPage} · {requests.data?.total ?? 0} records</span><Button variant="outline" disabled={requests.isFetching || requestPage * 50 >= (requests.data?.total ?? 0)} onClick={() => setRequestPage((n) => n + 1)}>Next</Button></div>
-          </TabsContent>
+          </AdminSection>
 
-          <TabsContent value="jobs" className="mt-6 grid gap-6 lg:grid-cols-[1fr_1.4fr]">
+          <AdminSection activeTab={activeTab} value="jobs" className="mt-6 grid gap-6 lg:grid-cols-[1fr_1.4fr]">
             <Card className="border-slate-200 bg-white">
               <CardContent className="p-4 sm:p-6">
                 <h3 className="mb-4 text-lg font-semibold text-[#0F2444]">{editingJobId ? "Edit Job" : "Post a New Job"}</h3>
@@ -1038,19 +1024,19 @@ function Dashboard({
                 )}
               </CardContent>
             </Card>
-          </TabsContent>
+          </AdminSection>
 
-          <TabsContent value="email" className="mt-6">
+          <AdminSection activeTab={activeTab} value="email" className="mt-6">
             {account.data?.role === "owner" ? <EmailSettings pin={pin} /> : <p className="rounded-xl border bg-white p-6">Email settings are managed by the owner.</p>}
-          </TabsContent>
+          </AdminSection>
 
-          <TabsContent value="invoices" className="mt-0">
+          <AdminSection activeTab={activeTab} value="invoices" className="mt-0">
             <Invoices />
-          </TabsContent>
-          <TabsContent value="expenses" className="mt-0"><Expenses /></TabsContent>
-          <TabsContent value="profit-loss" className="mt-0"><ProfitLoss /></TabsContent>
-          <TabsContent value="payroll" className="mt-0"><Payroll /></TabsContent>
-          <TabsContent value="attendance" className="mt-0">
+          </AdminSection>
+          <AdminSection activeTab={activeTab} value="expenses" className="mt-0"><Expenses /></AdminSection>
+          <AdminSection activeTab={activeTab} value="profit-loss" className="mt-0"><ProfitLoss /></AdminSection>
+          <AdminSection activeTab={activeTab} value="payroll" className="mt-0"><Payroll /></AdminSection>
+          <AdminSection activeTab={activeTab} value="attendance" className="mt-0">
             <div className="mb-5 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-sky-200 bg-sky-50 p-4 sm:p-5">
               <div>
                 <p className="font-semibold text-[#0F2444]">Website admin attendance</p>
@@ -1059,31 +1045,31 @@ function Dashboard({
               <a href="https://brothers-workforce-attendance.onrender.com/" target="_blank" rel="noreferrer" className="inline-flex min-h-10 items-center justify-center rounded-md bg-[#0F2444] px-4 py-2 text-sm font-semibold text-white hover:bg-[#183A67]">Open employee app</a>
             </div>
             <Attendance />
-          </TabsContent>
-          <TabsContent value="requirements" className="mt-0"><Staffing /></TabsContent>
-          <TabsContent value="recruitment" className="mt-0"><Recruitment /></TabsContent>
-          <TabsContent value="salary-payments" className="mt-0"><SalaryPayments /></TabsContent>
-          <TabsContent value="documents" className="mt-0"><Documents /></TabsContent>
-          <TabsContent value="company-profitability" className="mt-0"><CompanyProfitability /></TabsContent>
-          <TabsContent value="activity" className="mt-0">{account.data?.role === "owner" && <ActivityHistory />}</TabsContent>
-          <TabsContent value="workforce" className="mt-6">
+          </AdminSection>
+          <AdminSection activeTab={activeTab} value="requirements" className="mt-0"><Staffing /></AdminSection>
+          <AdminSection activeTab={activeTab} value="recruitment" className="mt-0"><Recruitment /></AdminSection>
+          <AdminSection activeTab={activeTab} value="salary-payments" className="mt-0"><SalaryPayments /></AdminSection>
+          <AdminSection activeTab={activeTab} value="documents" className="mt-0"><Documents /></AdminSection>
+          <AdminSection activeTab={activeTab} value="company-profitability" className="mt-0"><CompanyProfitability /></AdminSection>
+          <AdminSection activeTab={activeTab} value="activity" className="mt-0">{account.data?.role === "owner" && <ActivityHistory />}</AdminSection>
+          <AdminSection activeTab={activeTab} value="workforce" className="mt-6">
             <WorkforceManager pin={pin} />
-          </TabsContent>
+          </AdminSection>
 
-          <TabsContent value="clients" className="mt-6">
+          <AdminSection activeTab={activeTab} value="clients" className="mt-6">
             <ClientsManager pin={pin} />
-          </TabsContent>
+          </AdminSection>
 
-          <TabsContent value="security" className="mt-6">
+          <AdminSection activeTab={activeTab} value="security" className="mt-6">
             <Security pin={pin} onPinChanged={onPinChanged} />
-          </TabsContent>
+          </AdminSection>
 
-          <TabsContent value="shortlists" className="mt-6">
+          <AdminSection activeTab={activeTab} value="shortlists" className="mt-6">
             <Shortlists pin={pin} />
-          </TabsContent>
+          </AdminSection>
 
           </div>
-        </Tabs>
+        </div>
       </main>
     </div>
   );
