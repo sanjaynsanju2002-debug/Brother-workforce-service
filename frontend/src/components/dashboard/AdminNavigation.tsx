@@ -1,6 +1,9 @@
 import { useState, type ReactNode } from "react";
-import { ChevronRight, Menu } from "lucide-react";
+import { BriefcaseBusiness, ChevronRight, LayoutDashboard, Menu, Settings2, UsersRound, WalletCards } from "lucide-react";
 import { adminGroups, allowedTab } from "@/lib/adminNavigation";
+import "./admin-navigation.css";
+
+const groupIcons = [LayoutDashboard, BriefcaseBusiness, UsersRound, WalletCards, Settings2];
 
 export function AdminNavigation({ role, activeTab, onNavigate }: {
   role: string | undefined;
@@ -16,25 +19,29 @@ export function AdminNavigation({ role, activeTab, onNavigate }: {
     </button>
     <div id="admin-sidebar-menu" className={`${mobileOpen ? "block" : "hidden"} mt-2 lg:mt-0 lg:block`}>
       <p className="mb-2 hidden px-3 text-xs font-bold uppercase tracking-widest text-slate-500 lg:block">Dashboard</p>
-      <nav aria-label="Dashboard menu" className="space-y-1 rounded-xl border border-slate-200 bg-white p-2 shadow-sm" data-testid="admin-sidebar">
-        {adminGroups.map((group) => {
+      <nav aria-label="Dashboard menu" className="admin-navigation" data-testid="admin-sidebar">
+        {adminGroups.map((group, index) => {
+          const Icon = groupIcons[index];
           const tabs = group.tabs.filter(([key]) => allowedTab(role, key));
           if (!tabs.length) return null;
           const expanded = expandedGroup === group.label;
           const containsActive = tabs.some(([key]) => key === activeTab);
           const id = `admin-group-${group.label.toLowerCase().replaceAll(" ", "-")}`;
-          return <div key={group.label}>
+          return <div key={group.label} className="admin-nav-group" data-open={expanded} data-current={containsActive}>
             <h2><button type="button" id={`${id}-heading`} aria-expanded={expanded} aria-controls={id}
-              className={`flex min-h-12 w-full items-center justify-between gap-2 rounded-lg px-3 py-3 text-left text-xs font-bold uppercase tracking-wide hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 ${containsActive ? "text-[#C2410C]" : "text-slate-600"}`}
+              className="admin-nav-heading"
               onClick={() => setExpandedGroup(expanded ? null : group.label)} data-testid={`${id}-toggle`}>
-              {group.label}<ChevronRight className={`h-4 w-4 shrink-0 transition-transform ${expanded ? "rotate-90" : ""}`} aria-hidden="true" />
+              <span className="admin-nav-icon"><Icon size={18} strokeWidth={1.8} aria-hidden="true" /></span>
+              <span className="admin-nav-title">{group.label}</span><ChevronRight className="admin-nav-chevron" size={16} aria-hidden="true" />
             </button></h2>
-            <div id={id} hidden={!expanded} aria-labelledby={`${id}-heading`} className="pb-2 pl-2">
+            <div id={id} aria-hidden={!expanded} inert={!expanded} aria-labelledby={`${id}-heading`} className="admin-nav-panel">
+              <div className="admin-nav-panel-inner"><div className="admin-nav-list">
               {tabs.map(([key, label]) => <button key={key} type="button" id={`admin-tab-${key}`} aria-controls={`admin-panel-${key}`} aria-current={activeTab === key ? "page" : undefined}
-                className={`my-0.5 min-h-10 w-full rounded-md border px-3 py-2 text-left text-sm font-medium hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-orange-500 ${activeTab === key ? "border-slate-300 bg-slate-100 text-[#0F2444]" : "border-transparent text-slate-600"}`}
+                className="admin-nav-item"
                 onClick={() => { onNavigate(key); setMobileOpen(false); }} data-testid={`admin-tab-${key}`}>
                 {label}
               </button>)}
+              </div></div>
             </div>
           </div>;
         })}
