@@ -1,3 +1,4 @@
+import { watchPageReveals } from "@/lib/pageReveals";
 import RecruitmentFAQ from "@/components/site/RecruitmentFAQ";
 import JobListings from "@/components/site/JobListings";
 import { useEffect, useState } from "react";
@@ -119,29 +120,12 @@ export default function Home() {
     document.title = "Brothers Workforce Solutions | Manpower Services in Mysuru, Karnataka";
     trackVisit("/");
     return watchContactActions();
+  }, []);
+
+  useEffect(() => {
     const anchor = window.location.hash.slice(1);
     if (anchor) document.getElementById(anchor)?.scrollIntoView({ behavior: "instant" });
-
-    const revealItems = Array.from(document.querySelectorAll<HTMLElement>("[data-reveal]"));
-    if (!("IntersectionObserver" in window)) {
-      revealItems.forEach((item) => item.setAttribute("data-visible", "true"));
-      return;
-    }
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            (entry.target as HTMLElement).setAttribute("data-visible", "true");
-            observer.unobserve(entry.target);
-          }
-        });
-      },
-      { threshold: 0.12, rootMargin: "0px 0px -40px 0px" },
-    );
-
-    revealItems.forEach((item) => observer.observe(item));
-    return () => observer.disconnect();
+    return watchPageReveals();
   }, []);
 
   const jobsQuery = useQuery({ queryKey: ["jobs"], queryFn: () => apiGet<Job[]>("/jobs") });
