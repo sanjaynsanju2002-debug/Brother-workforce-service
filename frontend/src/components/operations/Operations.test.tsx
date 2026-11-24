@@ -3,7 +3,7 @@ import { act, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, expect, it, vi } from "vitest";
-import Attendance from "./Attendance";
+import { DailyAttendance as Attendance } from "./Attendance";
 import { InvoicePayments } from "./Payments";
 import Recruitment from "./Recruitment";
 import { invoiceBalance, invoicePaid, type InvoicePaymentRecord } from "@/lib/operations";

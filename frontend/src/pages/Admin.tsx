@@ -4,7 +4,7 @@ import { DashboardTheme, DashboardThemeToggle } from "@/components/dashboard/Das
 import AdminNotificationCenter from "@/components/dashboard/AdminNotificationCenter";
 import { jobSaveError, jobValidationError } from "@/lib/jobValidation";
 import { CandidateDetailsStatus, JobSearchVerification } from "@/components/site/JobReadiness";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Briefcase, Building2, Download, Eye, FileText, Loader2, Lock, MailWarning, MessageSquare, Plus, Trash2, TrendingUp, Users } from "lucide-react";
@@ -209,6 +209,13 @@ function Dashboard({
       setActiveTab(account.data.role === "finance" ? "invoices" : account.data.role === "attendance" ? "attendance" : "workers");
     }
   }, [account.data, activeTab]);
+  const attendancePending = useRef({ dirty: false, busy: false });
+  const leaveAttendance = () => {
+    if (activeTab !== "attendance") return true;
+    if (attendancePending.current.busy) { toast.info("Wait for attendance to finish saving before leaving."); return false; }
+    return !attendancePending.current.dirty || window.confirm("Discard unsaved attendance changes before leaving this section?");
+  };
+  const navigateSection = (tab: string) => { if (tab === activeTab || leaveAttendance()) setActiveTab(tab); };
   const sectionEnabled = (...tabs: string[]) => !!account.data && allowedTab(account.data.role, activeTab) && tabs.includes(activeTab);
 
   const shortlists = useQuery({
@@ -388,12 +395,12 @@ function Dashboard({
             <p className="text-xs text-slate-500">{account.data ? `${account.data.name} · ${account.data.role === "viewer" ? "View only" : account.data.role}` : "Brothers Workforce Solutions"}</p>
           </div>
           <div className="ml-auto flex w-full gap-2 sm:w-auto">
-            {account.data?.role === "owner" && <AdminNotificationCenter onNavigate={setActiveTab} accountKey={account.data.name} />}
+            {account.data?.role === "owner" && <AdminNotificationCenter onNavigate={navigateSection} accountKey={account.data.name} />}
             <DashboardThemeToggle />
-            <Link to="/" className="flex-1 rounded-md border border-slate-200 px-3 py-2 text-center text-sm text-slate-600 hover:text-[#0F2444] sm:flex-none sm:px-4">
+            <Link to="/" onClick={event => { if (!leaveAttendance()) event.preventDefault(); }} className="flex-1 rounded-md border border-slate-200 px-3 py-2 text-center text-sm text-slate-600 hover:text-[#0F2444] sm:flex-none sm:px-4">
               View Site
             </Link>
-            <Button variant="outline" onClick={onLogout} className="flex-1 sm:flex-none" data-testid="admin-logout">
+            <Button variant="outline" onClick={() => { if (leaveAttendance()) onLogout(); }} className="flex-1 sm:flex-none" data-testid="admin-logout">
               Lock
             </Button>
           </div>
@@ -402,13 +409,13 @@ function Dashboard({
 
       <main className="w-full px-3 py-5 sm:px-6 sm:py-6" data-testid="admin-workspace">
         <div className="flex flex-col gap-5 lg:grid lg:grid-cols-[224px_minmax(0,1fr)]">
-          <AdminNavigation role={account.data?.role} activeTab={activeTab} onNavigate={setActiveTab} />
+          <AdminNavigation role={account.data?.role} activeTab={activeTab} onNavigate={navigateSection} />
           <div className="min-w-0">
             <AdminSection activeTab={activeTab} value="overview" className="mt-0">
             {account.data?.role === "owner" && <JourneyCounts />}
               <div className="mb-5">
                 <h1 className="text-2xl font-bold text-[#0F2444]">Overview</h1>
-                <div className="mt-6"><BusinessOverview onNavigate={setActiveTab} /></div>
+                <div className="mt-6"><BusinessOverview onNavigate={navigateSection} /></div>
                 <p className="mt-1 text-sm text-slate-500">Key totals and website activity in one place.</p>
               </div>
 
@@ -1040,11 +1047,11 @@ function Dashboard({
             <div className="mb-5 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-sky-200 bg-sky-50 p-4 sm:p-5">
               <div>
                 <p className="font-semibold text-[#0F2444]">Website admin attendance</p>
-                <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-600">Select a company and date below to mark attendance using the same live employee and payroll records. Employees can continue checking in and out through the separate app.</p>
+                <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-600">Record several days together in the monthly sheet below. Employees can continue checking in and out through the separate app.</p>
               </div>
               <a href="https://brothers-workforce-attendance.onrender.com/" target="_blank" rel="noreferrer" className="inline-flex min-h-10 items-center justify-center rounded-md bg-[#0F2444] px-4 py-2 text-sm font-semibold text-white hover:bg-[#183A67]">Open employee app</a>
             </div>
-            <Attendance />
+            <Attendance onPendingChange={state => { attendancePending.current = state; }} />
           </AdminSection>
           <AdminSection activeTab={activeTab} value="requirements" className="mt-0"><Staffing /></AdminSection>
           <AdminSection activeTab={activeTab} value="recruitment" className="mt-0"><Recruitment /></AdminSection>

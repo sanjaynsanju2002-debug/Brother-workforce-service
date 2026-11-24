@@ -19,7 +19,10 @@ type Sheet = { id: string; revision: number; status: "Draft" | "Approved"; rows:
 type Draft = { review_warnings?: string[]; employees: { id: string; full_name: string; role: string; shift?: ShiftName }[]; sheet: Sheet | null; company_name: string };
 const statuses: AttendanceStatus[] = ["Unmarked", "Present", "Absent", "Half-day", "Paid leave", "Unpaid leave", "Holiday", "Weekly off"];
 const shifts: ShiftName[] = ["General", "Morning", "Afternoon", "Night"];
-export default function Attendance() {
+import MonthlyAttendance from "./MonthlyAttendance";
+export default function Attendance(props: Parameters<typeof MonthlyAttendance>[0]) { return <MonthlyAttendance {...props} />; }
+
+export function DailyAttendance() {
   const [company, setCompany] = useState(""); const [day, setDay] = useState(indiaToday());
   const dirty = useRef(false);
   const [entryMode, setEntryMode] = useState<EntryMode>("all");
